@@ -1,0 +1,22 @@
+[package]
+name = "mapdiffbot2"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+serde = { version = "1.0", features = ["derive"] }
+octocrab = { git = "https://github.com/MCHSL/octocrab" }
+flume = "0.10.12"
+dmm-tools = { git = "https://github.com/SpaceManiac/SpacemanDMM/", features = ["png"] }
+dreammaker = { git = "https://github.com/SpaceManiac/SpacemanDMM/" }
+ahash = "0.7.6"
+path-absolutize = "3.0.13"
+chrono = "0.4.19"
+jsonwebtoken = "8"
+lazy_static = "1.4.0"
+
+[dependencies.rocket]
+version = "0.5.0-rc.1"
+features = ["json"]
