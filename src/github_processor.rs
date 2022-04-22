@@ -58,7 +58,7 @@ async fn process_pull(
             )
             .await
             .expect("Could not update check run");
-        return; // Ok("No files to process");
+        return;
     }
 
     eprintln!("{}", repo.owner());

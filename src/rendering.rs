@@ -1,10 +1,11 @@
 use std::{collections::HashSet, path::Path, sync::RwLock};
 
 use ahash::RandomState;
+use anyhow::Result;
 use dm::objtree::ObjectTree;
 use dmm_tools::{dmi::Image, dmm, minimap, render_passes::RenderPass, IconCache};
 
-use crate::{git_operations::*, github_types::*, render_error::RenderError};
+use crate::{git_operations::*, github_types::*};
 extern crate dreammaker as dm;
 
 #[derive(Debug)]
@@ -40,7 +41,6 @@ pub fn get_diff_bounding_box(
             let right_tile =
                 &right_map.dictionary[&right_map.grid[(z_level, right_dims.1 - y - 1, x)]];
             if left_tile != right_tile {
-                eprintln!("different tile: ({}, {}, {})", x + 1, y + 1, z_level + 1);
                 if x < leftmost {
                     leftmost = x;
                 }
@@ -72,43 +72,38 @@ pub fn get_diff_bounding_box(
     }
 }
 
-pub struct MapDiff {
-    pub base_map: dmm::Map,
-    pub head_map: dmm::Map,
-    pub bounding_box: BoundingBox,
+pub struct MapDiffs {
+    pub bases: Vec<dmm::Map>,
+    pub heads: Vec<dmm::Map>,
+    pub bbs: Vec<BoundingBox>,
 }
 
-pub fn get_map_diffs(base: &Branch, head: &str, files: &Vec<ModifiedFile>) -> Vec<MapDiff> {
+pub fn get_map_diffs(base: &Branch, head: &str, files: &Vec<ModifiedFile>) -> Result<MapDiffs> {
     eprintln!("getting map diffs");
-    let mut result = vec![];
-    let lefts: Result<Vec<dmm::Map>, RenderError> =
-        with_checkout(&base.repo.name, &base.name, || {
-            files
-                .iter()
-                .map(|file| {
-                    dmm::Map::from_file(Path::new(&file.filename)).map_err(|e| RenderError::Dmm(e))
-                })
-                .collect()
-        });
-    /*for file in files {
-        let left_map = with_checkout(&base.repo.name, &base.name, || {
-            dmm::Map::from_file(Path::new(&file.filename)).unwrap()
-        })
-        .unwrap();
-        let right_map = with_checkout(&base.repo.name, head, || {
-            dmm::Map::from_file(Path::new(&file.filename)).unwrap()
-        })
-        .unwrap();
 
-        let bounding_box = get_diff_bounding_box(&left_map, &right_map, 0);
+    let load_maps = || {
+        files
+            .iter()
+            .map(|file| {
+                dmm::Map::from_file(Path::new(&file.filename)).map_err(|e| anyhow::anyhow!(e))
+            })
+            .collect()
+    };
 
-        result.push(MapDiff {
-            base_map: left_map,
-            head_map: right_map,
-            bounding_box,
-        });
-    }*/
-    result
+    let lefts: Vec<dmm::Map> = with_checkout(&base.repo.name, &base.name, load_maps)?;
+    let rights: Vec<dmm::Map> = with_checkout(&base.repo.name, &head, load_maps)?;
+
+    let bbs = lefts
+        .iter()
+        .zip(rights.iter())
+        .map(|(left, right)| (get_diff_bounding_box(left, right, 0)))
+        .collect();
+
+    Ok(MapDiffs {
+        bases: lefts,
+        heads: rights,
+        bbs,
+    })
 }
 
 #[derive(Default)]
@@ -119,7 +114,7 @@ pub struct Context {
 }
 
 impl Context {
-    pub fn objtree(&mut self, path: &Path) -> Result<(), dm::DMError> {
+    pub fn objtree(&mut self, path: &Path) -> Result<()> {
         let environment = match dm::detect_environment(path, dm::DEFAULT_ENV) {
             Ok(Some(found)) => found,
             _ => dm::DEFAULT_ENV.into(),
@@ -140,15 +135,16 @@ impl Context {
 }
 
 pub fn render_map(
-    context: &Context,
+    objtree: &ObjectTree,
+    icon_cache: &IconCache,
     map: &dmm::Map,
     bb: &BoundingBox,
     errors: &RwLock<HashSet<String, RandomState>>,
     render_passes: &Vec<Box<dyn RenderPass>>,
-) -> Result<Image, RenderError> {
+) -> Result<Image> {
     let bump = Default::default();
     let minimap_context = minimap::Context {
-        objtree: &context.objtree,
+        objtree: objtree,
         map: &map,
         level: map.z_level(0),
         min: (bb.left, bb.bottom),
@@ -159,5 +155,6 @@ pub fn render_map(
     };
     println!("Generating map");
     eprintln!("{:?}", bb);
-    minimap::generate(minimap_context, &context.icon_cache).map_err(|_| RenderError::Minimap)
+    minimap::generate(minimap_context, icon_cache)
+        .map_err(|_| anyhow::anyhow!("An error occured during map rendering"))
 }

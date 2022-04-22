@@ -1,0 +1,10 @@
+<details>
+	<summary>
+	{}
+	</summary>
+
+|  Old  |      New      |  Difference  |
+|  ---  |      ---      |     ---      |
+|![]({})|    ![]({})    |coming soon...|
+
+</details>

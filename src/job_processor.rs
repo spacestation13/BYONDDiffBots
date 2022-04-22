@@ -1,78 +1,96 @@
 use ahash::RandomState;
+use anyhow::Result;
+use dmm_tools::dmm;
 use dmm_tools::render_passes::RenderPass;
 use flume::Receiver;
 use path_absolutize::*;
+use rayon::prelude::*;
 use std::collections::HashSet;
 use std::path::Path;
 use std::process::Command;
 use std::sync::RwLock;
+use std::time::{Duration, Instant};
 
 extern crate dreammaker as dm;
 
 use crate::git_operations::*;
 use crate::github_types::{Branch, Empty, ModifiedFile, Output, Repository, UpdateCheckRun};
 use crate::job::Job;
-use crate::render_error::RenderError;
-use crate::rendering::{get_map_diffs, render_map, Context, MapDiff};
+use crate::rendering::{get_map_diffs, render_map, BoundingBox, Context, MapDiffs};
 use crate::{job, CONFIG};
+
+fn do_render(
+    context: &Context,
+    maps: &Vec<dmm::Map>,
+    bbs: &Vec<BoundingBox>,
+    render_passes: &Vec<Box<dyn RenderPass>>,
+    output_dir: &Path,
+    filename: &str,
+) -> Result<()> {
+    let objtree = &context.objtree;
+    let icon_cache = &context.icon_cache;
+    let _: Result<()> = maps
+        .par_iter()
+        .zip(bbs.par_iter())
+        .enumerate()
+        .map(|(idx, (map, bb))| {
+            eprintln!("rendering map {}", idx);
+            let image = render_map(
+                objtree,
+                icon_cache,
+                map,
+                bb,
+                &Default::default(),
+                render_passes,
+            )?;
+
+            let directory = format!("{}/{}", output_dir.display(), idx);
+
+            eprintln!("Creating output directory: {}", directory);
+            std::fs::create_dir_all(&directory)?;
+
+            eprintln!("saving images");
+            image.to_file(format!("{}/{}", directory, filename).as_ref())?;
+            Ok(())
+        })
+        .collect();
+    Ok(())
+}
 
 fn render_befores(
     base_context: &Context,
-    diffs: &Vec<MapDiff>,
+    maps: &Vec<dmm::Map>,
+    bbs: &Vec<BoundingBox>,
     render_passes: &Vec<Box<dyn RenderPass>>,
     output_dir: &Path,
-) {
-    eprintln!("rendering befores");
-    for (idx, diff) in diffs.iter().enumerate() {
-        eprintln!("rendering before");
-        let before = render_map(
-            &base_context,
-            &diff.base_map,
-            &diff.bounding_box,
-            &Default::default(),
-            render_passes,
-        )
-        .unwrap();
-
-        let directory = format!("{}/{}", output_dir.display(), idx);
-
-        eprintln!("Creating output directory: {}", directory);
-        std::fs::create_dir_all(&directory).expect("Could not create path");
-
-        eprintln!("saving images");
-        before
-            .to_file(format!("{}/{}", directory, "before.png").as_ref())
-            .unwrap();
-    }
+) -> Result<()> {
+    eprintln!("Rendering befores");
+    do_render(
+        base_context,
+        maps,
+        bbs,
+        render_passes,
+        output_dir,
+        "before.png",
+    )
 }
 
 fn render_afters(
     head_context: &Context,
-    diffs: &Vec<MapDiff>,
+    maps: &Vec<dmm::Map>,
+    bbs: &Vec<BoundingBox>,
     render_passes: &Vec<Box<dyn RenderPass>>,
     output_dir: &Path,
-) -> Result<(), RenderError> {
-    eprintln!("rendering afters");
-    for (idx, diff) in diffs.iter().enumerate() {
-        eprintln!("rendering after");
-        let after = render_map(
-            &head_context,
-            &diff.head_map,
-            &diff.bounding_box,
-            &Default::default(),
-            render_passes,
-        )?;
-        eprintln!("rendering after");
-
-        let directory = format!("{}/{}", output_dir.display(), idx);
-
-        eprintln!("Creating output directory: {}", directory);
-        std::fs::create_dir_all(&directory)?;
-
-        eprintln!("saving images");
-        after.to_file(format!("{}/{}", directory, "after.png").as_ref())?;
-    }
-    Ok(())
+) -> Result<()> {
+    eprintln!("Rendering afters");
+    do_render(
+        head_context,
+        maps,
+        bbs,
+        render_passes,
+        output_dir,
+        "after.png",
+    )
 }
 
 fn render(
@@ -82,16 +100,24 @@ fn render(
     files: &Vec<ModifiedFile>,
     output_dir: &Path,
     pull_request_number: u64,
-) -> Result<(), RenderError> {
+) -> Result<()> {
     let errors: RwLock<HashSet<String, RandomState>> = Default::default();
 
     eprintln!("Parsing base");
+    let now = Instant::now();
     let mut base_context = Context::default();
-    base_context.objtree(&Path::new(&repo.name).absolutize()?)?;
+    with_repo_dir(&repo.name, || {
+        let p = Path::new(".").absolutize()?;
+        base_context.objtree(&p)?;
+        Ok(())
+    })?;
+    eprintln!("Parsing base took {}s", now.elapsed().as_secs());
 
     let pull_branch = format!("mdb-{}-{}", base.sha, head.sha);
     let fetch_branch = format!("pull/{}/head:{}", pull_request_number, pull_branch);
 
+    eprintln!("Fetching and parsing head");
+    let now = Instant::now();
     with_repo_dir(&base.repo.name, || {
         Command::new("git")
             .args(["fetch", "origin", &fetch_branch])
@@ -99,31 +125,50 @@ fn render(
         Ok(())
     })?;
 
-    eprintln!("Parsing head");
     let mut head_context = Context::default();
     with_checkout(&repo.name, &fetch_branch, || {
         let p = Path::new(".").absolutize()?;
         head_context.objtree(&p)?;
         Ok(())
     })?;
+    eprintln!(
+        "Fetching and parsing head took {}s",
+        now.elapsed().as_secs()
+    );
 
     let render_passes = &dmm_tools::render_passes::configure(
         &base_context.dm_context.config().map_renderer, //TODO: also use render passes from head context
         "",
         "",
     );
-    let diffs = get_map_diffs(&base, &pull_branch, files);
+    let diffs = get_map_diffs(&base, &pull_branch, files)?;
 
-    render_befores(&base_context, &diffs, render_passes, output_dir);
+    let now = Instant::now();
+    render_befores(
+        &base_context,
+        &diffs.bases,
+        &diffs.bbs,
+        render_passes,
+        output_dir,
+    )?;
+    eprintln!("rendering befores took {}s", now.elapsed().as_secs());
 
+    let now = Instant::now();
     with_checkout(&repo.name, &pull_branch, || {
-        render_afters(&head_context, &diffs, render_passes, output_dir)?;
+        render_afters(
+            &head_context,
+            &diffs.heads,
+            &diffs.bbs,
+            render_passes,
+            output_dir,
+        )?;
         Ok(())
     })?;
+    eprintln!("rendering afters took {}s", now.elapsed().as_secs());
     Ok(())
 }
 
-async fn handle_job(job: Job) -> Result<(), RenderError> {
+async fn handle_job(job: Job) -> Result<()> {
     // Done this way rather than `let _ = ...` because `patch` needs to know the expected
     // type returned from the github api
     let _: Empty = octocrab::instance()
@@ -148,14 +193,17 @@ async fn handle_job(job: Job) -> Result<(), RenderError> {
     let base = job.base;
     let head = job.head;
     let repo = format!("https://github.com/{}", base.repo.full_name());
-    Command::new("git")
-        .args(["clone", "-C", "./repos", &repo])
+    let output = Command::new("git")
+        .args(["clone", &repo, &format!("./repos/{}", base.repo.name)])
         .output()?;
+
+    println!("{}", String::from_utf8_lossy(&output.stdout));
+    println!("{}", String::from_utf8_lossy(&output.stderr));
 
     let non_abs_directory = format!("images/{}/{}", job.repository.id, job.check_run_id);
     let directory = Path::new(&non_abs_directory).absolutize()?;
-    let directory = directory.as_ref().to_str().ok_or(RenderError::Other(
-        "Failed to create absolute path to image directory".to_owned(),
+    let directory = directory.as_ref().to_str().ok_or(anyhow::anyhow!(
+        "Failed to create absolute path to image directory",
     ))?;
 
     git_checkout(
@@ -177,25 +225,18 @@ async fn handle_job(job: Job) -> Result<(), RenderError> {
     let conf = CONFIG.read().await;
     let file_url = &conf.as_ref().unwrap().file_hosting_url;
 
-    let link_before = format!("{}/{}/0/before.png", file_url, non_abs_directory);
-    let link_after = format!("{}/{}/0/after.png", file_url, non_abs_directory);
-
     let title = "Map renderings";
     let summary = "Maps with diff:";
-    let text = format!(
-        "\
-<details>
-	<summary>
-	{}
-	</summary>
+    let mut text = String::new();
 
-|  Old  |      New      |  Difference  |
-| :---: |     :---:     |    :---:     |
-|![]({})|    ![]({})    |coming soon...|
-
-</details>",
-        job.files[0].filename, link_before, link_after
-    );
+    for (idx, file) in job.files.iter().enumerate() {
+        let link_before = format!("{}/{}/{}/before.png", file_url, non_abs_directory, idx);
+        let link_after = format!("{}/{}/{}/after.png", file_url, non_abs_directory, idx);
+        text.push_str(&format!(
+            include_str!("diff_template.txt"),
+            file.filename, link_before, link_after
+        ));
+    }
 
     let output = Output {
         title: title.to_owned(),
@@ -229,8 +270,12 @@ pub async fn handle_jobs(job_receiver: Receiver<job::Job>) {
     eprintln!("Starting job handler");
     while let Ok(job) = job_receiver.recv_async().await {
         eprintln!("Received job: {:#?}", job);
+        let now = Instant::now();
         if let Err(err) = handle_job(job).await {
             eprintln!("Error handling job: {:?}", err);
+        } else {
+            eprintln!("Job handled successfully");
         }
+        eprintln!("Handling job took {}s", now.elapsed().as_secs());
     }
 }
