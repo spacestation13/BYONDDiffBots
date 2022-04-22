@@ -1,9 +1,12 @@
 #![feature(proc_macro_hygiene, decl_macro)]
 
+mod git_operations;
 mod github_processor;
 mod github_types;
 mod job;
 mod job_processor;
+mod render_error;
+mod rendering;
 
 #[macro_use]
 extern crate rocket;

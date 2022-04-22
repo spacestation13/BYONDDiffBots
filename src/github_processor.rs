@@ -83,7 +83,7 @@ async fn process_pull(
         .await
         .expect("Could not update check run");
 
-    let result = job_sender
+    job_sender
         .0
         .send_async(job::Job {
             base: pull.base.clone(),
@@ -94,7 +94,8 @@ async fn process_pull(
             check_run_id: run.id,
             installation_id: installation.id,
         })
-        .await;
+        .await
+        .expect("Could not send job");
 }
 
 #[derive(Debug)]
