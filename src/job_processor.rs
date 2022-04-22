@@ -19,6 +19,8 @@ use crate::job::Job;
 use crate::rendering::{get_map_diffs, render_map, BoundingBox, Context, MapDiffs};
 use crate::{job, CONFIG};
 
+type RenderingErrors = RwLock<HashSet<String, RandomState>>;
+
 fn do_render(
     context: &Context,
     maps: &Vec<dmm::Map>,
@@ -26,6 +28,7 @@ fn do_render(
     render_passes: &Vec<Box<dyn RenderPass>>,
     output_dir: &Path,
     filename: &str,
+    errors: &RenderingErrors,
 ) -> Result<()> {
     let objtree = &context.objtree;
     let icon_cache = &context.icon_cache;
@@ -35,14 +38,7 @@ fn do_render(
         .enumerate()
         .map(|(idx, (map, bb))| {
             eprintln!("rendering map {}", idx);
-            let image = render_map(
-                objtree,
-                icon_cache,
-                map,
-                bb,
-                &Default::default(),
-                render_passes,
-            )?;
+            let image = render_map(objtree, icon_cache, map, bb, errors, render_passes)?;
 
             let directory = format!("{}/{}", output_dir.display(), idx);
 
@@ -63,6 +59,7 @@ fn render_befores(
     bbs: &Vec<BoundingBox>,
     render_passes: &Vec<Box<dyn RenderPass>>,
     output_dir: &Path,
+    errors: &RenderingErrors,
 ) -> Result<()> {
     eprintln!("Rendering befores");
     do_render(
@@ -72,6 +69,7 @@ fn render_befores(
         render_passes,
         output_dir,
         "before.png",
+        errors,
     )
 }
 
@@ -81,6 +79,7 @@ fn render_afters(
     bbs: &Vec<BoundingBox>,
     render_passes: &Vec<Box<dyn RenderPass>>,
     output_dir: &Path,
+    errors: &RenderingErrors,
 ) -> Result<()> {
     eprintln!("Rendering afters");
     do_render(
@@ -90,6 +89,7 @@ fn render_afters(
         render_passes,
         output_dir,
         "after.png",
+        errors,
     )
 }
 
@@ -101,7 +101,18 @@ fn render(
     output_dir: &Path,
     pull_request_number: u64,
 ) -> Result<()> {
-    let errors: RwLock<HashSet<String, RandomState>> = Default::default();
+    let errors: RenderingErrors = Default::default();
+
+    let filter_on_status = |status: &str| {
+        files
+            .iter()
+            .filter(|f| f.status == status)
+            .collect::<Vec<&ModifiedFile>>()
+    };
+
+    let added_files = filter_on_status("added");
+    let modified_files = filter_on_status("modified");
+    let removed_files = filter_on_status("removed");
 
     eprintln!("Parsing base");
     let now = Instant::now();
@@ -126,7 +137,7 @@ fn render(
     })?;
 
     let mut head_context = Context::default();
-    with_checkout(&repo.name, &fetch_branch, || {
+    with_checkout(&repo.name, &pull_branch, || {
         let p = Path::new(".").absolutize()?;
         head_context.objtree(&p)?;
         Ok(())
@@ -141,7 +152,42 @@ fn render(
         "",
         "",
     );
-    let diffs = get_map_diffs(&base, &pull_branch, files)?;
+
+    // ADDED MAPS
+    let added_directory = format!("{}/a", output_dir.display());
+    let added_directory = Path::new(&added_directory);
+    with_checkout(&repo.name, &pull_branch, || {
+        let mut maps = vec![];
+        let mut bbs = vec![];
+        for file in added_files {
+            println!("{}", file.filename);
+            let map =
+                dmm::Map::from_file(Path::new(&file.filename)).map_err(|e| anyhow::anyhow!(e))?;
+            let size = map.dim_xyz();
+            let bb = BoundingBox {
+                left: 0,
+                bottom: 0,
+                top: size.1 - 1,
+                right: size.0 - 1,
+            };
+            maps.push(map);
+            bbs.push(bb);
+        }
+        do_render(
+            &head_context,
+            &maps,
+            &bbs,
+            render_passes,
+            added_directory,
+            "added.png",
+            &errors,
+        )
+    })?;
+
+    // MODIFIED MAPS
+    let modified_directory = format!("{}/m", output_dir.display());
+    let modified_directory = Path::new(&modified_directory);
+    let diffs = get_map_diffs(&base, &pull_branch, &modified_files)?;
 
     let now = Instant::now();
     render_befores(
@@ -149,7 +195,8 @@ fn render(
         &diffs.bases,
         &diffs.bbs,
         render_passes,
-        output_dir,
+        modified_directory,
+        &errors,
     )?;
     eprintln!("rendering befores took {}s", now.elapsed().as_secs());
 
@@ -160,11 +207,51 @@ fn render(
             &diffs.heads,
             &diffs.bbs,
             render_passes,
-            output_dir,
+            modified_directory,
+            &errors,
         )?;
         Ok(())
     })?;
     eprintln!("rendering afters took {}s", now.elapsed().as_secs());
+
+    // REMOVED MAPS
+    let removed_directory = format!("{}/r", output_dir.display());
+    let removed_directory = Path::new(&removed_directory);
+
+    let mut maps = vec![];
+    let mut bbs = vec![];
+    with_repo_dir(&base.repo.name, || {
+        for file in removed_files {
+            println!("{}", file.filename);
+            let map =
+                dmm::Map::from_file(Path::new(&file.filename)).map_err(|e| anyhow::anyhow!(e))?;
+            let size = map.dim_xyz();
+            let bb = BoundingBox {
+                left: 0,
+                bottom: 0,
+                top: size.1 - 1,
+                right: size.0 - 1,
+            };
+            maps.push(map);
+            bbs.push(bb);
+        }
+        do_render(
+            &base_context,
+            &maps,
+            &bbs,
+            render_passes,
+            removed_directory,
+            "removed.png",
+            &errors,
+        )?;
+        Ok(())
+    })?;
+
+    eprintln!("Errors: ");
+    for error in errors.read().unwrap().iter() {
+        eprintln!("{}", error);
+    }
+
     Ok(())
 }
 
@@ -193,12 +280,9 @@ async fn handle_job(job: Job) -> Result<()> {
     let base = job.base;
     let head = job.head;
     let repo = format!("https://github.com/{}", base.repo.full_name());
-    let output = Command::new("git")
+    Command::new("git")
         .args(["clone", &repo, &format!("./repos/{}", base.repo.name)])
         .output()?;
-
-    println!("{}", String::from_utf8_lossy(&output.stdout));
-    println!("{}", String::from_utf8_lossy(&output.stderr));
 
     let non_abs_directory = format!("images/{}/{}", job.repository.id, job.check_run_id);
     let directory = Path::new(&non_abs_directory).absolutize()?;
@@ -229,12 +313,52 @@ async fn handle_job(job: Job) -> Result<()> {
     let summary = "Maps with diff:";
     let mut text = String::new();
 
-    for (idx, file) in job.files.iter().enumerate() {
-        let link_before = format!("{}/{}/{}/before.png", file_url, non_abs_directory, idx);
-        let link_after = format!("{}/{}/{}/after.png", file_url, non_abs_directory, idx);
+    //TODO: split into added, modified, removed earlier
+
+    for (idx, file) in job.files.iter().filter(|f| f.status == "added").enumerate() {
+        let link = format!(
+            "![]({}/{}/a/{}/added.png)",
+            file_url, non_abs_directory, idx
+        );
         text.push_str(&format!(
-            include_str!("diff_template.txt"),
+            include_str!("diff_template_add.txt"),
+            file.filename, link
+        ));
+    }
+
+    for (idx, file) in job
+        .files
+        .iter()
+        .filter(|f| f.status == "modified")
+        .enumerate()
+    {
+        let link_before = format!(
+            "![]({}/{}/m/{}/before.png)",
+            file_url, non_abs_directory, idx
+        );
+        let link_after = format!(
+            "![]({}/{}/m/{}/after.png)",
+            file_url, non_abs_directory, idx
+        );
+        text.push_str(&format!(
+            include_str!("diff_template_mod.txt"),
             file.filename, link_before, link_after
+        ));
+    }
+
+    for (idx, file) in job
+        .files
+        .iter()
+        .filter(|f| f.status == "removed")
+        .enumerate()
+    {
+        let link = format!(
+            "![]({}/{}/r/{}/removed.png)",
+            file_url, non_abs_directory, idx
+        );
+        text.push_str(&format!(
+            include_str!("diff_template_remove.txt"),
+            file.filename, link
         ));
     }
 

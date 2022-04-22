@@ -4,7 +4,7 @@
 	</summary>
 
 |  Old  |      New      |  Difference  |
-|  ---  |      ---      |     ---      |
-|![]({})|    ![]({})    |coming soon...|
+| :---: |     :---:     |    :---:     |
+|   {}  |       {}      |coming soon...|
 
 </details>

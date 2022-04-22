@@ -1,3 +1,4 @@
+use anyhow::Result;
 use chrono;
 use rocket::http::Status;
 use rocket::outcome::Outcome;
@@ -11,14 +12,13 @@ use serde::Serialize;
 
 use crate::github_types::*;
 use crate::job;
-use crate::Config;
 
 async fn process_pull(
     pull: &PullRequest,
     run: &CheckRun,
     installation: &Installation,
     job_sender: &job::JobSender,
-) {
+) -> Result<()> {
     let repo = &pull.head.repo;
     let files: Vec<ModifiedFile> = octocrab::instance()
         .installation(installation.id.into())
@@ -30,12 +30,11 @@ async fn process_pull(
             ),
             None::<&()>,
         )
-        .await
-        .expect("Could not get files");
+        .await?;
 
     let files: Vec<ModifiedFile> = files
         .into_iter()
-        .filter(|f| f.status != "removed" && f.filename.ends_with(".dmm"))
+        .filter(|f| f.filename.ends_with(".dmm"))
         .collect();
 
     if files.is_empty() {
@@ -56,12 +55,10 @@ async fn process_pull(
                     output: None,
                 }),
             )
-            .await
-            .expect("Could not update check run");
-        return;
-    }
+            .await?;
 
-    eprintln!("{}", repo.owner());
+        return Ok(());
+    }
 
     let _: Empty = octocrab::instance()
         .installation(installation.id.into())
@@ -80,8 +77,7 @@ async fn process_pull(
                 output: None,
             }),
         )
-        .await
-        .expect("Could not update check run");
+        .await?;
 
     job_sender
         .0
@@ -94,8 +90,9 @@ async fn process_pull(
             check_run_id: run.id,
             installation_id: installation.id,
         })
-        .await
-        .expect("Could not send job");
+        .await?;
+
+    Ok(())
 }
 
 #[derive(Debug)]
@@ -124,7 +121,7 @@ struct CreateCheckRun {
 #[derive(Deserialize, Debug)]
 struct AssFart {}
 
-pub async fn submit_check(full_repo: String, head_sha: String, inst_id: u64) {
+pub async fn submit_check(full_repo: String, head_sha: String, inst_id: u64) -> Result<()> {
     let _: AssFart = octocrab::instance()
         .installation(inst_id.into())
         .post(
@@ -134,8 +131,8 @@ pub async fn submit_check(full_repo: String, head_sha: String, inst_id: u64) {
                 head_sha,
             }),
         )
-        .await
-        .expect("Could not create check run");
+        .await?;
+    Ok(())
 }
 
 #[post("/payload", format = "json", data = "<payload>")]
@@ -147,13 +144,15 @@ pub async fn process_github_payload(
     match event.0.as_str() {
         "check_suite" => {
             let payload: JobPayload = serde_json::from_str(&payload).unwrap();
-            println!("{:#?}", payload);
-            submit_check(
+            if let Err(e) = submit_check(
                 payload.repository.full_name(),
                 payload.check_suite.unwrap().head_sha,
                 payload.installation.id,
             )
-            .await;
+            .await
+            {
+                eprintln!("Failed to submit check: {}", e);
+            }
         }
         "check_run" => {
             let payload: JobPayload = serde_json::from_str(&payload).unwrap();
@@ -162,19 +161,18 @@ pub async fn process_github_payload(
                     return Ok("Not MapDiffBot2");
                 }
                 if payload.action == "created" {
-                    process_pull(
-                        &check_run.pull_requests[0],
-                        &check_run,
-                        &payload.installation,
-                        job_sender,
-                    )
-                    .await;
+                    let pulls = &check_run.pull_requests;
+                    for pull in pulls {
+                        if let Err(e) =
+                            process_pull(&pull, &check_run, &payload.installation, job_sender).await
+                        {
+                            eprintln!("Failed to process pull request: {}", e);
+                        }
+                    }
                 }
             }
         }
         _ => {
-            println!("{}", event.0);
-            //println!("{}", payload);
             return Ok("Not a job event");
         }
     }

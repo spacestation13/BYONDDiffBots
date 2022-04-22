@@ -10,10 +10,10 @@ extern crate dreammaker as dm;
 
 #[derive(Debug)]
 pub struct BoundingBox {
-    left: usize,
-    bottom: usize,
-    right: usize,
-    top: usize,
+    pub left: usize,
+    pub bottom: usize,
+    pub right: usize,
+    pub top: usize,
 }
 
 pub fn get_diff_bounding_box(
@@ -78,7 +78,7 @@ pub struct MapDiffs {
     pub bbs: Vec<BoundingBox>,
 }
 
-pub fn get_map_diffs(base: &Branch, head: &str, files: &Vec<ModifiedFile>) -> Result<MapDiffs> {
+pub fn get_map_diffs(base: &Branch, head: &str, files: &Vec<&ModifiedFile>) -> Result<MapDiffs> {
     eprintln!("getting map diffs");
 
     let load_maps = || {

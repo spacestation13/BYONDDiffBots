@@ -1,0 +1,9 @@
+<details>
+	<summary>
+	{}
+	</summary>
+
+Added:
+	{}
+
+</details>
