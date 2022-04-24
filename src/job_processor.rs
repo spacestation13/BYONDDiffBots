@@ -165,8 +165,9 @@ fn render(
 
     with_repo_dir(&base.repo.name, || {
         Command::new("git")
-            .args(["branch", "-d", &pull_branch])
+            .args(["branch", "-D", &pull_branch])
             .output()?;
+
         Ok(())
     })
     .context("Deleting pull branch")?;
