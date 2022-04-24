@@ -184,7 +184,7 @@ fn render(
     // MODIFIED MAPS
     let modified_directory = format!("{}/m", output_dir.display());
     let modified_directory = Path::new(&modified_directory);
-    let diffs = get_map_diffs(&base, &pull_branch, modified_files)?;
+    let diffs = get_map_diffs(base, &pull_branch, modified_files)?;
 
     let now = Instant::now();
     render_befores(
@@ -270,16 +270,17 @@ async fn handle_job(job: Job) -> Result<()> {
 
     let non_abs_directory = format!("images/{}/{}", job.base.repo.id, job.check_run_id);
     let directory = Path::new(&non_abs_directory).absolutize()?;
-    let directory = directory.as_ref().to_str().ok_or(anyhow::anyhow!(
-        "Failed to create absolute path to image directory",
-    ))?;
+    let directory = directory
+        .as_ref()
+        .to_str()
+        .ok_or_else(|| anyhow::anyhow!("Failed to create absolute path to image directory",))?;
 
     git_checkout(
         &job.base
             .repo
             .default_branch
             .clone()
-            .unwrap_or("master".to_owned()),
+            .unwrap_or_else(|| "master".to_owned()),
     )?;
 
     let filter_on_status = |status: &str| {
@@ -294,8 +295,8 @@ async fn handle_job(job: Job) -> Result<()> {
     let removed_files = filter_on_status("removed");
 
     render(
-        &base,
-        &head,
+        base,
+        head,
         &added_files,
         &modified_files,
         &removed_files,

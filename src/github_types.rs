@@ -22,12 +22,12 @@ pub struct Repository {
 
 impl Repository {
     pub fn full_name(&self) -> String {
-        self.url.split("/").skip(4).collect::<Vec<&str>>().join("/")
+        self.url.split('/').skip(4).collect::<Vec<&str>>().join("/")
     }
 
     pub fn owner(&self) -> String {
         self.url
-            .split("/")
+            .split('/')
             .skip(4)
             .take(1)
             .collect::<Vec<&str>>()

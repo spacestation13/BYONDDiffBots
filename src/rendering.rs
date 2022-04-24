@@ -91,7 +91,7 @@ pub fn get_map_diffs(base: &Branch, head: &str, files: &[&ModifiedFile]) -> Resu
     };
 
     let base_maps: Vec<_> = with_checkout(&base.repo.name, &base.name, load_maps)?;
-    let head_maps: Vec<_> = with_checkout(&base.repo.name, &head, load_maps)?;
+    let head_maps: Vec<_> = with_checkout(&base.repo.name, head, load_maps)?;
 
     let bounds = base_maps
         .iter()
@@ -123,7 +123,7 @@ impl Context {
         eprintln!("parsing {}", environment.display());
 
         if let Some(parent) = environment.parent() {
-            self.icon_cache.set_icons_root(&parent);
+            self.icon_cache.set_icons_root(parent);
         }
 
         self.dm_context.autodetect_config(&environment);
