@@ -11,6 +11,11 @@ mod rendering;
 #[macro_use]
 extern crate rocket;
 
+use std::env;
+use std::fs::File;
+use std::io::Read;
+use std::path::PathBuf;
+
 use lazy_static::lazy_static;
 use rocket::fs::FileServer;
 use rocket::tokio::runtime::Handle;
@@ -30,6 +35,18 @@ lazy_static! {
     static ref CONFIG: RwLock<Option<Config>> = RwLock::new(None);
 }
 
+fn read_key(path: PathBuf) -> Vec<u8> {
+    let mut key_file =
+        File::open(&path).unwrap_or_else(|_| panic!("Unable to find file {}", path.display()));
+
+    let mut key = Vec::new();
+    let _ = key_file
+        .read_to_end(&mut key)
+        .unwrap_or_else(|_| panic!("Failed to read key {}", path.display()));
+
+    key
+}
+
 // #[post("/payload", data = "<data>")]
 // fn payload(data: String) -> &'static str {
 //     println!("{}", data);
@@ -38,11 +55,15 @@ lazy_static! {
 
 #[launch]
 async fn rocket() -> _ {
-    let key = include_bytes!("../mapdiffbot2.pem");
+    let key = read_key(
+        env::current_dir()
+            .expect("Failed to get current directory")
+            .join("mapdiffbot2.pem"),
+    );
 
     octocrab::initialise(octocrab::OctocrabBuilder::new().app(
         192759.into(),
-        jsonwebtoken::EncodingKey::from_rsa_pem(key).unwrap(),
+        jsonwebtoken::EncodingKey::from_rsa_pem(&key).unwrap(),
     ))
     .expect("fucked up octocrab");
 
