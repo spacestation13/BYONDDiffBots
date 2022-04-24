@@ -1,4 +1,4 @@
-use anyhow::Result;
+use anyhow::{Context, Result};
 use chrono;
 use rocket::http::Status;
 use rocket::outcome::Outcome;
@@ -7,90 +7,56 @@ use rocket::request::FromRequest;
 use rocket::serde::json::serde_json;
 use rocket::Request;
 use rocket::State;
-use serde::Deserialize;
-use serde::Serialize;
 
+use crate::github_api::*;
 use crate::github_types::*;
-use crate::job;
+use crate::job::*;
 
 async fn process_pull(
-    pull: &PullRequest,
-    run: &CheckRun,
+    pull: PullRequest,
+    run_id: u64,
     installation: &Installation,
-    job_sender: &job::JobSender,
+    job_sender: &JobSender,
 ) -> Result<()> {
-    let repo = &pull.head.repo;
-    let files: Vec<ModifiedFile> = octocrab::instance()
-        .installation(installation.id.into())
-        .get(
-            &format!(
-                "/repos/{repo}/pulls/{pull_number}/files",
-                repo = repo.full_name(),
-                pull_number = pull.number
-            ),
-            None::<&()>,
-        )
-        .await?;
-
-    let files: Vec<ModifiedFile> = files
+    let files: Vec<ModifiedFile> = get_pull_files(installation, &pull)
+        .await
+        .context("Getting files modified by PR")?
         .into_iter()
         .filter(|f| f.filename.ends_with(".dmm"))
         .collect();
 
-    if files.is_empty() {
-        let _: Empty = octocrab::instance()
-            .installation(installation.id.into())
-            .patch(
-                format!(
-                    "/repos/{repo}/check-runs/{check_run_id}",
-                    repo = repo.full_name(),
-                    check_run_id = run.id
-                ),
-                Some(&UpdateCheckRun {
-                    conclusion: Some("skipped".to_owned()),
-                    completed_at: Some(chrono::Utc::now().to_rfc3339()),
-                    status: None,
-                    name: None,
-                    started_at: None,
-                    output: None,
-                }),
-            )
-            .await?;
+    let job = Job {
+        base: pull.base,
+        head: pull.head,
+        pull_request: pull.number,
+        files,
+        check_run_id: run_id,
+        installation_id: installation.id,
+    };
+
+    if job.files.is_empty() {
+        update_check_run(
+            &job,
+            UpdateCheckRunBuilder::default()
+                .status("skipped")
+                .completed_at(chrono::Utc::now().to_rfc3339()),
+        )
+        .await
+        .context("Marking check run as skipped")?;
 
         return Ok(());
     }
 
-    let _: Empty = octocrab::instance()
-        .installation(installation.id.into())
-        .patch(
-            format!(
-                "/repos/{repo}/check-runs/{check_run_id}",
-                repo = repo.full_name(),
-                check_run_id = run.id
-            ),
-            Some(&UpdateCheckRun {
-                conclusion: None,
-                completed_at: None,
-                status: Some("queued".to_string()),
-                name: None,
-                started_at: Some(chrono::Utc::now().to_rfc3339()),
-                output: None,
-            }),
-        )
-        .await?;
+    update_check_run(
+        &job,
+        UpdateCheckRunBuilder::default()
+            .status("queued")
+            .started_at(chrono::Utc::now().to_rfc3339()),
+    )
+    .await
+    .context("Marking check run as queued")?;
 
-    job_sender
-        .0
-        .send_async(job::Job {
-            base: pull.base.clone(),
-            head: pull.head.clone(),
-            pull_request: pull.number,
-            files,
-            repository: pull.base.repo.clone(),
-            check_run_id: run.id,
-            installation_id: installation.id,
-        })
-        .await?;
+    job_sender.0.send_async(job).await?;
 
     Ok(())
 }
@@ -112,37 +78,15 @@ impl<'r> FromRequest<'r> for GithubEvent {
     }
 }
 
-#[derive(Serialize)]
-struct CreateCheckRun {
-    pub name: String,
-    pub head_sha: String,
-}
-
-#[derive(Deserialize, Debug)]
-struct AssFart {}
-
-pub async fn submit_check(full_repo: String, head_sha: String, inst_id: u64) -> Result<()> {
-    let _: AssFart = octocrab::instance()
-        .installation(inst_id.into())
-        .post(
-            format!("/repos/{full_repo}/check-runs"),
-            Some(&CreateCheckRun {
-                name: "MapDiffBot2".to_string(),
-                head_sha,
-            }),
-        )
-        .await?;
-    Ok(())
-}
-
 #[post("/payload", format = "json", data = "<payload>")]
 pub async fn process_github_payload(
     event: GithubEvent,
     payload: String,
-    job_sender: &State<job::JobSender>,
+    job_sender: &State<JobSender>,
 ) -> Result<&'static str, &'static str> {
     match event.0.as_str() {
         "check_suite" => {
+            eprintln!("Received check_suite event");
             let payload: JobPayload = serde_json::from_str(&payload).unwrap();
             if let Err(e) = submit_check(
                 payload.repository.full_name(),
@@ -151,7 +95,7 @@ pub async fn process_github_payload(
             )
             .await
             {
-                eprintln!("Failed to submit check: {}", e);
+                eprintln!("Failed to submit check: {:?}", e);
             }
         }
         "check_run" => {
@@ -161,12 +105,13 @@ pub async fn process_github_payload(
                     return Ok("Not MapDiffBot2");
                 }
                 if payload.action == "created" {
-                    let pulls = &check_run.pull_requests;
+                    let pulls = check_run.pull_requests;
+                    let run_id = check_run.id;
                     for pull in pulls {
                         if let Err(e) =
-                            process_pull(&pull, &check_run, &payload.installation, job_sender).await
+                            process_pull(pull, run_id, &payload.installation, job_sender).await
                         {
-                            eprintln!("Failed to process pull request: {}", e);
+                            eprintln!("Failed to process pull request: {:?}", e);
                         }
                     }
                 }

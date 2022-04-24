@@ -1,9 +1,10 @@
 <details>
 	<summary>
-	{}
+	REMOVED - {filename}
 	</summary>
 
 Removed:
-	{}
+[Raw link]({image_link})
+![If the image doesn't load, use the raw link above]({image_link})
 
 </details>

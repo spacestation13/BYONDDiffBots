@@ -1,3 +1,4 @@
+use derive_builder::Builder;
 use rocket::serde::Deserialize;
 use serde::Serialize;
 
@@ -94,6 +95,15 @@ pub struct Output {
 }
 
 #[derive(Serialize)]
+pub struct CreateCheckRun {
+    pub name: String,
+    pub head_sha: String,
+}
+
+#[derive(Serialize, Builder, Default)]
+#[builder(pattern = "owned")]
+#[builder(default)]
+#[builder(setter(into, strip_option))]
 pub struct UpdateCheckRun {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub name: Option<String>,

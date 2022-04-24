@@ -7,7 +7,6 @@ pub struct Job {
     pub head: Branch,
     pub pull_request: u64,
     pub files: Vec<ModifiedFile>,
-    pub repository: Repository,
     pub check_run_id: u64,
     pub installation_id: u64,
 }

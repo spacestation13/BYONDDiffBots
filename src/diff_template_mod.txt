@@ -1,10 +1,13 @@
 <details>
 	<summary>
-	{}
+	MODIFIED - {filename}
 	</summary>
+
+Raw links:
+[Old]({image_before_link}) - [New]({image_after_link}) - [Diff coming soon...](http://example.com)
 
 |  Old  |      New      |  Difference  |
 | :---: |     :---:     |    :---:     |
-|   {}  |       {}      |coming soon...|
+|![If the image doesn't load, use the raw link above]({image_before_link})|![If the image doesn't load, use the raw link above]({image_after_link})|coming soon...|
 
 </details>

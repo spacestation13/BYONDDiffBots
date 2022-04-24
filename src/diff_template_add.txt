@@ -1,9 +1,10 @@
 <details>
 	<summary>
-	{}
+	ADDED - {filename}
 	</summary>
 
 Added:
-	{}
+[Raw link]({image_link})
+![If the image doesn't load, use the raw link above]({image_link})
 
 </details>
