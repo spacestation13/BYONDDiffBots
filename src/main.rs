@@ -1,5 +1,3 @@
-#![feature(proc_macro_hygiene, decl_macro)]
-
 mod git_operations;
 mod github_api;
 mod github_processor;
