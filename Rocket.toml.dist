@@ -1,7 +1,9 @@
 [global]
 address = "0.0.0.0"
 port = 7878
-file_hosting_domain =
+private_key_path = "/path/to/private/key"
+file_hosting_url = "http://my_domain.com/files"
+app_id = 42069
 
 [global.limits]
 forms = 131072

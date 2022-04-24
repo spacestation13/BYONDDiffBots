@@ -10,6 +10,7 @@ use rocket::State;
 use crate::github_api::*;
 use crate::github_types::*;
 use crate::job::*;
+use crate::CONFIG;
 
 async fn process_pull(
     pull: PullRequest,
@@ -83,6 +84,7 @@ pub async fn process_github_payload(
     payload: String,
     job_sender: &State<JobSender>,
 ) -> Result<&'static str, &'static str> {
+    let app_id = { CONFIG.read().await.as_ref().unwrap().app_id };
     match event.0.as_str() {
         "check_suite" => {
             eprintln!("Received check_suite event");
@@ -100,7 +102,7 @@ pub async fn process_github_payload(
         "check_run" => {
             let payload: JobPayload = serde_json::from_str(&payload).unwrap();
             if let Some(check_run) = payload.check_run {
-                if check_run.app.id != 192759 {
+                if check_run.app.id != app_id {
                     return Ok("Not MapDiffBot2");
                 }
                 if payload.action == "created" {

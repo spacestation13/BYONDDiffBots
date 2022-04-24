@@ -1,14 +1,8 @@
-use ahash::RandomState;
-use anyhow::Result;
-use dmm_tools::dmm;
-use dmm_tools::render_passes::RenderPass;
+use anyhow::{Context, Result};
 use flume::Receiver;
 use path_absolutize::*;
-use rayon::prelude::*;
-use std::collections::HashSet;
 use std::path::Path;
 use std::process::Command;
-use std::sync::RwLock;
 use std::time::Instant;
 
 extern crate dreammaker as dm;
@@ -17,82 +11,8 @@ use crate::git_operations::*;
 use crate::github_api::update_check_run;
 use crate::github_types::*;
 use crate::job::Job;
-use crate::rendering::{get_map_diffs, render_map, BoundingBox, Context};
+use crate::rendering::*;
 use crate::{job, CONFIG};
-
-type RenderingErrors = RwLock<HashSet<String, RandomState>>;
-
-fn do_render(
-    context: &Context,
-    maps: &[dmm::Map],
-    bounds: &[BoundingBox],
-    render_passes: &[Box<dyn RenderPass>],
-    output_dir: &Path,
-    filename: &str,
-    errors: &RenderingErrors,
-) -> Result<()> {
-    let objtree = &context.obj_tree;
-    let icon_cache = &context.icon_cache;
-    let _: Result<()> = maps
-        .par_iter()
-        .zip(bounds.par_iter())
-        .enumerate()
-        .map(|(idx, (map, bb))| {
-            eprintln!("rendering map {}", idx);
-            let image = render_map(objtree, icon_cache, map, bb, errors, render_passes)?;
-
-            let directory = format!("{}/{}", output_dir.display(), idx);
-
-            eprintln!("Creating output directory: {}", directory);
-            std::fs::create_dir_all(&directory)?;
-
-            eprintln!("saving images");
-            image.to_file(format!("{}/{}", directory, filename).as_ref())?;
-            Ok(())
-        })
-        .collect();
-    Ok(())
-}
-
-fn render_befores(
-    base_context: &Context,
-    maps: &[dmm::Map],
-    bounds: &[BoundingBox],
-    render_passes: &[Box<dyn RenderPass>],
-    output_dir: &Path,
-    errors: &RenderingErrors,
-) -> Result<()> {
-    eprintln!("Rendering befores");
-    do_render(
-        base_context,
-        maps,
-        bounds,
-        render_passes,
-        output_dir,
-        "before.png",
-        errors,
-    )
-}
-
-fn render_afters(
-    head_context: &Context,
-    maps: &[dmm::Map],
-    bounds: &[BoundingBox],
-    render_passes: &[Box<dyn RenderPass>],
-    output_dir: &Path,
-    errors: &RenderingErrors,
-) -> Result<()> {
-    eprintln!("Rendering afters");
-    do_render(
-        head_context,
-        maps,
-        bounds,
-        render_passes,
-        output_dir,
-        "after.png",
-        errors,
-    )
-}
 
 fn render(
     base: &Branch,
@@ -103,16 +23,13 @@ fn render(
     output_dir: &Path,
     pull_request_number: u64,
 ) -> Result<()> {
-    let errors: RenderingErrors = Default::default();
-
     eprintln!("Parsing base");
     let now = Instant::now();
-    let mut base_context = Context::default();
-    with_repo_dir(&base.repo.name, || {
-        let p = Path::new(".").absolutize()?;
-        base_context.objtree(&p)?;
-        Ok(())
-    })?;
+    let path = format!("./repos/{}", &base.repo.name);
+    let path = Path::new(&path)
+        .absolutize()
+        .context("Making repo path absolute")?;
+    let base_context = RenderingContext::new(&path).context("Parsing base")?;
     eprintln!("Parsing base took {}s", now.elapsed().as_secs());
 
     let pull_branch = format!("mdb-{}-{}", base.sha, head.sha);
@@ -123,29 +40,30 @@ fn render(
     with_repo_dir(&base.repo.name, || {
         Command::new("git")
             .args(["fetch", "origin", &fetch_branch])
-            .output()?;
+            .output()
+            .context("Running fetch command")?;
         Ok(())
-    })?;
+    })
+    .context("Fetching the pull")?;
 
-    let mut head_context = Context::default();
-    with_checkout(&base.repo.name, &pull_branch, || {
-        let p = Path::new(".").absolutize()?;
-        head_context.objtree(&p)?;
-        Ok(())
-    })?;
+    let head_context = with_checkout(&base.repo.name, &pull_branch, || {
+        RenderingContext::new(&path)
+    })
+    .context("Parsing head")?;
+
     eprintln!(
         "Fetching and parsing head took {}s",
         now.elapsed().as_secs()
     );
 
     let base_render_passes = &dmm_tools::render_passes::configure(
-        &base_context.dm_context.config().map_renderer,
+        &base_context.config().map_renderer,
         "",
         "hide-space,hide-invisible,random",
     );
 
     let head_render_passes = &dmm_tools::render_passes::configure(
-        &head_context.dm_context.config().map_renderer,
+        &head_context.config().map_renderer,
         "",
         "hide-space,hide-invisible,random",
     );
@@ -153,101 +71,120 @@ fn render(
     // ADDED MAPS
     let added_directory = format!("{}/a", output_dir.display());
     let added_directory = Path::new(&added_directory);
+
+    let added_errors = Default::default();
+    let now = Instant::now();
     with_checkout(&base.repo.name, &pull_branch, || {
-        let mut maps = vec![];
-        let mut bounds = vec![];
-        for file in added_files {
-            println!("{}", file.filename);
-            let map =
-                dmm::Map::from_file(Path::new(&file.filename)).map_err(|e| anyhow::anyhow!(e))?;
-            let size = map.dim_xyz();
-            let bb = BoundingBox {
-                left: 0,
-                bottom: 0,
-                top: size.1 - 1,
-                right: size.0 - 1,
-            };
-            maps.push(map);
-            bounds.push(bb);
-        }
-        do_render(
+        let maps = load_maps(added_files).context("Loading added maps")?;
+        let bounds = maps
+            .iter()
+            .map(|m| BoundingBox::for_full_map(m))
+            .collect::<Vec<BoundingBox>>();
+
+        render_map_regions(
             &head_context,
             &maps,
             &bounds,
-            head_render_passes,
-            added_directory,
+            &head_render_passes,
+            &added_directory,
             "added.png",
-            &errors,
+            &added_errors,
         )
+        .context("Rendering added maps")
     })?;
+    eprintln!("Added maps took {}s", now.elapsed().as_secs());
 
     // MODIFIED MAPS
     let modified_directory = format!("{}/m", output_dir.display());
     let modified_directory = Path::new(&modified_directory);
-    let diffs = get_map_diffs(base, &pull_branch, modified_files)?;
 
+    let base_maps = with_repo_dir(&base.repo.name, || load_maps(modified_files))
+        .context("Loading base maps")?;
+    let head_maps = with_checkout(&base.repo.name, &pull_branch, || load_maps(modified_files))
+        .context("Loading head maps")?;
+    let diff_bounds = get_map_diff_bounding_boxes(&base_maps, &head_maps);
+
+    let modified_before_errors = Default::default();
     let now = Instant::now();
-    render_befores(
-        &base_context,
-        &diffs.base_maps,
-        &diffs.bounds,
-        base_render_passes,
-        modified_directory,
-        &errors,
-    )?;
-    eprintln!("rendering befores took {}s", now.elapsed().as_secs());
 
+    render_map_regions(
+        &base_context,
+        &base_maps,
+        &diff_bounds,
+        &head_render_passes,
+        &modified_directory,
+        "before.png",
+        &modified_before_errors,
+    )
+    .context("Rendering modified before maps")?;
+
+    eprintln!("Modified before maps took {}s", now.elapsed().as_secs());
+
+    let modified_after_errors = Default::default();
     let now = Instant::now();
     with_checkout(&base.repo.name, &pull_branch, || {
-        render_afters(
+        render_map_regions(
             &head_context,
-            &diffs.head_maps,
-            &diffs.bounds,
+            &head_maps,
+            &diff_bounds,
             head_render_passes,
             modified_directory,
-            &errors,
+            "after.png",
+            &modified_after_errors,
         )?;
         Ok(())
-    })?;
-    eprintln!("rendering afters took {}s", now.elapsed().as_secs());
+    })
+    .context("Rendering modified after maps")?;
+    eprintln!("Modified after maps took {}s", now.elapsed().as_secs());
 
     // REMOVED MAPS
     let removed_directory = format!("{}/r", output_dir.display());
     let removed_directory = Path::new(&removed_directory);
 
-    let mut maps = vec![];
-    let mut bounds = vec![];
+    let removed_errors = Default::default();
+    let now = Instant::now();
     with_repo_dir(&base.repo.name, || {
-        for file in removed_files {
-            println!("{}", file.filename);
-            let map =
-                dmm::Map::from_file(Path::new(&file.filename)).map_err(|e| anyhow::anyhow!(e))?;
-            let size = map.dim_xyz();
-            let bound = BoundingBox {
-                left: 0,
-                bottom: 0,
-                top: size.1 - 1,
-                right: size.0 - 1,
-            };
-            maps.push(map);
-            bounds.push(bound);
-        }
-        do_render(
+        let maps = load_maps(removed_files).context("Loading removed maps")?;
+        let bounds = maps
+            .iter()
+            .map(|m| BoundingBox::for_full_map(m))
+            .collect::<Vec<BoundingBox>>();
+
+        render_map_regions(
             &base_context,
             &maps,
             &bounds,
-            base_render_passes,
-            removed_directory,
+            &base_render_passes,
+            &removed_directory,
             "removed.png",
-            &errors,
-        )?;
-        Ok(())
+            &removed_errors,
+        )
+        .context("Rendering removed maps")
     })?;
+    eprintln!("Removed maps took {}s", now.elapsed().as_secs());
 
-    eprintln!("Errors: ");
-    for error in errors.read().unwrap().iter() {
-        eprintln!("{}", error);
-    }
+    with_repo_dir(&base.repo.name, || {
+        Command::new("git")
+            .args(["branch", "-d", &pull_branch])
+            .output()?;
+        Ok(())
+    })
+    .context("Deleting pull branch")?;
+
+    let print_errors = |e: &RenderingErrors| {
+        for error in e.read().unwrap().iter() {
+            eprintln!("{}", error);
+        }
+    };
+
+    eprintln!("Added map errors: ");
+    print_errors(&added_errors);
+    eprintln!("Modified before map errors: ");
+    print_errors(&modified_before_errors);
+    eprintln!("Modified after map errors: ");
+    print_errors(&modified_after_errors);
+    eprintln!("Removed map errors: ");
+    print_errors(&removed_errors);
 
     Ok(())
 }
@@ -266,10 +203,13 @@ async fn handle_job(job: Job) -> Result<()> {
     let repo = format!("https://github.com/{}", base.repo.full_name());
     Command::new("git")
         .args(["clone", &repo, &format!("./repos/{}", base.repo.name)])
-        .output()?;
+        .output()
+        .context("Cloning repo")?;
 
     let non_abs_directory = format!("images/{}/{}", job.base.repo.id, job.check_run_id);
-    let directory = Path::new(&non_abs_directory).absolutize()?;
+    let directory = Path::new(&non_abs_directory)
+        .absolutize()
+        .context("Absolutizing images path")?;
     let directory = directory
         .as_ref()
         .to_str()
@@ -281,7 +221,8 @@ async fn handle_job(job: Job) -> Result<()> {
             .default_branch
             .clone()
             .unwrap_or_else(|| "master".to_owned()),
-    )?;
+    )
+    .context("Checking out to default branch")?; // If this fails, good luck
 
     let filter_on_status = |status: &str| {
         job.files
@@ -302,7 +243,8 @@ async fn handle_job(job: Job) -> Result<()> {
         &removed_files,
         Path::new(directory),
         job.pull_request,
-    )?;
+    )
+    .context("Doing the renderance")?;
 
     let conf = CONFIG.read().await;
     let file_url = &conf.as_ref().unwrap().file_hosting_url;
@@ -310,8 +252,6 @@ async fn handle_job(job: Job) -> Result<()> {
     let title = "Map renderings";
     let summary = "Maps with diff:";
     let mut text = String::new();
-
-    //TODO: split into added, modified, removed earlier
 
     for (idx, file) in added_files.iter().enumerate() {
         let link = format!("{}/{}/a/{}/added.png", file_url, non_abs_directory, idx);
@@ -355,7 +295,8 @@ async fn handle_job(job: Job) -> Result<()> {
             .completed_at(chrono::Utc::now().to_rfc3339())
             .output(output),
     )
-    .await?;
+    .await
+    .context("Updating check run with success")?;
 
     Ok(())
 }

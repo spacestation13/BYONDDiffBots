@@ -11,7 +11,6 @@ mod rendering;
 #[macro_use]
 extern crate rocket;
 
-use std::env;
 use std::fs::File;
 use std::io::Read;
 use std::path::PathBuf;
@@ -29,6 +28,7 @@ async fn index() -> &'static str {
 #[derive(Default, Debug)]
 pub struct Config {
     pub file_hosting_url: String,
+    pub app_id: u64,
 }
 
 lazy_static! {
@@ -55,29 +55,34 @@ fn read_key(path: PathBuf) -> Vec<u8> {
 
 #[launch]
 async fn rocket() -> _ {
-    let key = read_key(
-        env::current_dir()
-            .expect("Failed to get current directory")
-            .join("mapdiffbot2.pem"),
-    );
+    let rocket = rocket::build();
+    let figment = rocket.figment();
+
+    let private_key_path: String = figment
+        .extract_inner("private_key_path")
+        .expect("private_key_path missing from Rocket.toml");
+
+    let file_hosting_url: String = figment
+        .extract_inner("file_hosting_url")
+        .expect("file_hosting_url missing from Rocket.toml");
+
+    let app_id: u64 = figment
+        .extract_inner("app_id")
+        .expect("app_id missing from Rocket.toml");
+
+    let key = read_key(PathBuf::from(&private_key_path));
 
     octocrab::initialise(octocrab::OctocrabBuilder::new().app(
-        192759.into(),
+        app_id.into(),
         jsonwebtoken::EncodingKey::from_rsa_pem(&key).unwrap(),
     ))
     .expect("fucked up octocrab");
 
     let handle = Handle::current();
 
-    let rocket = rocket::build();
-    let figment = rocket.figment();
-
-    let file_url: String = figment
-        .extract_inner("file_hosting_url")
-        .expect("file_hosting_url");
-
     CONFIG.write().await.replace(Config {
-        file_hosting_url: file_url,
+        file_hosting_url,
+        app_id,
     });
 
     let (job_sender, job_receiver) = flume::unbounded();
