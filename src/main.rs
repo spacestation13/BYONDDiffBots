@@ -15,20 +15,9 @@ use lazy_static::lazy_static;
 use rocket::fs::FileServer;
 use rocket::tokio::runtime::Handle;
 use rocket::tokio::sync::RwLock;
-use serde::Deserialize;
-
-#[derive(Deserialize, Debug)]
-struct AssBalls {
-    name: String,
-}
 
 #[get("/")]
 async fn index() -> &'static str {
-    let ass: AssBalls = octocrab::instance()
-        .get("/app", None::<&()>)
-        .await
-        .expect("Could not get app");
-    println!("{:?}", ass);
     "MDB says hello!"
 }
 
