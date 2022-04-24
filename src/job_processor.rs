@@ -24,18 +24,18 @@ type RenderingErrors = RwLock<HashSet<String, RandomState>>;
 
 fn do_render(
     context: &Context,
-    maps: &Vec<dmm::Map>,
-    bbs: &Vec<BoundingBox>,
-    render_passes: &Vec<Box<dyn RenderPass>>,
+    maps: &[dmm::Map],
+    bounds: &[BoundingBox],
+    render_passes: &[Box<dyn RenderPass>],
     output_dir: &Path,
     filename: &str,
     errors: &RenderingErrors,
 ) -> Result<()> {
-    let objtree = &context.objtree;
+    let objtree = &context.obj_tree;
     let icon_cache = &context.icon_cache;
     let _: Result<()> = maps
         .par_iter()
-        .zip(bbs.par_iter())
+        .zip(bounds.par_iter())
         .enumerate()
         .map(|(idx, (map, bb))| {
             eprintln!("rendering map {}", idx);
@@ -56,9 +56,9 @@ fn do_render(
 
 fn render_befores(
     base_context: &Context,
-    maps: &Vec<dmm::Map>,
-    bbs: &Vec<BoundingBox>,
-    render_passes: &Vec<Box<dyn RenderPass>>,
+    maps: &[dmm::Map],
+    bounds: &[BoundingBox],
+    render_passes: &[Box<dyn RenderPass>],
     output_dir: &Path,
     errors: &RenderingErrors,
 ) -> Result<()> {
@@ -66,7 +66,7 @@ fn render_befores(
     do_render(
         base_context,
         maps,
-        bbs,
+        bounds,
         render_passes,
         output_dir,
         "before.png",
@@ -76,9 +76,9 @@ fn render_befores(
 
 fn render_afters(
     head_context: &Context,
-    maps: &Vec<dmm::Map>,
-    bbs: &Vec<BoundingBox>,
-    render_passes: &Vec<Box<dyn RenderPass>>,
+    maps: &[dmm::Map],
+    bounds: &[BoundingBox],
+    render_passes: &[Box<dyn RenderPass>],
     output_dir: &Path,
     errors: &RenderingErrors,
 ) -> Result<()> {
@@ -86,7 +86,7 @@ fn render_afters(
     do_render(
         head_context,
         maps,
-        bbs,
+        bounds,
         render_passes,
         output_dir,
         "after.png",
@@ -97,9 +97,9 @@ fn render_afters(
 fn render(
     base: &Branch,
     head: &Branch,
-    added_files: &Vec<&ModifiedFile>,
-    modified_files: &Vec<&ModifiedFile>,
-    removed_files: &Vec<&ModifiedFile>,
+    added_files: &[&ModifiedFile],
+    modified_files: &[&ModifiedFile],
+    removed_files: &[&ModifiedFile],
     output_dir: &Path,
     pull_request_number: u64,
 ) -> Result<()> {
@@ -155,7 +155,7 @@ fn render(
     let added_directory = Path::new(&added_directory);
     with_checkout(&base.repo.name, &pull_branch, || {
         let mut maps = vec![];
-        let mut bbs = vec![];
+        let mut bounds = vec![];
         for file in added_files {
             println!("{}", file.filename);
             let map =
@@ -168,12 +168,12 @@ fn render(
                 right: size.0 - 1,
             };
             maps.push(map);
-            bbs.push(bb);
+            bounds.push(bb);
         }
         do_render(
             &head_context,
             &maps,
-            &bbs,
+            &bounds,
             head_render_passes,
             added_directory,
             "added.png",
@@ -184,13 +184,13 @@ fn render(
     // MODIFIED MAPS
     let modified_directory = format!("{}/m", output_dir.display());
     let modified_directory = Path::new(&modified_directory);
-    let diffs = get_map_diffs(&base, &pull_branch, &modified_files)?;
+    let diffs = get_map_diffs(&base, &pull_branch, modified_files)?;
 
     let now = Instant::now();
     render_befores(
         &base_context,
-        &diffs.bases,
-        &diffs.bbs,
+        &diffs.base_maps,
+        &diffs.bounds,
         base_render_passes,
         modified_directory,
         &errors,
@@ -201,8 +201,8 @@ fn render(
     with_checkout(&base.repo.name, &pull_branch, || {
         render_afters(
             &head_context,
-            &diffs.heads,
-            &diffs.bbs,
+            &diffs.head_maps,
+            &diffs.bounds,
             head_render_passes,
             modified_directory,
             &errors,
@@ -216,26 +216,26 @@ fn render(
     let removed_directory = Path::new(&removed_directory);
 
     let mut maps = vec![];
-    let mut bbs = vec![];
+    let mut bounds = vec![];
     with_repo_dir(&base.repo.name, || {
         for file in removed_files {
             println!("{}", file.filename);
             let map =
                 dmm::Map::from_file(Path::new(&file.filename)).map_err(|e| anyhow::anyhow!(e))?;
             let size = map.dim_xyz();
-            let bb = BoundingBox {
+            let bound = BoundingBox {
                 left: 0,
                 bottom: 0,
                 top: size.1 - 1,
                 right: size.0 - 1,
             };
             maps.push(map);
-            bbs.push(bb);
+            bounds.push(bound);
         }
         do_render(
             &base_context,
             &maps,
-            &bbs,
+            &bounds,
             base_render_passes,
             removed_directory,
             "removed.png",
