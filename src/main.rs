@@ -41,7 +41,7 @@ fn read_key(path: PathBuf) -> Vec<u8> {
 
     let mut key = Vec::new();
     let _ = key_file
-        .read(&mut key)
+        .read_to_end(&mut key)
         .unwrap_or_else(|_| panic!("Failed to read key {}", path.display()));
 
     key
