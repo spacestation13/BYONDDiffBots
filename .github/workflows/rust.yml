@@ -15,7 +15,8 @@ jobs:
 
     steps:
       - uses: actions/checkout@v3
-        run: rustup component add clippy
+
+      - run: rustup component add clippy
 
       - name: Cache
         uses: actions/cache@v2
