@@ -48,6 +48,7 @@ pub struct PullRequest {
     pub number: u64,
     pub head: Branch,
     pub base: Branch,
+    pub title: Option<String>,
 }
 #[derive(Deserialize, Debug)]
 pub struct ModifiedFile {

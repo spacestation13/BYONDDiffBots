@@ -39,6 +39,26 @@ pub async fn get_pull_files(
     Ok(res)
 }
 
+pub async fn get_pull_meta(
+    installation: &Installation,
+    repo: &Repository,
+    id: u64,
+) -> Result<PullRequest> {
+    let res = octocrab::instance()
+        .installation(installation.id.into())
+        .get(
+            &format!(
+                "/repos/{repo}/pulls/{pull_number}",
+                repo = repo.full_name(),
+                pull_number = id
+            ),
+            None::<&()>,
+        )
+        .await?;
+
+    Ok(res)
+}
+
 pub async fn submit_check(full_repo: String, head_sha: String, inst_id: u64) -> Result<()> {
     let _: Empty = octocrab::instance()
         .installation(inst_id.into())
