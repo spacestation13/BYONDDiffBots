@@ -2,6 +2,7 @@ use anyhow::{Context, Result};
 use flume::Receiver;
 use path_absolutize::*;
 use rocket::tokio::sync::Mutex;
+use rocket::tokio::task;
 use std::path::Path;
 use std::process::Command;
 use std::sync::Arc;
@@ -192,15 +193,7 @@ fn render(
     Ok(())
 }
 
-async fn do_job(job: &Job) -> Result<()> {
-    update_check_run(
-        job,
-        UpdateCheckRunBuilder::default()
-            .status("in_progress")
-            .started_at(chrono::Utc::now().to_rfc3339()),
-    )
-    .await?;
-
+fn do_job(job: &Job) -> Result<Output> {
     let base = &job.base;
     let head = &job.head;
     let repo = format!("https://github.com/{}", base.repo.full_name());
@@ -249,7 +242,7 @@ async fn do_job(job: &Job) -> Result<()> {
     )
     .context("Doing the renderance")?;
 
-    let conf = CONFIG.read().await;
+    let conf = CONFIG.read().unwrap();
     let file_url = &conf.as_ref().unwrap().file_hosting_url;
 
     let title = "Map renderings";
@@ -291,28 +284,37 @@ async fn do_job(job: &Job) -> Result<()> {
         text,
     };
 
+    Ok(output)
+}
+
+async fn handle_job(job: job::Job) {
     update_check_run(
-        job,
+        &job,
+        UpdateCheckRunBuilder::default()
+            .status("in_progress")
+            .started_at(chrono::Utc::now().to_rfc3339()),
+    )
+    .await;
+    let job_clone = job.clone();
+    let output = task::spawn_blocking(move || {
+        eprintln!("Received job: {:#?}", job_clone);
+        let now = Instant::now();
+        let result = do_job(&job_clone);
+        eprintln!("Handling job took {}s", now.elapsed().as_secs());
+        result
+    })
+    .await
+    .unwrap();
+    let output = output.unwrap();
+    update_check_run(
+        &job,
         UpdateCheckRunBuilder::default()
             .conclusion("success")
             .completed_at(chrono::Utc::now().to_rfc3339())
             .output(output),
     )
-    .await
-    .context("Updating check run with success")?;
-
-    Ok(())
-}
-
-async fn handle_job(job: &job::Job) {
-    eprintln!("Received job: {:#?}", job);
-    let now = Instant::now();
-    if let Err(err) = do_job(job).await {
-        eprintln!("Error handling job: {:?}", err);
-    } else {
-        eprintln!("Job handled successfully");
-    }
-    eprintln!("Handling job took {}s", now.elapsed().as_secs());
+    .await;
+    //.context("Updating check run with success")?;
 }
 
 async fn recover_from_journal(journal: &Arc<Mutex<job::JobJournal>>) {
@@ -328,8 +330,10 @@ async fn recover_from_journal(journal: &Arc<Mutex<job::JobJournal>>) {
         // Done this way to avoid a deadlock
         let job = journal.lock().await.get_job();
         if let Some(job) = job {
-            handle_job(&job).await;
-            journal.lock().await.complete_job().await;
+            handle_job(job).await;
+            {
+                journal.lock().await.complete_job().await;
+            }
         } else {
             break;
         }
@@ -339,8 +343,15 @@ async fn recover_from_journal(journal: &Arc<Mutex<job::JobJournal>>) {
 pub async fn handle_jobs(job_receiver: Receiver<job::Job>, journal: Arc<Mutex<job::JobJournal>>) {
     eprintln!("Starting job handler");
     recover_from_journal(&journal).await;
-    while let Ok(job) = job_receiver.recv_async().await {
-        handle_job(&job).await;
-        journal.lock().await.complete_job().await;
+    loop {
+        let job = job_receiver.recv_async().await;
+        if let Ok(job) = job {
+            handle_job(job).await;
+            {
+                journal.lock().await.complete_job().await;
+            }
+        } else {
+            break;
+        }
     }
 }

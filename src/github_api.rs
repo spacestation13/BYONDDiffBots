@@ -60,6 +60,7 @@ pub async fn get_pull_meta(
 }
 
 pub async fn submit_check(full_repo: String, head_sha: String, inst_id: u64) -> Result<()> {
+    eprintln!("Just before submit");
     let _: Empty = octocrab::instance()
         .installation(inst_id.into())
         .post(
@@ -71,6 +72,7 @@ pub async fn submit_check(full_repo: String, head_sha: String, inst_id: u64) -> 
         )
         .await
         .context("Submitting check")?;
+    eprintln!("Just after submit");
 
     Ok(())
 }

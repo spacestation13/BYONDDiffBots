@@ -85,6 +85,7 @@ async fn process_pull(
     .await
     .context("Marking check run as queued")?;
 
+    eprintln!("Journaling job: {:?}", &job);
     journal.lock().await.add_job(job.clone()).await;
 
     job_sender.0.send_async(job).await?;
@@ -116,20 +117,21 @@ pub async fn process_github_payload(
     job_sender: &State<JobSender>,
     journal: &State<Arc<Mutex<JobJournal>>>,
 ) -> Result<&'static str, &'static str> {
-    let app_id = { CONFIG.read().await.as_ref().unwrap().app_id };
+    eprintln!("AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA");
+    let app_id = { CONFIG.read().unwrap().as_ref().unwrap().app_id };
     match event.0.as_str() {
         "check_suite" => {
             eprintln!("Received check_suite event");
             let payload: JobPayload = serde_json::from_str(&payload).unwrap();
-            if let Err(e) = submit_check(
+            eprintln!("Submitting check");
+            submit_check(
                 payload.repository.full_name(),
                 payload.check_suite.unwrap().head_sha,
                 payload.installation.id,
             )
             .await
-            {
-                eprintln!("Failed to submit check: {:?}", e);
-            }
+            .expect("FUCK");
+            eprintln!("Check submitted");
         }
         "check_run" => {
             let payload: JobPayload = serde_json::from_str(&payload).unwrap();

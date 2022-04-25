@@ -17,7 +17,8 @@ use std::sync::Arc;
 use lazy_static::lazy_static;
 use rocket::fs::FileServer;
 use rocket::tokio::runtime::Handle;
-use rocket::tokio::sync::{Mutex, RwLock};
+use rocket::tokio::sync::Mutex;
+use std::sync::RwLock;
 
 #[get("/")]
 async fn index() -> &'static str {
@@ -79,7 +80,7 @@ async fn rocket() -> _ {
 
     let handle = Handle::current();
 
-    CONFIG.write().await.replace(Config {
+    CONFIG.write().unwrap().replace(Config {
         file_hosting_url,
         app_id,
     });
