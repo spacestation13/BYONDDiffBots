@@ -86,7 +86,7 @@ fn render(
             &maps,
             &bounds,
             &head_render_passes,
-            &added_directory,
+            added_directory,
             "added.png",
             &added_errors,
         )

@@ -25,14 +25,14 @@ impl Repository {
         self.url.split('/').skip(4).collect::<Vec<&str>>().join("/")
     }
 
-    pub fn owner(&self) -> String {
-        self.url
-            .split('/')
-            .skip(4)
-            .take(1)
-            .collect::<Vec<&str>>()
-            .join("")
-    }
+    // pub fn owner(&self) -> String {
+    //     self.url
+    //         .split('/')
+    //         .skip(4)
+    //         .take(1)
+    //         .collect::<Vec<&str>>()
+    //         .join("")
+    // }
 }
 
 #[derive(Deserialize, Debug, Clone)]
