@@ -4,6 +4,8 @@ use rocket::outcome::Outcome;
 use rocket::request;
 use rocket::request::FromRequest;
 use rocket::serde::json::serde_json;
+use rocket::tokio::fs::OpenOptions;
+use rocket::tokio::io::AsyncWriteExt;
 use rocket::Request;
 use rocket::State;
 
@@ -55,6 +57,20 @@ async fn process_pull(
     )
     .await
     .context("Marking check run as queued")?;
+
+    let mut file = OpenOptions::new()
+        .append(true)
+        .create(true)
+        .open("mdb.jobs")
+        .await
+        .context("Opening job file")?;
+
+    if let Err(e) = file
+        .write(serde_json::to_string(&job).unwrap().as_bytes())
+        .await
+    {
+        eprintln!("Couldn't write to file: {}", e);
+    }
 
     job_sender.0.send_async(job).await?;
 

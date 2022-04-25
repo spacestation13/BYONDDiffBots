@@ -1,7 +1,8 @@
 use crate::github_types::*;
 use flume::Sender;
+use serde::{Deserialize, Serialize};
 
-#[derive(Debug)]
+#[derive(Serialize, Deserialize, Debug)]
 pub struct Job {
     pub base: Branch,
     pub head: Branch,

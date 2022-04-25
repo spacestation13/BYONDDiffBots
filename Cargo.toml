@@ -7,7 +7,7 @@ edition = "2021"
 
 [dependencies]
 serde = { version = "1.0", features = ["derive"] }
-octocrab = { git = "https://github.com/MCHSL/octocrab" }
+octocrab = { git = "https://github.com/XAMPPRocky/octocrab" }
 flume = "0.10.12"
 dmm-tools = { git = "https://github.com/SpaceManiac/SpacemanDMM/", features = ["png"] }
 dreammaker = { git = "https://github.com/SpaceManiac/SpacemanDMM/" }

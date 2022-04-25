@@ -12,7 +12,7 @@ pub struct Installation {
     pub id: u64,
 }
 
-#[derive(Deserialize, Debug, Clone)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct Repository {
     pub url: String,
     pub name: String,
@@ -35,7 +35,7 @@ impl Repository {
     // }
 }
 
-#[derive(Deserialize, Debug, Clone)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct Branch {
     #[serde(rename = "ref")]
     pub name: String,
@@ -49,7 +49,7 @@ pub struct PullRequest {
     pub head: Branch,
     pub base: Branch,
 }
-#[derive(Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug)]
 pub struct ModifiedFile {
     pub filename: String,
     pub status: String,
