@@ -34,6 +34,26 @@ async fn process_pull(
         installation_id: installation.id,
     };
 
+    if pull.title.to_ascii_lowercase().contains("[mdb ignore]") {
+        let output = Output {
+            title: "PR Ignored".to_owned(),
+            summary: "This PR has `[MDB IGNORE]` in the title. Aborting.".to_owned(),
+            text: "".to_owned(),
+        };
+
+        update_check_run(
+            &job,
+            UpdateCheckRunBuilder::default()
+                .status("skipped")
+                .completed_at(chrono::Utc::now().to_rfc3339())
+                .output(output),
+        )
+        .await
+        .context("Marking check run as skipped")?;
+
+        return Ok(());
+    }
+
     if job.files.is_empty() {
         update_check_run(
             &job,
