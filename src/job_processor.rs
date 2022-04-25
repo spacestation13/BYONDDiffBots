@@ -26,6 +26,41 @@ fn render(
     output_dir: &Path,
     pull_request_number: u64,
 ) -> Result<()> {
+    with_repo_dir(&base.repo, || {
+        eprintln!("Checking out {}", base.name);
+        Command::new("git")
+            .args(["checkout", &base.name])
+            .output()
+            .context("Running base checkout command")?;
+
+        eprintln!("pulling {}", base.name);
+        Command::new("git")
+            .args(["pull", "origin", &base.name])
+            .output()
+            .context("Running base pull command")?;
+
+        eprintln!("Purging branches");
+        let output = Command::new("git")
+            .args(["branch"])
+            .output()
+            .context("Running branch command")?;
+
+        String::from_utf8(output.stdout)?
+            .lines()
+            .map(|l| l.trim())
+            .filter(|l| l.starts_with("mdb-"))
+            .try_for_each(|l| {
+                Command::new("git")
+                    .args(["branch", "-D", l])
+                    .output()
+                    .context("Running branch delete command")
+                    .map(|_| ())
+            })?;
+
+        Ok(())
+    })
+    .context("Updating to latest master on base")?;
+
     eprintln!("Parsing base");
     let now = Instant::now();
     let path = format!("./repos/{}", &base.repo.name);
@@ -40,7 +75,7 @@ fn render(
 
     eprintln!("Fetching and parsing head");
     let now = Instant::now();
-    with_repo_dir(&base.repo.name, || {
+    with_repo_dir(&base.repo, || {
         Command::new("git")
             .args(["fetch", "origin", &fetch_branch])
             .output()
@@ -49,10 +84,8 @@ fn render(
     })
     .context("Fetching the pull")?;
 
-    let head_context = with_checkout(&base.repo.name, &pull_branch, || {
-        RenderingContext::new(&path)
-    })
-    .context("Parsing head")?;
+    let head_context = with_checkout(&base.repo, &pull_branch, || RenderingContext::new(&path))
+        .context("Parsing head")?;
 
     eprintln!(
         "Fetching and parsing head took {}s",
@@ -77,7 +110,7 @@ fn render(
 
     let added_errors = Default::default();
     let now = Instant::now();
-    with_checkout(&base.repo.name, &pull_branch, || {
+    with_checkout(&base.repo, &pull_branch, || {
         let maps = load_maps(added_files).context("Loading added maps")?;
         let bounds = maps
             .iter()
@@ -101,9 +134,9 @@ fn render(
     let modified_directory = format!("{}/m", output_dir.display());
     let modified_directory = Path::new(&modified_directory);
 
-    let base_maps = with_repo_dir(&base.repo.name, || load_maps(modified_files))
-        .context("Loading base maps")?;
-    let head_maps = with_checkout(&base.repo.name, &pull_branch, || load_maps(modified_files))
+    let base_maps =
+        with_repo_dir(&base.repo, || load_maps(modified_files)).context("Loading base maps")?;
+    let head_maps = with_checkout(&base.repo, &pull_branch, || load_maps(modified_files))
         .context("Loading head maps")?;
     let diff_bounds = get_map_diff_bounding_boxes(&base_maps, &head_maps);
 
@@ -125,7 +158,7 @@ fn render(
 
     let modified_after_errors = Default::default();
     let now = Instant::now();
-    with_checkout(&base.repo.name, &pull_branch, || {
+    with_checkout(&base.repo, &pull_branch, || {
         render_map_regions(
             &head_context,
             &head_maps,
@@ -146,7 +179,7 @@ fn render(
 
     let removed_errors = Default::default();
     let now = Instant::now();
-    with_repo_dir(&base.repo.name, || {
+    with_repo_dir(&base.repo, || {
         let maps = load_maps(removed_files).context("Loading removed maps")?;
         let bounds = maps
             .iter()
@@ -166,7 +199,7 @@ fn render(
     })?;
     eprintln!("Removed maps took {}s", now.elapsed().as_secs());
 
-    with_repo_dir(&base.repo.name, || {
+    with_repo_dir(&base.repo, || {
         Command::new("git")
             .args(["branch", "-D", &pull_branch])
             .output()?;
@@ -287,14 +320,16 @@ fn do_job(job: &Job) -> Result<Output> {
     Ok(output)
 }
 
-async fn handle_job(job: job::Job) {
+async fn handle_job(job: job::Job) -> Result<()> {
     update_check_run(
         &job,
         UpdateCheckRunBuilder::default()
             .status("in_progress")
             .started_at(chrono::Utc::now().to_rfc3339()),
     )
-    .await;
+    .await
+    .context("Marking check as in progress")?;
+
     let job_clone = job.clone();
     let output = task::spawn_blocking(move || {
         eprintln!("Received job: {:#?}", job_clone);
@@ -303,8 +338,8 @@ async fn handle_job(job: job::Job) {
         eprintln!("Handling job took {}s", now.elapsed().as_secs());
         result
     })
-    .await
-    .unwrap();
+    .await?;
+
     let output = output.unwrap();
     update_check_run(
         &job,
@@ -313,8 +348,10 @@ async fn handle_job(job: job::Job) {
             .completed_at(chrono::Utc::now().to_rfc3339())
             .output(output),
     )
-    .await;
-    //.context("Updating check run with success")?;
+    .await
+    .context("Updating check run with success")?;
+
+    Ok(())
 }
 
 async fn recover_from_journal(journal: &Arc<Mutex<job::JobJournal>>) {
@@ -330,10 +367,10 @@ async fn recover_from_journal(journal: &Arc<Mutex<job::JobJournal>>) {
         // Done this way to avoid a deadlock
         let job = journal.lock().await.get_job();
         if let Some(job) = job {
-            handle_job(job).await;
-            {
-                journal.lock().await.complete_job().await;
+            if let Err(e) = handle_job(job).await {
+                eprintln!("Error handling job: {}", e);
             }
+            journal.lock().await.complete_job().await;
         } else {
             break;
         }
@@ -346,10 +383,10 @@ pub async fn handle_jobs(job_receiver: Receiver<job::Job>, journal: Arc<Mutex<jo
     loop {
         let job = job_receiver.recv_async().await;
         if let Ok(job) = job {
-            handle_job(job).await;
-            {
-                journal.lock().await.complete_job().await;
+            if let Err(e) = handle_job(job).await {
+                eprintln!("Error handling job: {}", e);
             }
+            journal.lock().await.complete_job().await;
         } else {
             break;
         }

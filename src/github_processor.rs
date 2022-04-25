@@ -64,11 +64,18 @@ async fn process_pull(
     }
 
     if job.files.is_empty() {
+        let output = Output {
+            title: "No map chages".to_owned(),
+            summary: "There are no changed map files to render.".to_owned(),
+            text: "".to_owned(),
+        };
+
         update_check_run(
             &job,
             UpdateCheckRunBuilder::default()
                 .conclusion("skipped")
-                .completed_at(chrono::Utc::now().to_rfc3339()),
+                .completed_at(chrono::Utc::now().to_rfc3339())
+                .output(output),
         )
         .await
         .context("Marking check run as skipped")?;
@@ -85,9 +92,7 @@ async fn process_pull(
     .await
     .context("Marking check run as queued")?;
 
-    eprintln!("Journaling job: {:?}", &job);
     journal.lock().await.add_job(job.clone()).await;
-
     job_sender.0.send_async(job).await?;
 
     Ok(())
@@ -117,20 +122,44 @@ pub async fn process_github_payload(
     job_sender: &State<JobSender>,
     journal: &State<Arc<Mutex<JobJournal>>>,
 ) -> Result<&'static str, &'static str> {
-    eprintln!("AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA");
     let app_id = { CONFIG.read().unwrap().as_ref().unwrap().app_id };
     match event.0.as_str() {
-        "check_suite" => {
-            eprintln!("Received check_suite event");
-            let payload: JobPayload = serde_json::from_str(&payload).unwrap();
-            eprintln!("Submitting check");
+        "pull_request" => {
+            let payload: PullRequestEventPayload = serde_json::from_str(&payload).unwrap();
+            if payload.action != "opened" {
+                return Ok("Ignoring non-opened PR");
+            }
+
             submit_check(
-                payload.repository.full_name(),
-                payload.check_suite.unwrap().head_sha,
+                payload.pull_request.base.repo.full_name(),
+                payload.pull_request.head.sha,
                 payload.installation.id,
             )
             .await
-            .expect("FUCK");
+            .map_err(|e| {
+                eprintln!("Error submitting check: {}", e);
+                "Error submitting check"
+            })?;
+        }
+        "check_suite" => {
+            eprintln!("Received check_suite event");
+            let payload: JobPayload = serde_json::from_str(&payload).unwrap();
+            let suite = payload.check_suite.unwrap();
+            if suite.pull_requests.is_empty() {
+                eprintln!("No PRs in check_suite event, ignoring");
+                return Ok("No PRs");
+            }
+            eprintln!("Submitting check");
+            submit_check(
+                payload.repository.full_name(),
+                suite.head_sha,
+                payload.installation.id,
+            )
+            .await
+            .map_err(|e| {
+                eprintln!("Error submitting check: {}", e);
+                "Error submitting check"
+            })?;
             eprintln!("Check submitted");
         }
         "check_run" => {

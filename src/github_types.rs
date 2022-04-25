@@ -88,6 +88,15 @@ pub struct JobPayload {
     pub installation: Installation,
 }
 
+#[derive(Deserialize, Debug)]
+pub struct PullRequestEventPayload {
+    pub action: String,
+    pub number: u64,
+    pub repository: Repository,
+    pub pull_request: PullRequest,
+    pub installation: Installation,
+}
+
 #[derive(Serialize)]
 pub struct Output {
     pub title: String,
