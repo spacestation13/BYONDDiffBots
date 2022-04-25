@@ -78,7 +78,7 @@ fn render(
         let maps = load_maps(added_files).context("Loading added maps")?;
         let bounds = maps
             .iter()
-            .map(|m| BoundingBox::for_full_map(m))
+            .map(BoundingBox::for_full_map)
             .collect::<Vec<BoundingBox>>();
 
         render_map_regions(
@@ -112,7 +112,7 @@ fn render(
         &base_maps,
         &diff_bounds,
         &head_render_passes,
-        &modified_directory,
+        modified_directory,
         "before.png",
         &modified_before_errors,
     )
@@ -147,7 +147,7 @@ fn render(
         let maps = load_maps(removed_files).context("Loading removed maps")?;
         let bounds = maps
             .iter()
-            .map(|m| BoundingBox::for_full_map(m))
+            .map(BoundingBox::for_full_map)
             .collect::<Vec<BoundingBox>>();
 
         render_map_regions(
@@ -155,7 +155,7 @@ fn render(
             &maps,
             &bounds,
             &base_render_passes,
-            &removed_directory,
+            removed_directory,
             "removed.png",
             &removed_errors,
         )
