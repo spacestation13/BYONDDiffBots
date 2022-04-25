@@ -36,11 +36,36 @@ async fn process_pull(
         installation_id: installation.id,
     };
 
+    if pull
+        .title
+        .ok_or_else(|| anyhow::anyhow!("PR title is None"))?
+        .to_ascii_lowercase()
+        .contains("[mdb ignore]")
+    {
+        let output = Output {
+            title: "PR Ignored".to_owned(),
+            summary: "This PR has `[MDB IGNORE]` in the title. Aborting.".to_owned(),
+            text: "".to_owned(),
+        };
+
+        update_check_run(
+            &job,
+            UpdateCheckRunBuilder::default()
+                .conclusion("skipped")
+                .completed_at(chrono::Utc::now().to_rfc3339())
+                .output(output),
+        )
+        .await
+        .context("Marking check run as skipped")?;
+
+        return Ok(());
+    }
+
     if job.files.is_empty() {
         update_check_run(
             &job,
             UpdateCheckRunBuilder::default()
-                .status("skipped")
+                .conclusion("skipped")
                 .completed_at(chrono::Utc::now().to_rfc3339()),
         )
         .await
@@ -125,6 +150,16 @@ pub async fn process_github_payload(
                     let pulls = check_run.pull_requests;
                     let run_id = check_run.id;
                     for pull in pulls {
+                        // We only get partial pull information in the check, we request full info from github
+                        let pull =
+                            get_pull_meta(&payload.installation, &pull.base.repo, pull.number)
+                                .await
+                                .context("Getting full pull information");
+                        if let Err(e) = pull {
+                            eprintln!("Failed to get pull information: {:?}", e);
+                            continue;
+                        }
+                        let pull = pull.unwrap();
                         if let Err(e) =
                             process_pull(pull, run_id, &payload.installation, job_sender).await
                         {
