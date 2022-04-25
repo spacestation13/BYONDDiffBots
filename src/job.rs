@@ -35,12 +35,12 @@ impl JobJournal {
         })
     }
 
-    pub fn has_jobs(&self) -> bool {
-        !self.jobs.is_empty()
+    pub fn get_job_count(&self) -> usize {
+        self.jobs.len()
     }
 
-    pub async fn get_job(&self) -> Option<&Job> {
-        self.jobs.get(0)
+    pub fn get_job(&self) -> Option<Job> {
+        self.jobs.get(0).map(Clone::clone)
     }
 
     // Jobs are processed one at a time, so we can just remove the first job.

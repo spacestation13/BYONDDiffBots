@@ -316,18 +316,23 @@ async fn handle_job(job: &job::Job) {
 }
 
 async fn recover_from_journal(journal: &Arc<Mutex<job::JobJournal>>) {
-    let mut journal = journal.lock().await;
-
-    if journal.has_jobs() {
-        eprintln!("Recovering from journal");
+    let num_jobs = journal.lock().await.get_job_count();
+    if num_jobs > 0 {
+        eprintln!("Recovering {} jobs from journal", num_jobs);
     } else {
-        eprintln!("No jobs in journal");
+        eprintln!("No jobs to recover from journal");
         return;
     }
 
-    while let Some(job) = journal.get_job().await {
-        handle_job(job).await;
-        journal.complete_job().await; // watch this deadlock
+    loop {
+        // Done this way to avoid a deadlock
+        let job = journal.lock().await.get_job();
+        if let Some(job) = job {
+            handle_job(&job).await;
+            journal.lock().await.complete_job().await;
+        } else {
+            break;
+        }
     }
 }
 
