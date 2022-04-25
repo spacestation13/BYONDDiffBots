@@ -56,13 +56,13 @@ fn render(
         now.elapsed().as_secs()
     );
 
-    let base_render_passes = &dmm_tools::render_passes::configure(
+    let base_render_passes = dmm_tools::render_passes::configure(
         &base_context.config().map_renderer,
         "",
         "hide-space,hide-invisible,random",
     );
 
-    let head_render_passes = &dmm_tools::render_passes::configure(
+    let head_render_passes = dmm_tools::render_passes::configure(
         &head_context.config().map_renderer,
         "",
         "hide-space,hide-invisible,random",
@@ -127,7 +127,7 @@ fn render(
             &head_context,
             &head_maps,
             &diff_bounds,
-            head_render_passes,
+            &head_render_passes,
             modified_directory,
             "after.png",
             &modified_after_errors,
