@@ -1,11 +1,12 @@
+use std::sync::Arc;
+
 use anyhow::{Context, Result};
 use rocket::http::Status;
 use rocket::outcome::Outcome;
 use rocket::request;
 use rocket::request::FromRequest;
 use rocket::serde::json::serde_json;
-use rocket::tokio::fs::OpenOptions;
-use rocket::tokio::io::AsyncWriteExt;
+use rocket::tokio::sync::Mutex;
 use rocket::Request;
 use rocket::State;
 
@@ -19,6 +20,7 @@ async fn process_pull(
     run_id: u64,
     installation: &Installation,
     job_sender: &JobSender,
+    journal: &Arc<Mutex<JobJournal>>,
 ) -> Result<()> {
     let files: Vec<ModifiedFile> = get_pull_files(installation, &pull)
         .await
@@ -83,19 +85,7 @@ async fn process_pull(
     .await
     .context("Marking check run as queued")?;
 
-    let mut file = OpenOptions::new()
-        .append(true)
-        .create(true)
-        .open("mdb.jobs")
-        .await
-        .context("Opening job file")?;
-
-    if let Err(e) = file
-        .write(serde_json::to_string(&job).unwrap().as_bytes())
-        .await
-    {
-        eprintln!("Couldn't write to file: {}", e);
-    }
+    journal.lock().await.add_job(job.clone()).await;
 
     job_sender.0.send_async(job).await?;
 
@@ -124,6 +114,7 @@ pub async fn process_github_payload(
     event: GithubEvent,
     payload: String,
     job_sender: &State<JobSender>,
+    journal: &State<Arc<Mutex<JobJournal>>>,
 ) -> Result<&'static str, &'static str> {
     let app_id = { CONFIG.read().await.as_ref().unwrap().app_id };
     match event.0.as_str() {
@@ -161,7 +152,8 @@ pub async fn process_github_payload(
                         }
                         let pull = pull.unwrap();
                         if let Err(e) =
-                            process_pull(pull, run_id, &payload.installation, job_sender).await
+                            process_pull(pull, run_id, &payload.installation, job_sender, journal)
+                                .await
                         {
                             eprintln!("Failed to process pull request: {:?}", e);
                         }

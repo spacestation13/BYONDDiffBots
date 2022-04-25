@@ -1,8 +1,10 @@
 use anyhow::{Context, Result};
 use flume::Receiver;
 use path_absolutize::*;
+use rocket::tokio::sync::Mutex;
 use std::path::Path;
 use std::process::Command;
+use std::sync::Arc;
 use std::time::Instant;
 
 extern crate dreammaker as dm;
@@ -190,9 +192,9 @@ fn render(
     Ok(())
 }
 
-async fn handle_job(job: Job) -> Result<()> {
+async fn do_job(job: &Job) -> Result<()> {
     update_check_run(
-        &job,
+        job,
         UpdateCheckRunBuilder::default()
             .status("in_progress")
             .started_at(chrono::Utc::now().to_rfc3339()),
@@ -290,7 +292,7 @@ async fn handle_job(job: Job) -> Result<()> {
     };
 
     update_check_run(
-        &job,
+        job,
         UpdateCheckRunBuilder::default()
             .conclusion("success")
             .completed_at(chrono::Utc::now().to_rfc3339())
@@ -302,16 +304,38 @@ async fn handle_job(job: Job) -> Result<()> {
     Ok(())
 }
 
-pub async fn handle_jobs(job_receiver: Receiver<job::Job>) {
+async fn handle_job(job: &job::Job) {
+    eprintln!("Received job: {:#?}", job);
+    let now = Instant::now();
+    if let Err(err) = do_job(job).await {
+        eprintln!("Error handling job: {:?}", err);
+    } else {
+        eprintln!("Job handled successfully");
+    }
+    eprintln!("Handling job took {}s", now.elapsed().as_secs());
+}
+
+async fn recover_from_journal(journal: &Arc<Mutex<job::JobJournal>>) {
+    let mut journal = journal.lock().await;
+
+    if journal.has_jobs() {
+        eprintln!("Recovering from journal");
+    } else {
+        eprintln!("No jobs in journal");
+        return;
+    }
+
+    while let Some(job) = journal.get_job().await {
+        handle_job(job).await;
+        journal.complete_job().await; // watch this deadlock
+    }
+}
+
+pub async fn handle_jobs(job_receiver: Receiver<job::Job>, journal: Arc<Mutex<job::JobJournal>>) {
     eprintln!("Starting job handler");
+    recover_from_journal(&journal).await;
     while let Ok(job) = job_receiver.recv_async().await {
-        eprintln!("Received job: {:#?}", job);
-        let now = Instant::now();
-        if let Err(err) = handle_job(job).await {
-            eprintln!("Error handling job: {:?}", err);
-        } else {
-            eprintln!("Job handled successfully");
-        }
-        eprintln!("Handling job took {}s", now.elapsed().as_secs());
+        handle_job(&job).await;
+        journal.lock().await.complete_job().await;
     }
 }

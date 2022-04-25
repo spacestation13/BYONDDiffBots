@@ -12,11 +12,12 @@ extern crate rocket;
 use std::fs::File;
 use std::io::Read;
 use std::path::PathBuf;
+use std::sync::Arc;
 
 use lazy_static::lazy_static;
 use rocket::fs::FileServer;
 use rocket::tokio::runtime::Handle;
-use rocket::tokio::sync::RwLock;
+use rocket::tokio::sync::{Mutex, RwLock};
 
 #[get("/")]
 async fn index() -> &'static str {
@@ -83,13 +84,19 @@ async fn rocket() -> _ {
         app_id,
     });
 
+    let journal = Arc::new(Mutex::new(
+        job::JobJournal::from_file("jobs.json").await.unwrap(),
+    ));
+
     let (job_sender, job_receiver) = flume::unbounded();
+    let journal_clone = journal.clone();
     std::thread::spawn(move || {
-        handle.spawn(async move { job_processor::handle_jobs(job_receiver).await })
+        handle.spawn(async move { job_processor::handle_jobs(job_receiver, journal_clone).await })
     });
 
     rocket
         .manage(job::JobSender(job_sender))
+        .manage(journal)
         .mount(
             "/",
             routes![index, github_processor::process_github_payload],

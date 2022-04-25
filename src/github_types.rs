@@ -50,7 +50,7 @@ pub struct PullRequest {
     pub base: Branch,
     pub title: Option<String>,
 }
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct ModifiedFile {
     pub filename: String,
     pub status: String,
