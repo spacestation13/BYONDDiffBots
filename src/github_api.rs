@@ -76,3 +76,65 @@ pub async fn submit_check(full_repo: String, head_sha: String, inst_id: u64) -> 
 
     Ok(())
 }
+
+pub async fn mark_job_queued(job: &Job) -> Result<()> {
+    update_check_run(
+        job,
+        UpdateCheckRunBuilder::default()
+            .status("queued")
+            .started_at(chrono::Utc::now().to_rfc3339()),
+    )
+    .await
+    .context("Marking check run as queued")
+}
+
+pub async fn mark_job_started(job: &Job) -> Result<()> {
+    update_check_run(
+        job,
+        UpdateCheckRunBuilder::default()
+            .status("in_progress")
+            .started_at(chrono::Utc::now().to_rfc3339()),
+    )
+    .await
+    .context("Marking check as in progress")
+}
+
+pub async fn mark_job_failed(job: &Job) -> Result<()> {
+    update_check_run(
+		job,
+		UpdateCheckRunBuilder::default()
+			.status("completed")
+			.conclusion("failure")
+			.output(Output {
+				title: "Error handling job".to_owned(),
+				summary: "An unexpected error occured during processing, possibly caused by malformed maps, icons, or server catching fire.".to_owned(),
+				text: "".to_owned(),
+			}),
+	)
+	.await
+	.context("Marking check as failure")
+}
+
+pub async fn mark_job_success(job: &Job, output: Output) -> Result<()> {
+    update_check_run(
+        job,
+        UpdateCheckRunBuilder::default()
+            .conclusion("success")
+            .completed_at(chrono::Utc::now().to_rfc3339())
+            .output(output),
+    )
+    .await
+    .context("Marking check as success")
+}
+
+pub async fn mark_job_skipped(job: &Job, output: Output) -> Result<()> {
+    update_check_run(
+        job,
+        UpdateCheckRunBuilder::default()
+            .conclusion("skipped")
+            .completed_at(chrono::Utc::now().to_rfc3339())
+            .output(output),
+    )
+    .await
+    .context("Marking check as skipped")
+}

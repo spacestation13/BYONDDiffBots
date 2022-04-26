@@ -50,15 +50,7 @@ async fn process_pull(
             text: "".to_owned(),
         };
 
-        update_check_run(
-            &job,
-            UpdateCheckRunBuilder::default()
-                .conclusion("skipped")
-                .completed_at(chrono::Utc::now().to_rfc3339())
-                .output(output),
-        )
-        .await
-        .context("Marking check run as skipped")?;
+        mark_job_skipped(&job, output).await?;
 
         return Ok(());
     }
@@ -70,27 +62,12 @@ async fn process_pull(
             text: "".to_owned(),
         };
 
-        update_check_run(
-            &job,
-            UpdateCheckRunBuilder::default()
-                .conclusion("skipped")
-                .completed_at(chrono::Utc::now().to_rfc3339())
-                .output(output),
-        )
-        .await
-        .context("Marking check run as skipped")?;
+        mark_job_skipped(&job, output).await?;
 
         return Ok(());
     }
 
-    update_check_run(
-        &job,
-        UpdateCheckRunBuilder::default()
-            .status("queued")
-            .started_at(chrono::Utc::now().to_rfc3339()),
-    )
-    .await
-    .context("Marking check run as queued")?;
+    mark_job_queued(&job).await?;
 
     journal.lock().await.add_job(job.clone()).await;
     job_sender.0.send_async(job).await?;

@@ -1,6 +1,7 @@
 use anyhow::{Context, Result};
 use flume::Receiver;
 use path_absolutize::*;
+use rocket::futures::FutureExt;
 use rocket::tokio::sync::Mutex;
 use rocket::tokio::task;
 use std::path::Path;
@@ -11,7 +12,7 @@ use std::time::Instant;
 extern crate dreammaker as dm;
 
 use crate::git_operations::*;
-use crate::github_api::update_check_run;
+use crate::github_api::*;
 use crate::github_types::*;
 use crate::job::Job;
 use crate::rendering::*;
@@ -64,7 +65,7 @@ fn render(
         .absolutize()
         .context("Making repo path absolute")?;
     let base_context = RenderingContext::new(&path).context("Parsing base")?;
-    eprintln!("Parsing base took {}s", now.elapsed().as_secs());
+    eprintln!("Parsing base took {}ms", now.elapsed().as_millis());
 
     let pull_branch = format!("mdb-{}-{}", base.sha, head.sha);
     let fetch_branch = format!("pull/{}/head:{}", pull_request_number, pull_branch);
@@ -84,8 +85,8 @@ fn render(
         .context("Parsing head")?;
 
     eprintln!(
-        "Fetching and parsing head took {}s",
-        now.elapsed().as_secs()
+        "Fetching and parsing head took {}ms",
+        now.elapsed().as_millis()
     );
 
     let base_render_passes = dmm_tools::render_passes::configure(
@@ -158,7 +159,7 @@ fn render(
         );
         results.0?;
         results.1?;
-        eprintln!("Base maps took {}s", now.elapsed().as_secs());
+        eprintln!("Base maps took {}ms", now.elapsed().as_millis());
         Ok(())
     })?;
 
@@ -201,7 +202,7 @@ fn render(
         Ok(())
     })
     .context("Rendering modified after and added maps")?;
-    eprintln!("Head maps took {}s", now.elapsed().as_secs());
+    eprintln!("Head maps took {}ms", now.elapsed().as_millis());
 
     with_repo_dir(&base.repo, || {
         Command::new("git")
@@ -324,38 +325,44 @@ fn do_job(job: &Job) -> Result<Output> {
     Ok(output)
 }
 
-async fn handle_job(job: job::Job) -> Result<()> {
-    update_check_run(
-        &job,
-        UpdateCheckRunBuilder::default()
-            .status("in_progress")
-            .started_at(chrono::Utc::now().to_rfc3339()),
-    )
-    .await
-    .context("Marking check as in progress")?;
+async fn handle_job(job: job::Job) {
+    let _ = mark_job_started(&job).await;
 
     let job_clone = job.clone();
     let output = task::spawn_blocking(move || {
         eprintln!("Received job: {:#?}", job_clone);
         let now = Instant::now();
         let result = do_job(&job_clone);
-        eprintln!("Handling job took {}s", now.elapsed().as_secs());
+        eprintln!("Handling job took {}ms", now.elapsed().as_millis());
         result
     })
-    .await?;
+    .catch_unwind()
+    .await;
+
+    // Done in this weird way because something something the error type cannot be sent between threads
+    if output.is_err() {
+        let fuckup = format!("{:?}", output.err().unwrap());
+        eprintln!("Severe fuckup: {:?}", fuckup);
+        let _ = mark_job_failed(&job).await;
+        return;
+    }
 
     let output = output.unwrap();
-    update_check_run(
-        &job,
-        UpdateCheckRunBuilder::default()
-            .conclusion("success")
-            .completed_at(chrono::Utc::now().to_rfc3339())
-            .output(output),
-    )
-    .await
-    .context("Updating check run with success")?;
+    if let Err(ref e) = output {
+        let fuckup = format!("{:?}", e);
+        eprintln!("Mild fuckup: {}", fuckup);
+        let _ = mark_job_failed(&job).await;
+        return;
+    }
 
-    Ok(())
+    let output = output.unwrap();
+    if let Err(e) = output {
+        eprintln!("Acceptable fuckup: {:?}", e);
+        let _ = mark_job_failed(&job).await;
+        return;
+    }
+
+    let _ = mark_job_success(&job, output.unwrap()).await;
 }
 
 async fn recover_from_journal(journal: &Arc<Mutex<job::JobJournal>>) {
@@ -371,9 +378,7 @@ async fn recover_from_journal(journal: &Arc<Mutex<job::JobJournal>>) {
         // Done this way to avoid a deadlock
         let job = journal.lock().await.get_job();
         if let Some(job) = job {
-            if let Err(e) = handle_job(job).await {
-                eprintln!("Error handling job: {}", e);
-            }
+            handle_job(job).await;
             journal.lock().await.complete_job().await;
         } else {
             break;
@@ -387,9 +392,7 @@ pub async fn handle_jobs(job_receiver: Receiver<job::Job>, journal: Arc<Mutex<jo
     loop {
         let job = job_receiver.recv_async().await;
         if let Ok(job) = job {
-            if let Err(e) = handle_job(job).await {
-                eprintln!("Error handling job: {}", e);
-            }
+            handle_job(job).await;
             journal.lock().await.complete_job().await;
         } else {
             break;
