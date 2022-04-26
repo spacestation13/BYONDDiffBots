@@ -1,4 +1,4 @@
-use std::{cell::Ref, cmp::min, collections::HashSet, path::Path, sync::RwLock};
+use std::{cmp::min, collections::HashSet, path::Path, sync::RwLock};
 
 extern crate dreammaker as dm;
 
@@ -104,22 +104,16 @@ pub fn get_map_diff_bounding_boxes(
     head_maps: &[dmm::Map],
 ) -> Vec<BoundingBox> {
     base_maps
-        .iter()
-        .zip(head_maps.iter())
+        .par_iter()
+        .zip(head_maps.par_iter())
         .map(|(base, head)| (get_diff_bounding_box(base, head, 0)))
         .collect()
 }
 
 pub struct RenderingContext {
-    dm_context: dm::Context,
+    map_renderer_config: dm::config::MapRenderer,
     obj_tree: ObjectTree,
     icon_cache: IconCache,
-}
-
-impl RenderingContext {
-    pub fn config(&self) -> Ref<dm::config::Config> {
-        self.dm_context.config()
-    }
 }
 
 impl RenderingContext {
@@ -145,12 +139,17 @@ impl RenderingContext {
         let parser = dm::parser::Parser::new(&dm_context, indents);
 
         let obj_tree = parser.parse_object_tree();
+        let map_renderer_config = dm_context.config().map_renderer.clone();
 
         Ok(Self {
-            dm_context,
+            map_renderer_config,
             icon_cache,
             obj_tree,
         })
+    }
+
+    pub fn map_config(&self) -> &dm::config::MapRenderer {
+        &self.map_renderer_config
     }
 }
 

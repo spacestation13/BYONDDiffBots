@@ -49,13 +49,9 @@ fn render(
             .lines()
             .map(|l| l.trim())
             .filter(|l| l.starts_with("mdb-"))
-            .try_for_each(|l| {
-                Command::new("git")
-                    .args(["branch", "-D", l])
-                    .output()
-                    .context("Running branch delete command")
-                    .map(|_| ())
-            })?;
+            .for_each(|l| {
+                let _ = Command::new("git").args(["branch", "-D", l]).status();
+            });
 
         Ok(())
     })
@@ -93,13 +89,13 @@ fn render(
     );
 
     let base_render_passes = dmm_tools::render_passes::configure(
-        &base_context.config().map_renderer,
+        base_context.map_config(),
         "",
         "hide-space,hide-invisible,random",
     );
 
     let head_render_passes = dmm_tools::render_passes::configure(
-        &head_context.config().map_renderer,
+        head_context.map_config(),
         "",
         "hide-space,hide-invisible,random",
     );
@@ -107,32 +103,17 @@ fn render(
     // ADDED MAPS
     let added_directory = format!("{}/a", output_dir.display());
     let added_directory = Path::new(&added_directory);
-
     let added_errors = Default::default();
-    let now = Instant::now();
-    with_checkout(&base.repo, &pull_branch, || {
-        let maps = load_maps(added_files).context("Loading added maps")?;
-        let bounds = maps
-            .iter()
-            .map(BoundingBox::for_full_map)
-            .collect::<Vec<BoundingBox>>();
-
-        render_map_regions(
-            &head_context,
-            &maps,
-            &bounds,
-            &head_render_passes,
-            added_directory,
-            "added.png",
-            &added_errors,
-        )
-        .context("Rendering added maps")
-    })?;
-    eprintln!("Added maps took {}s", now.elapsed().as_secs());
 
     // MODIFIED MAPS
     let modified_directory = format!("{}/m", output_dir.display());
     let modified_directory = Path::new(&modified_directory);
+    let modified_before_errors = Default::default();
+    let modified_after_errors = Default::default();
+
+    let removed_directory = format!("{}/r", output_dir.display());
+    let removed_directory = Path::new(&removed_directory);
+    let removed_errors = Default::default();
 
     let base_maps =
         with_repo_dir(&base.repo, || load_maps(modified_files)).context("Loading base maps")?;
@@ -140,64 +121,87 @@ fn render(
         .context("Loading head maps")?;
     let diff_bounds = get_map_diff_bounding_boxes(&base_maps, &head_maps);
 
-    let modified_before_errors = Default::default();
-    let now = Instant::now();
-
-    render_map_regions(
-        &base_context,
-        &base_maps,
-        &diff_bounds,
-        &head_render_passes,
-        modified_directory,
-        "before.png",
-        &modified_before_errors,
-    )
-    .context("Rendering modified before maps")?;
-
-    eprintln!("Modified before maps took {}s", now.elapsed().as_secs());
-
-    let modified_after_errors = Default::default();
-    let now = Instant::now();
-    with_checkout(&base.repo, &pull_branch, || {
-        render_map_regions(
-            &head_context,
-            &head_maps,
-            &diff_bounds,
-            &head_render_passes,
-            modified_directory,
-            "after.png",
-            &modified_after_errors,
-        )?;
-        Ok(())
-    })
-    .context("Rendering modified after maps")?;
-    eprintln!("Modified after maps took {}s", now.elapsed().as_secs());
-
-    // REMOVED MAPS
-    let removed_directory = format!("{}/r", output_dir.display());
-    let removed_directory = Path::new(&removed_directory);
-
-    let removed_errors = Default::default();
+    eprintln!("Rendering base maps");
     let now = Instant::now();
     with_repo_dir(&base.repo, || {
-        let maps = load_maps(removed_files).context("Loading removed maps")?;
-        let bounds = maps
-            .iter()
-            .map(BoundingBox::for_full_map)
-            .collect::<Vec<BoundingBox>>();
+        let results = rayon::join(
+            || {
+                render_map_regions(
+                    &base_context,
+                    &base_maps,
+                    &diff_bounds,
+                    &head_render_passes,
+                    modified_directory,
+                    "before.png",
+                    &modified_before_errors,
+                )
+                .context("Rendering modified before maps")
+            },
+            || {
+                let maps = load_maps(removed_files).context("Loading removed maps")?;
+                let bounds = maps
+                    .iter()
+                    .map(BoundingBox::for_full_map)
+                    .collect::<Vec<BoundingBox>>();
 
-        render_map_regions(
-            &base_context,
-            &maps,
-            &bounds,
-            &base_render_passes,
-            removed_directory,
-            "removed.png",
-            &removed_errors,
-        )
-        .context("Rendering removed maps")
+                render_map_regions(
+                    &base_context,
+                    &maps,
+                    &bounds,
+                    &base_render_passes,
+                    removed_directory,
+                    "removed.png",
+                    &removed_errors,
+                )
+                .context("Rendering removed maps")
+            },
+        );
+        results.0?;
+        results.1?;
+        eprintln!("Base maps took {}s", now.elapsed().as_secs());
+        Ok(())
     })?;
-    eprintln!("Removed maps took {}s", now.elapsed().as_secs());
+
+    eprintln!("Rendering head maps");
+    let now = Instant::now();
+    with_checkout(&base.repo, &pull_branch, || {
+        let results = rayon::join(
+            || {
+                render_map_regions(
+                    &head_context,
+                    &head_maps,
+                    &diff_bounds,
+                    &head_render_passes,
+                    modified_directory,
+                    "after.png",
+                    &modified_after_errors,
+                )
+            },
+            || {
+                let maps = load_maps(added_files).context("Loading added maps")?;
+                let bounds = maps
+                    .iter()
+                    .map(BoundingBox::for_full_map)
+                    .collect::<Vec<BoundingBox>>();
+
+                render_map_regions(
+                    &head_context,
+                    &maps,
+                    &bounds,
+                    &head_render_passes,
+                    added_directory,
+                    "added.png",
+                    &added_errors,
+                )
+                .context("Rendering added maps")
+            },
+        );
+        results.0?; // Is there a better way?
+        results.1?;
+        Ok(())
+    })
+    .context("Rendering modified after and added maps")?;
+    eprintln!("Head maps took {}s", now.elapsed().as_secs());
 
     with_repo_dir(&base.repo, || {
         Command::new("git")

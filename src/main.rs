@@ -16,7 +16,6 @@ use std::sync::Arc;
 
 use lazy_static::lazy_static;
 use rocket::fs::FileServer;
-use rocket::tokio::runtime::Handle;
 use rocket::tokio::sync::Mutex;
 use std::sync::RwLock;
 
@@ -78,8 +77,6 @@ async fn rocket() -> _ {
     ))
     .expect("fucked up octocrab");
 
-    let handle = Handle::current();
-
     CONFIG.write().unwrap().replace(Config {
         file_hosting_url,
         app_id,
@@ -91,9 +88,10 @@ async fn rocket() -> _ {
 
     let (job_sender, job_receiver) = flume::unbounded();
     let journal_clone = journal.clone();
-    std::thread::spawn(move || {
-        handle.spawn(async move { job_processor::handle_jobs(job_receiver, journal_clone).await })
-    });
+
+    rocket::tokio::spawn(
+        async move { job_processor::handle_jobs(job_receiver, journal_clone).await },
+    );
 
     rocket
         .manage(job::JobSender(job_sender))
