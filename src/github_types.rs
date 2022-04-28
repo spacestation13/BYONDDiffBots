@@ -80,11 +80,18 @@ pub struct CheckRun {
 }
 
 #[derive(Deserialize, Debug)]
-pub struct JobPayload {
+pub struct CheckSuitePayload {
     pub action: String,
     pub repository: Repository,
-    pub check_suite: Option<CheckSuite>,
-    pub check_run: Option<CheckRun>,
+    pub check_suite: CheckSuite,
+    pub installation: Installation,
+}
+
+#[derive(Deserialize, Debug)]
+pub struct CheckRunPayload {
+    pub action: String,
+    pub repository: Repository,
+    pub check_run: CheckRun,
     pub installation: Installation,
 }
 
@@ -101,7 +108,7 @@ pub struct PullRequestEventPayload {
 pub struct Output {
     pub title: String,
     pub summary: String,
-    pub text: String,
+    pub text: Option<String>,
 }
 
 #[derive(Serialize)]

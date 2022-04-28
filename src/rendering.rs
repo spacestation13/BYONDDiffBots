@@ -126,8 +126,6 @@ impl RenderingContext {
             _ => dm::DEFAULT_ENV.into(),
         };
 
-        eprintln!("Parsing {}", environment.display());
-
         if let Some(parent) = environment.parent() {
             icon_cache.set_icons_root(parent);
         }
@@ -192,7 +190,6 @@ pub fn render_map_regions(
         .zip(bounds.par_iter())
         .enumerate()
         .map(|(idx, (map, bb))| {
-            eprintln!("rendering map {}", idx);
             let image = render_map(objtree, icon_cache, map, bb, errors, render_passes)
                 .with_context(|| format!("Rendering map {idx}"))?;
 

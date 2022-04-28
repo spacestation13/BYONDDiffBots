@@ -7,7 +7,7 @@ use rocket::tokio::task;
 use std::path::Path;
 use std::process::Command;
 use std::sync::Arc;
-use std::time::Instant;
+//use std::time::Instant;
 
 extern crate dreammaker as dm;
 
@@ -28,19 +28,16 @@ fn render(
     pull_request_number: u64,
 ) -> Result<()> {
     with_repo_dir(&base.repo, || {
-        eprintln!("Checking out {}", base.name);
         Command::new("git")
             .args(["checkout", &base.name])
             .output()
             .context("Running base checkout command")?;
 
-        eprintln!("pulling {}", base.name);
         Command::new("git")
             .args(["pull", "origin", &base.name])
             .output()
             .context("Running base pull command")?;
 
-        eprintln!("Purging branches");
         let output = Command::new("git")
             .args(["branch"])
             .output()
@@ -58,20 +55,18 @@ fn render(
     })
     .context("Updating to latest master on base")?;
 
-    eprintln!("Parsing base");
-    let now = Instant::now();
+    //let now = Instant::now();
     let path = format!("./repos/{}", &base.repo.name);
     let path = Path::new(&path)
         .absolutize()
         .context("Making repo path absolute")?;
     let base_context = RenderingContext::new(&path).context("Parsing base")?;
-    eprintln!("Parsing base took {}ms", now.elapsed().as_millis());
+    //eprintln!("Parsing base took {}ms", now.elapsed().as_millis());
 
     let pull_branch = format!("mdb-{}-{}", base.sha, head.sha);
     let fetch_branch = format!("pull/{}/head:{}", pull_request_number, pull_branch);
 
-    eprintln!("Fetching and parsing head");
-    let now = Instant::now();
+    //let now = Instant::now();
     with_repo_dir(&base.repo, || {
         Command::new("git")
             .args(["fetch", "origin", &fetch_branch])
@@ -84,10 +79,10 @@ fn render(
     let head_context = with_checkout(&base.repo, &pull_branch, || RenderingContext::new(&path))
         .context("Parsing head")?;
 
-    eprintln!(
-        "Fetching and parsing head took {}ms",
-        now.elapsed().as_millis()
-    );
+    // eprintln!(
+    //     "Fetching and parsing head took {}ms",
+    //     now.elapsed().as_millis()
+    // );
 
     let base_render_passes = dmm_tools::render_passes::configure(
         base_context.map_config(),
@@ -122,8 +117,7 @@ fn render(
         .context("Loading head maps")?;
     let diff_bounds = get_map_diff_bounding_boxes(&base_maps, &head_maps);
 
-    eprintln!("Rendering base maps");
-    let now = Instant::now();
+    //let now = Instant::now();
     with_repo_dir(&base.repo, || {
         let results = rayon::join(
             || {
@@ -159,12 +153,11 @@ fn render(
         );
         results.0?;
         results.1?;
-        eprintln!("Base maps took {}ms", now.elapsed().as_millis());
+        //eprintln!("Base maps took {}ms", now.elapsed().as_millis());
         Ok(())
     })?;
 
-    eprintln!("Rendering head maps");
-    let now = Instant::now();
+    //let now = Instant::now();
     with_checkout(&base.repo, &pull_branch, || {
         let results = rayon::join(
             || {
@@ -202,7 +195,7 @@ fn render(
         Ok(())
     })
     .context("Rendering modified after and added maps")?;
-    eprintln!("Head maps took {}ms", now.elapsed().as_millis());
+    //eprintln!("Head maps took {}ms", now.elapsed().as_millis());
 
     with_repo_dir(&base.repo, || {
         Command::new("git")
@@ -213,6 +206,7 @@ fn render(
     })
     .context("Deleting pull branch")?;
 
+    /*
     let print_errors = |e: &RenderingErrors| {
         for error in e.read().unwrap().iter() {
             eprintln!("{}", error);
@@ -227,6 +221,7 @@ fn render(
     print_errors(&modified_after_errors);
     eprintln!("Removed map errors: ");
     print_errors(&removed_errors);
+    */
 
     Ok(())
 }
@@ -280,8 +275,8 @@ fn do_job(job: &Job) -> Result<Output> {
     )
     .context("Doing the renderance")?;
 
-    let conf = CONFIG.read().unwrap();
-    let file_url = &conf.as_ref().unwrap().file_hosting_url;
+    let conf = CONFIG.get().unwrap();
+    let file_url = &conf.file_hosting_url;
 
     let title = "Map renderings";
     let summary = "Maps with diff:";
@@ -319,30 +314,42 @@ fn do_job(job: &Job) -> Result<Output> {
     let output = Output {
         title: title.to_owned(),
         summary: summary.to_owned(),
-        text,
+        text: Some(text),
     };
 
     Ok(output)
 }
 
 async fn handle_job(job: job::Job) {
-    let _ = mark_job_started(&job).await;
+    println!(
+        "[{}] [{}#{}] [{}] Starting",
+        chrono::Utc::now().to_rfc3339(),
+        job.base.repo.full_name(),
+        job.pull_request,
+        job.check_run_id
+    );
+    let _ = mark_job_started(&job).await; // TODO: Put the failed marks in a queue to retry later
+                                          //let now = Instant::now();
 
     let job_clone = job.clone();
-    let output = task::spawn_blocking(move || {
-        eprintln!("Received job: {:#?}", job_clone);
-        let now = Instant::now();
-        let result = do_job(&job_clone);
-        eprintln!("Handling job took {}ms", now.elapsed().as_millis());
-        result
-    })
-    .catch_unwind()
-    .await;
+    let output = task::spawn_blocking(move || do_job(&job_clone))
+        .catch_unwind()
+        .await;
+
+    println!(
+        "[{}] [{}#{}] [{}] Finished",
+        chrono::Utc::now().to_rfc3339(),
+        job.base.repo.full_name(),
+        job.pull_request,
+        job.check_run_id
+    );
+
+    //eprintln!("Handling job took {}ms", now.elapsed().as_millis());
 
     // Done in this weird way because something something the error type cannot be sent between threads
     if output.is_err() {
         let fuckup = format!("{:?}", output.err().unwrap());
-        eprintln!("Severe fuckup: {:?}", fuckup);
+        eprintln!("(Presumably) dmm-tools renderer error: {:?}", fuckup);
         let _ = mark_job_failed(&job).await;
         return;
     }
@@ -350,14 +357,14 @@ async fn handle_job(job: job::Job) {
     let output = output.unwrap();
     if let Err(ref e) = output {
         let fuckup = format!("{:?}", e);
-        eprintln!("Mild fuckup: {}", fuckup);
+        eprintln!("Join Handle error (should never happen): {}", fuckup);
         let _ = mark_job_failed(&job).await;
         return;
     }
 
     let output = output.unwrap();
     if let Err(e) = output {
-        eprintln!("Acceptable fuckup: {:?}", e);
+        eprintln!("Other rendering error: {:?}", e);
         let _ = mark_job_failed(&job).await;
         return;
     }
@@ -387,7 +394,6 @@ async fn recover_from_journal(journal: &Arc<Mutex<job::JobJournal>>) {
 }
 
 pub async fn handle_jobs(job_receiver: Receiver<job::Job>, journal: Arc<Mutex<job::JobJournal>>) {
-    eprintln!("Starting job handler");
     recover_from_journal(&journal).await;
     loop {
         let job = job_receiver.recv_async().await;

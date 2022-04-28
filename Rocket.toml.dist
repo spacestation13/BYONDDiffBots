@@ -5,6 +5,10 @@ private_key_path = "/path/to/private/key"
 file_hosting_url = "http://my_domain.com/files"
 app_id = 42069
 
+blacklist = [
+	1337,
+]
+
 [global.limits]
 forms = 131072
 string = 131072

@@ -60,7 +60,6 @@ pub async fn get_pull_meta(
 }
 
 pub async fn submit_check(full_repo: String, head_sha: String, inst_id: u64) -> Result<()> {
-    eprintln!("Just before submit");
     let _: Empty = octocrab::instance()
         .installation(inst_id.into())
         .post(
@@ -72,7 +71,6 @@ pub async fn submit_check(full_repo: String, head_sha: String, inst_id: u64) -> 
         )
         .await
         .context("Submitting check")?;
-    eprintln!("Just after submit");
 
     Ok(())
 }
@@ -108,7 +106,7 @@ pub async fn mark_job_failed(job: &Job) -> Result<()> {
 			.output(Output {
 				title: "Error handling job".to_owned(),
 				summary: "An unexpected error occured during processing, possibly caused by malformed maps, icons, or server catching fire.".to_owned(),
-				text: "".to_owned(),
+				text: None,
 			}),
 	)
 	.await

@@ -14,10 +14,10 @@ use std::io::Read;
 use std::path::PathBuf;
 use std::sync::Arc;
 
-use lazy_static::lazy_static;
+use once_cell::sync::OnceCell;
+use rocket::figment::Figment;
 use rocket::fs::FileServer;
 use rocket::tokio::sync::Mutex;
-use std::sync::RwLock;
 
 #[get("/")]
 async fn index() -> &'static str {
@@ -26,13 +26,18 @@ async fn index() -> &'static str {
 
 #[derive(Default, Debug)]
 pub struct Config {
+    pub private_key_path: String,
     pub file_hosting_url: String,
     pub app_id: u64,
+    pub blacklist: Vec<u64>,
+    pub blacklist_contact: String,
 }
 
-lazy_static! {
-    static ref CONFIG: RwLock<Option<Config>> = RwLock::new(None);
-}
+// lazy_static! {
+//     static ref CONFIG: RwLock<Option<Config>> = RwLock::new(None);
+// }
+
+static CONFIG: OnceCell<Config> = OnceCell::new();
 
 fn read_key(path: PathBuf) -> Vec<u8> {
     let mut key_file =
@@ -52,11 +57,7 @@ fn read_key(path: PathBuf) -> Vec<u8> {
 //     "MDB says hello!"
 // }
 
-#[launch]
-async fn rocket() -> _ {
-    let rocket = rocket::build();
-    let figment = rocket.figment();
-
+fn set_config(figment: &Figment) -> &Config {
     let private_key_path: String = figment
         .extract_inner("private_key_path")
         .expect("private_key_path missing from Rocket.toml");
@@ -69,18 +70,40 @@ async fn rocket() -> _ {
         .extract_inner("app_id")
         .expect("app_id missing from Rocket.toml");
 
-    let key = read_key(PathBuf::from(&private_key_path));
+    let blacklist: Vec<u64> = figment
+        .extract_inner("blacklist")
+        .expect("blacklist missing from Rocket.toml");
+
+    let blacklist_contact: String = figment
+        .extract_inner("blacklist_contact")
+        .expect("blacklist_contact missing from Rocket.toml");
+
+    let config = Config {
+        private_key_path,
+        file_hosting_url,
+        app_id,
+        blacklist,
+        blacklist_contact,
+    };
+
+    CONFIG.set(config).expect("Failed to set config");
+    CONFIG.get().unwrap()
+}
+
+#[launch]
+async fn rocket() -> _ {
+    let rocket = rocket::build();
+    let figment = rocket.figment();
+
+    let config = set_config(figment);
+
+    let key = read_key(PathBuf::from(&config.private_key_path));
 
     octocrab::initialise(octocrab::OctocrabBuilder::new().app(
-        app_id.into(),
+        config.app_id.into(),
         jsonwebtoken::EncodingKey::from_rsa_pem(&key).unwrap(),
     ))
     .expect("fucked up octocrab");
-
-    CONFIG.write().unwrap().replace(Config {
-        file_hosting_url,
-        app_id,
-    });
 
     let journal = Arc::new(Mutex::new(
         job::JobJournal::from_file("jobs.json").await.unwrap(),

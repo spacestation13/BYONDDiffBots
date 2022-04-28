@@ -1011,6 +1011,7 @@ dependencies = [
  "jsonwebtoken",
  "lazy_static",
  "octocrab",
+ "once_cell",
  "path-absolutize",
  "rayon",
  "rocket",
