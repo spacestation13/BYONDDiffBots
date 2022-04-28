@@ -8,6 +8,7 @@ app_id = 42069
 blacklist = [
 	1337,
 ]
+blacklist_contact = "Good luck!"
 
 [global.limits]
 forms = 131072
