@@ -120,8 +120,8 @@ async fn handle_pull_request(payload: String) -> Result<&'static str> {
     }
 
     submit_check(
-        payload.pull_request.base.repo.full_name(),
-        payload.pull_request.head.sha,
+        &payload.pull_request.base.repo.full_name(),
+        &payload.pull_request.head.sha,
         payload.installation.id,
     )
     .await?;
@@ -137,8 +137,8 @@ async fn handle_check_suite(payload: String) -> Result<&'static str> {
     }
 
     submit_check(
-        payload.repository.full_name(),
-        suite.head_sha,
+        &payload.repository.full_name(),
+        &suite.head_sha,
         payload.installation.id,
     )
     .await?;
@@ -155,6 +155,18 @@ async fn handle_check_run(
 
     if payload.action != "created" {
         return Ok("Ignoring non-created check run");
+    }
+
+    if payload.action == "rerequested" {
+        for pull in &payload.check_run.pull_requests {
+            submit_check(
+                &pull.base.repo.full_name(),
+                &pull.head.sha,
+                payload.installation.id,
+            )
+            .await?;
+        }
+        return Ok("Check resubmitted");
     }
 
     let app_id = CONFIG.get().unwrap().app_id;

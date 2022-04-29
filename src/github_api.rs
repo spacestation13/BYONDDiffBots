@@ -59,14 +59,14 @@ pub async fn get_pull_meta(
     Ok(res)
 }
 
-pub async fn submit_check(full_repo: String, head_sha: String, inst_id: u64) -> Result<()> {
+pub async fn submit_check(full_repo: &str, head_sha: &str, inst_id: u64) -> Result<()> {
     let _: Empty = octocrab::instance()
         .installation(inst_id.into())
         .post(
             format!("/repos/{full_repo}/check-runs"),
             Some(&CreateCheckRun {
                 name: "MapDiffBot2".to_string(),
-                head_sha,
+                head_sha: head_sha.to_string(),
             }),
         )
         .await
