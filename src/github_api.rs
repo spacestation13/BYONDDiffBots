@@ -77,6 +77,12 @@ pub async fn mark_job_started(job: &Job) -> Result<()> {
     .context("Marking check as in progress")
 }
 
+pub async fn update_job(job: &Job, output: Output) -> Result<()> {
+    update_check_run(job, UpdateCheckRunBuilder::default().output(output))
+        .await
+        .context("Updating check")
+}
+
 pub async fn mark_job_failed(job: &Job, error: &str) -> Result<()> {
     let summary = format!(include_str!("error_template.txt"), stack_trace = error);
 

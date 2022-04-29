@@ -1,9 +1,11 @@
 use anyhow::{Context, Result};
 use flume::Receiver;
 use path_absolutize::*;
+use rocket::tokio::runtime::Handle;
 use rocket::tokio::sync::Mutex;
 use rocket::tokio::task;
 use std::path::Path;
+use std::path::PathBuf;
 use std::process::Command;
 use std::sync::Arc;
 //use std::time::Instant;
@@ -225,14 +227,39 @@ fn render(
     Ok(())
 }
 
+fn clone_repo(url: &str, dir: &Path) -> Result<()> {
+    Command::new("git")
+        .args([
+            "clone",
+            url,
+            dir.to_str()
+                .ok_or_else(|| anyhow::anyhow!("Target directory is somehow unstringable"))?,
+        ])
+        .output()
+        .context("Cloning repo")?;
+
+    Ok(())
+}
+
 fn do_job(job: &Job) -> Result<Output> {
     let base = &job.base;
     let head = &job.head;
     let repo = format!("https://github.com/{}", base.repo.full_name());
-    Command::new("git")
-        .args(["clone", &repo, &format!("./repos/{}", base.repo.name)])
-        .output()
-        .context("Cloning repo")?;
+    let target_dir: PathBuf = ["./repos/", &base.repo.name].iter().collect();
+
+    if !target_dir.exists() {
+        if let Ok(handle) = Handle::try_current() {
+            let _ = handle.block_on(async {
+				update_job(job, Output {
+					title: "Cloning repo...".to_owned(),
+					summary: "The repository is being cloned, this will take a few minutes. Future runs will not require cloning.".to_owned(),
+					text: "".to_owned(),
+				}).await // we don't really care if updating the job fails, just continue
+			});
+        }
+
+        clone_repo(&repo, &target_dir).context("Cloning repo")?;
+    }
 
     let non_abs_directory = format!("images/{}/{}", job.base.repo.id, job.check_run_id);
     let directory = Path::new(&non_abs_directory)
