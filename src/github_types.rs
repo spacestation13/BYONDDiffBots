@@ -76,7 +76,6 @@ pub struct CheckRun {
     pub pull_requests: Vec<PullRequest>,
     pub head_sha: String,
     pub app: App,
-    //pub check_suite: CheckSuite,
 }
 
 #[derive(Deserialize, Debug)]
@@ -108,7 +107,7 @@ pub struct PullRequestEventPayload {
 pub struct Output {
     pub title: String,
     pub summary: String,
-    pub text: Option<String>,
+    pub text: String,
 }
 
 #[derive(Serialize)]

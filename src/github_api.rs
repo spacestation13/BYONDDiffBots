@@ -39,26 +39,6 @@ pub async fn get_pull_files(
     Ok(res)
 }
 
-pub async fn get_pull_meta(
-    installation: &Installation,
-    repo: &Repository,
-    id: u64,
-) -> Result<PullRequest> {
-    let res = octocrab::instance()
-        .installation(installation.id.into())
-        .get(
-            &format!(
-                "/repos/{repo}/pulls/{pull_number}",
-                repo = repo.full_name(),
-                pull_number = id
-            ),
-            None::<&()>,
-        )
-        .await?;
-
-    Ok(res)
-}
-
 pub async fn submit_check(full_repo: &str, head_sha: &str, inst_id: u64) -> Result<CheckRun> {
     let result: CheckRun = octocrab::instance()
         .installation(inst_id.into())
@@ -97,20 +77,23 @@ pub async fn mark_job_started(job: &Job) -> Result<()> {
     .context("Marking check as in progress")
 }
 
-pub async fn mark_job_failed(job: &Job) -> Result<()> {
+pub async fn mark_job_failed(job: &Job, error: &str) -> Result<()> {
+    let summary = format!(include_str!("error_template.txt"), stack_trace = error);
+
     update_check_run(
-		job,
-		UpdateCheckRunBuilder::default()
-			.status("completed")
-			.conclusion("failure")
-			.output(Output {
-				title: "Error handling job".to_owned(),
-				summary: "An unexpected error occured during processing, possibly caused by malformed maps, icons, or server catching fire.".to_owned(),
-				text: None,
-			}),
-	)
-	.await
-	.context("Marking check as failure")
+        job,
+        UpdateCheckRunBuilder::default()
+            .status("completed")
+            .conclusion("failure")
+            .completed_at(chrono::Utc::now().to_rfc3339())
+            .output(Output {
+                title: "Error handling job".to_owned(),
+                summary,
+                text: "".to_owned(),
+            }),
+    )
+    .await
+    .context("Marking check as failure")
 }
 
 pub async fn mark_job_success(job: &Job, output: Output) -> Result<()> {

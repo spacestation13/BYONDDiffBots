@@ -1,7 +1,6 @@
 use anyhow::{Context, Result};
 use flume::Receiver;
 use path_absolutize::*;
-use rocket::futures::FutureExt;
 use rocket::tokio::sync::Mutex;
 use rocket::tokio::task;
 use std::path::Path;
@@ -279,7 +278,7 @@ fn do_job(job: &Job) -> Result<Output> {
     let file_url = &conf.file_hosting_url;
 
     let title = "Map renderings";
-    let summary = "Maps with diff:";
+    let summary = "*This is still a beta. Please file any issues [here](https://github.com/MCHSL/mapdiffbot2/issues).*\n\nMaps with diff:";
     let mut text = String::new();
 
     for (idx, file) in added_files.iter().enumerate() {
@@ -314,7 +313,7 @@ fn do_job(job: &Job) -> Result<Output> {
     let output = Output {
         title: title.to_owned(),
         summary: summary.to_owned(),
-        text: Some(text),
+        text,
     };
 
     Ok(output)
@@ -332,9 +331,7 @@ async fn handle_job(job: job::Job) {
                                           //let now = Instant::now();
 
     let job_clone = job.clone();
-    let output = task::spawn_blocking(move || do_job(&job_clone))
-        .catch_unwind()
-        .await;
+    let output = task::spawn_blocking(move || do_job(&job_clone)).await;
 
     println!(
         "[{}] [{}#{}] [{}] Finished",
@@ -346,26 +343,24 @@ async fn handle_job(job: job::Job) {
 
     //eprintln!("Handling job took {}ms", now.elapsed().as_millis());
 
-    // Done in this weird way because something something the error type cannot be sent between threads
-    if output.is_err() {
-        let fuckup = format!("{:?}", output.err().unwrap());
-        eprintln!("(Presumably) dmm-tools renderer error: {:?}", fuckup);
-        let _ = mark_job_failed(&job).await;
-        return;
-    }
-
-    let output = output.unwrap();
-    if let Err(ref e) = output {
-        let fuckup = format!("{:?}", e);
-        eprintln!("Join Handle error (should never happen): {}", fuckup);
-        let _ = mark_job_failed(&job).await;
+    if let Err(e) = output {
+        let fuckup = match e.try_into_panic() {
+            Ok(panic) => match panic.downcast_ref::<&str>() {
+                Some(s) => s.to_string(),
+                None => "*crickets*".to_owned(),
+            },
+            Err(e) => e.to_string(),
+        };
+        eprintln!("Join Handle error: {}", fuckup);
+        mark_job_failed(&job, &fuckup).await.unwrap();
         return;
     }
 
     let output = output.unwrap();
     if let Err(e) = output {
-        eprintln!("Other rendering error: {:?}", e);
-        let _ = mark_job_failed(&job).await;
+        let fuckup = format!("{:?}", e);
+        eprintln!("Other rendering error: {}", fuckup);
+        mark_job_failed(&job, &fuckup).await.unwrap();
         return;
     }
 

@@ -47,7 +47,7 @@ async fn process_pull(
         let output = Output {
             title: "PR Ignored".to_owned(),
             summary: "This PR has `[MDB IGNORE]` in the title. Aborting.".to_owned(),
-            text: None,
+            text: "".to_owned(),
         };
 
         mark_job_skipped(&job, output).await?;
@@ -68,7 +68,7 @@ async fn process_pull(
                 job.base.repo.full_name(),
                 contact
             ),
-            text: None,
+            text: "".to_owned(),
         };
 
         mark_job_skipped(&job, output).await?;
@@ -80,7 +80,7 @@ async fn process_pull(
         let output = Output {
             title: "No map chages".to_owned(),
             summary: "There are no changed map files to render.".to_owned(),
-            text: None,
+            text: "".to_owned(),
         };
 
         mark_job_skipped(&job, output).await?;
@@ -140,69 +140,6 @@ async fn handle_pull_request(
     Ok("Check submitted")
 }
 
-/*async fn handle_check_suite(payload: String) -> Result<&'static str> {
-    let payload: CheckSuitePayload = serde_json::from_str(&payload)?;
-    let suite = payload.check_suite;
-    if suite.pull_requests.is_empty() {
-        return Ok("No PRs");
-    }
-
-    submit_check(
-        &payload.repository.full_name(),
-        &suite.head_sha,
-        payload.installation.id,
-    )
-    .await?;
-
-    Ok("Check submitted")
-}
-
-async fn handle_check_run(
-    payload: String,
-    job_sender: &State<JobSender>,
-    journal: &State<Arc<Mutex<JobJournal>>>,
-) -> Result<&'static str> {
-    let payload: CheckRunPayload = serde_json::from_str(&payload)?;
-
-    if payload.action != "created" {
-        return Ok("Ignoring non-created check run");
-    }
-
-    if payload.action == "rerequested" {
-        for pull in &payload.check_run.pull_requests {
-            submit_check(
-                &pull.base.repo.full_name(),
-                &pull.head.sha,
-                payload.installation.id,
-            )
-            .await?;
-        }
-        return Ok("Check resubmitted");
-    }
-
-    let app_id = CONFIG.get().unwrap().app_id;
-
-    let check_run = payload.check_run;
-
-    if check_run.app.id != app_id {
-        return Ok("Not our app ID");
-    }
-
-    let pulls = check_run.pull_requests;
-    let run_id = check_run.id;
-
-    for pull in pulls {
-        // We only get partial pull information in the check, we request full info from github
-        let pull = get_pull_meta(&payload.installation, &pull.base.repo, pull.number)
-            .await
-            .context("Getting full pull information")?;
-
-        process_pull(pull, run_id, &payload.installation, job_sender, journal).await?;
-    }
-
-    Ok("Check run handled")
-}*/
-
 #[post("/payload", format = "json", data = "<payload>")]
 pub async fn process_github_payload(
     event: GithubEvent,
@@ -210,14 +147,14 @@ pub async fn process_github_payload(
     job_sender: &State<JobSender>,
     journal: &State<Arc<Mutex<JobJournal>>>,
 ) -> Result<&'static str, &'static str> {
-    match event.0.as_str() {
-        "pull_request" => handle_pull_request(payload, job_sender, journal).await,
-        //"check_suite" => handle_check_suite(payload).await,
-        //"check_run" => handle_check_run(payload, job_sender, journal).await,
-        _ => Ok("Not a job event"),
+    if event.0 != "pull_request" {
+        return Ok("Not a pull request event");
     }
-    .map_err(|e| {
-        eprintln!("Error handling event: {:?}", e);
-        "An error occured while handling the event"
-    })
+
+    handle_pull_request(payload, job_sender, journal)
+        .await
+        .map_err(|e| {
+            eprintln!("Error handling event: {:?}", e);
+            "An error occured while handling the event"
+        })
 }

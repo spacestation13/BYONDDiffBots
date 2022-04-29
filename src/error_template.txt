@@ -1,0 +1,11 @@
+An unexpected error occured during processing, possibly caused by malformed maps, icons, or server catching fire.
+
+The following stack trace may be useful:
+<details>
+	<summary>
+	Stack trace
+	</summary>
+
+{stack_trace}
+
+</details>

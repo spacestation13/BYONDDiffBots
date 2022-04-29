@@ -1,3 +1,5 @@
+use std::collections::VecDeque;
+
 use crate::github_types::*;
 use anyhow::{Context, Result};
 use flume::Sender;
@@ -19,7 +21,7 @@ pub struct JobSender(pub Sender<Job>);
 //TODO: Integrate journaling and channel into some sort of queue?
 pub struct JobJournal {
     file: String,
-    jobs: Vec<Job>,
+    jobs: VecDeque<Job>,
 }
 
 impl JobJournal {
@@ -28,7 +30,7 @@ impl JobJournal {
         let jobs = rocket::tokio::fs::read_to_string(file)
             .await
             .unwrap_or_else(|_| "[]".to_owned());
-        let jobs: Vec<Job> = serde_json::from_str(&jobs).unwrap_or_else(|_| vec![]);
+        let jobs: VecDeque<Job> = serde_json::from_str(&jobs).unwrap_or_default();
         Ok(Self {
             file: file.to_owned(),
             jobs,
@@ -45,12 +47,12 @@ impl JobJournal {
 
     // Jobs are processed one at a time, so we can just remove the first job.
     pub async fn complete_job(&mut self) {
-        self.jobs.remove(0);
+        self.jobs.pop_front();
         self.save().await.unwrap();
     }
 
     pub async fn add_job(&mut self, job: Job) {
-        self.jobs.push(job);
+        self.jobs.push_back(job);
         self.save().await.unwrap();
     }
 
