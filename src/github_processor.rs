@@ -104,17 +104,15 @@ impl<'r> FromRequest<'r> for GithubEvent {
     type Error = &'static str;
 
     async fn from_request(req: &'r Request<'_>) -> request::Outcome<Self, Self::Error> {
-        let event = req.headers().get_one("X-Github-Event");
-        if event.is_none() {
-            return Outcome::Failure((Status::BadRequest, "Missing X-Github-Event header"));
+        match req.headers().get_one("X-Github-Event") {
+            Some(event) => Outcome::Success(GithubEvent(event.to_owned())),
+            None => Outcome::Failure((Status::BadRequest, "Missing X-Github-Event header")),
         }
-        let event = GithubEvent(event.unwrap().to_string());
-        Outcome::Success(event)
     }
 }
 
 async fn handle_pull_request(payload: String) -> Result<&'static str> {
-    let payload: PullRequestEventPayload = serde_json::from_str(&payload).unwrap();
+    let payload: PullRequestEventPayload = serde_json::from_str(&payload)?;
     if payload.action != "opened" {
         return Ok("Ignoring non-opened PR");
     }
@@ -130,7 +128,7 @@ async fn handle_pull_request(payload: String) -> Result<&'static str> {
 }
 
 async fn handle_check_suite(payload: String) -> Result<&'static str> {
-    let payload: CheckSuitePayload = serde_json::from_str(&payload).unwrap();
+    let payload: CheckSuitePayload = serde_json::from_str(&payload)?;
     let suite = payload.check_suite;
     if suite.pull_requests.is_empty() {
         return Ok("No PRs");
@@ -151,7 +149,7 @@ async fn handle_check_run(
     job_sender: &State<JobSender>,
     journal: &State<Arc<Mutex<JobJournal>>>,
 ) -> Result<&'static str> {
-    let payload: CheckRunPayload = serde_json::from_str(&payload).unwrap();
+    let payload: CheckRunPayload = serde_json::from_str(&payload)?;
 
     if payload.action != "created" {
         return Ok("Ignoring non-created check run");
