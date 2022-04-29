@@ -76,7 +76,7 @@ pub struct CheckRun {
     pub pull_requests: Vec<PullRequest>,
     pub head_sha: String,
     pub app: App,
-    pub check_suite: CheckSuite,
+    //pub check_suite: CheckSuite,
 }
 
 #[derive(Deserialize, Debug)]

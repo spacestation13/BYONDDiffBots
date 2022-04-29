@@ -111,23 +111,36 @@ impl<'r> FromRequest<'r> for GithubEvent {
     }
 }
 
-async fn handle_pull_request(payload: String) -> Result<&'static str> {
+async fn handle_pull_request(
+    payload: String,
+    job_sender: &State<JobSender>,
+    journal: &State<Arc<Mutex<JobJournal>>>,
+) -> Result<&'static str> {
     let payload: PullRequestEventPayload = serde_json::from_str(&payload)?;
-    if payload.action != "opened" {
-        return Ok("Ignoring non-opened PR");
+    if payload.action != "opened" && payload.action != "synchronize" {
+        return Ok("PR not opened or updated");
     }
 
-    submit_check(
+    let check = submit_check(
         &payload.pull_request.base.repo.full_name(),
         &payload.pull_request.head.sha,
         payload.installation.id,
     )
     .await?;
 
+    process_pull(
+        payload.pull_request,
+        check.id,
+        &payload.installation,
+        job_sender,
+        journal,
+    )
+    .await?;
+
     Ok("Check submitted")
 }
 
-async fn handle_check_suite(payload: String) -> Result<&'static str> {
+/*async fn handle_check_suite(payload: String) -> Result<&'static str> {
     let payload: CheckSuitePayload = serde_json::from_str(&payload)?;
     let suite = payload.check_suite;
     if suite.pull_requests.is_empty() {
@@ -188,7 +201,7 @@ async fn handle_check_run(
     }
 
     Ok("Check run handled")
-}
+}*/
 
 #[post("/payload", format = "json", data = "<payload>")]
 pub async fn process_github_payload(
@@ -198,9 +211,9 @@ pub async fn process_github_payload(
     journal: &State<Arc<Mutex<JobJournal>>>,
 ) -> Result<&'static str, &'static str> {
     match event.0.as_str() {
-        "pull_request" => handle_pull_request(payload).await,
-        "check_suite" => handle_check_suite(payload).await,
-        "check_run" => handle_check_run(payload, job_sender, journal).await,
+        "pull_request" => handle_pull_request(payload, job_sender, journal).await,
+        //"check_suite" => handle_check_suite(payload).await,
+        //"check_run" => handle_check_run(payload, job_sender, journal).await,
         _ => Ok("Not a job event"),
     }
     .map_err(|e| {

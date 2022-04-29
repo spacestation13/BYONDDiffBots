@@ -59,8 +59,8 @@ pub async fn get_pull_meta(
     Ok(res)
 }
 
-pub async fn submit_check(full_repo: &str, head_sha: &str, inst_id: u64) -> Result<()> {
-    let _: Empty = octocrab::instance()
+pub async fn submit_check(full_repo: &str, head_sha: &str, inst_id: u64) -> Result<CheckRun> {
+    let result: CheckRun = octocrab::instance()
         .installation(inst_id.into())
         .post(
             format!("/repos/{full_repo}/check-runs"),
@@ -72,7 +72,7 @@ pub async fn submit_check(full_repo: &str, head_sha: &str, inst_id: u64) -> Resu
         .await
         .context("Submitting check")?;
 
-    Ok(())
+    Ok(result)
 }
 
 pub async fn mark_job_queued(job: &Job) -> Result<()> {
