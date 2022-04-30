@@ -39,6 +39,15 @@ impl BoundingBox {
     }
 }
 
+impl ToString for BoundingBox {
+    fn to_string(&self) -> String {
+        format!(
+            "({}, {}) -> ({}, {})",
+            self.left, self.bottom, self.right, self.top
+        )
+    }
+}
+
 pub type RenderingErrors = RwLock<HashSet<String, RandomState>>;
 
 pub fn get_diff_bounding_box(

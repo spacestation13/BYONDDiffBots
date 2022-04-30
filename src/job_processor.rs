@@ -27,7 +27,8 @@ fn render(
     removed_files: &[&ModifiedFile],
     output_dir: &Path,
     pull_request_number: u64,
-) -> Result<()> {
+) -> Result<Vec<BoundingBox>> {
+    // feel like this is a bit of a hack but it works for now
     with_repo_dir(&base.repo, || {
         Command::new("git")
             .args(["checkout", &base.name])
@@ -224,7 +225,7 @@ fn render(
     print_errors(&removed_errors);
     */
 
-    Ok(())
+    Ok(diff_bounds)
 }
 
 fn clone_repo(url: &str, dir: &Path) -> Result<()> {
@@ -290,7 +291,7 @@ fn do_job(job: &Job) -> Result<Output> {
     let modified_files = filter_on_status("modified");
     let removed_files = filter_on_status("removed");
 
-    render(
+    let diff_bounds = render(
         base,
         head,
         &added_files,
@@ -317,11 +318,12 @@ fn do_job(job: &Job) -> Result<Output> {
         ));
     }
 
-    for (idx, file) in modified_files.iter().enumerate() {
+    for (idx, (file, bounds)) in modified_files.iter().zip(diff_bounds.iter()).enumerate() {
         let link_before = format!("{}/{}/m/{}/before.png", file_url, non_abs_directory, idx);
         let link_after = format!("{}/{}/m/{}/after.png", file_url, non_abs_directory, idx);
         text.push_str(&format!(
             include_str!("diff_template_mod.txt"),
+            bounds = bounds.to_string(),
             filename = file.filename,
             image_before_link = link_before,
             image_after_link = link_after

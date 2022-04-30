@@ -3,8 +3,9 @@
 	MODIFIED - {filename}
 	</summary>
 
-Raw links:
-[Old]({image_before_link}) - [New]({image_after_link}) - [Diff coming soon...](http://example.com)
+Modified region: {bounds}
+
+Raw links: [Old]({image_before_link}) - [New]({image_after_link}) - [Diff coming soon...](http://example.com)
 
 |  Old  |      New      |  Difference  |
 | :---: |     :---:     |    :---:     |
