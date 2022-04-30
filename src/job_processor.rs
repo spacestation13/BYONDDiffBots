@@ -1,6 +1,12 @@
 use anyhow::{Context, Result};
 use flume::Receiver;
+use image::io::Reader as ImageReader;
+use image::GenericImageView;
+use image::ImageBuffer;
+use image::Pixel;
 use path_absolutize::*;
+use rayon::iter::IntoParallelIterator;
+use rayon::iter::ParallelIterator;
 use rocket::tokio::runtime::Handle;
 use rocket::tokio::sync::Mutex;
 use rocket::tokio::task;
@@ -18,6 +24,25 @@ use crate::github_types::*;
 use crate::job::Job;
 use crate::rendering::*;
 use crate::{job, CONFIG};
+
+fn generate_diff<P: AsRef<Path>>(directory: P) -> Result<()> {
+    let directory = directory.as_ref();
+    let before = ImageReader::open(directory.join("before.png"))?.decode()?;
+    let after = ImageReader::open(directory.join("after.png"))?.decode()?;
+
+    ImageBuffer::from_fn(after.width(), after.height(), |x, y| {
+        let before_pixel = before.get_pixel(x, y);
+        let after_pixel = after.get_pixel(x, y);
+        if before_pixel == after_pixel {
+            after_pixel.map_without_alpha(|c| c / 2)
+        } else {
+            image::Rgba([255, 0, 0, 255])
+        }
+    })
+    .save(directory.join("diff.png"))?;
+
+    Ok(())
+}
 
 fn render(
     base: &Branch,
@@ -208,6 +233,16 @@ fn render(
     })
     .context("Deleting pull branch")?;
 
+    //let now = Instant::now();
+    (0..modified_files.len()).into_par_iter().for_each(|i| {
+        let _ = generate_diff(modified_directory.join(i.to_string()));
+    });
+    /*eprintln!(
+        "Generating {} diff(s) took {}ms",
+        modified_files.len(),
+        now.elapsed().as_millis()
+    );*/
+
     /*
     let print_errors = |e: &RenderingErrors| {
         for error in e.read().unwrap().iter() {
@@ -319,14 +354,14 @@ fn do_job(job: &Job) -> Result<Output> {
     }
 
     for (idx, (file, bounds)) in modified_files.iter().zip(diff_bounds.iter()).enumerate() {
-        let link_before = format!("{}/{}/m/{}/before.png", file_url, non_abs_directory, idx);
-        let link_after = format!("{}/{}/m/{}/after.png", file_url, non_abs_directory, idx);
+        let link = format!("{}/{}/m/{}/", file_url, non_abs_directory, idx);
         text.push_str(&format!(
             include_str!("diff_template_mod.txt"),
             bounds = bounds.to_string(),
             filename = file.filename,
-            image_before_link = link_before,
-            image_after_link = link_after
+            image_before_link = link.clone() + "before.png",
+            image_after_link = link.clone() + "after.png",
+            image_diff_link = link + "diff.png"
         ));
     }
 
