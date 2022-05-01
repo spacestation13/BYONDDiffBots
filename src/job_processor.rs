@@ -1,12 +1,7 @@
 use anyhow::{Context, Result};
 use flume::Receiver;
-use image::io::Reader as ImageReader;
-use image::GenericImageView;
-use image::ImageBuffer;
-use image::Pixel;
 use path_absolutize::*;
-use rayon::iter::IntoParallelIterator;
-use rayon::iter::ParallelIterator;
+use rayon::prelude::*;
 use rocket::tokio::runtime::Handle;
 use rocket::tokio::sync::Mutex;
 use rocket::tokio::task;
@@ -19,30 +14,10 @@ use std::sync::Arc;
 extern crate dreammaker as dm;
 
 use crate::git_operations::*;
-use crate::github_api::*;
 use crate::github_types::*;
 use crate::job::Job;
 use crate::rendering::*;
 use crate::{job, CONFIG};
-
-fn generate_diff<P: AsRef<Path>>(directory: P) -> Result<()> {
-    let directory = directory.as_ref();
-    let before = ImageReader::open(directory.join("before.png"))?.decode()?;
-    let after = ImageReader::open(directory.join("after.png"))?.decode()?;
-
-    ImageBuffer::from_fn(after.width(), after.height(), |x, y| {
-        let before_pixel = before.get_pixel(x, y);
-        let after_pixel = after.get_pixel(x, y);
-        if before_pixel == after_pixel {
-            after_pixel.map_without_alpha(|c| c / 2)
-        } else {
-            image::Rgba([255, 0, 0, 255])
-        }
-    })
-    .save(directory.join("diff.png"))?;
-
-    Ok(())
-}
 
 fn render(
     base: &Branch,
@@ -52,8 +27,8 @@ fn render(
     removed_files: &[&ModifiedFile],
     output_dir: &Path,
     pull_request_number: u64,
-) -> Result<Vec<BoundingBox>> {
     // feel like this is a bit of a hack but it works for now
+) -> Result<Vec<BoundingBox>> {
     with_repo_dir(&base.repo, || {
         Command::new("git")
             .args(["checkout", &base.name])
@@ -235,7 +210,7 @@ fn render(
 
     //let now = Instant::now();
     (0..modified_files.len()).into_par_iter().for_each(|i| {
-        let _ = generate_diff(modified_directory.join(i.to_string()));
+        let _ = render_diffs_for_directory(modified_directory.join(i.to_string()));
     });
     /*eprintln!(
         "Generating {} diff(s) took {}ms",
@@ -277,7 +252,102 @@ fn clone_repo(url: &str, dir: &Path) -> Result<()> {
     Ok(())
 }
 
-fn do_job(job: &Job) -> Result<Output> {
+enum JobOutputs {
+    One(Output),
+    Many(Output, Vec<Output>),
+}
+
+fn generate_finished_output<P: AsRef<Path>>(
+    added_files: &[&ModifiedFile],
+    modified_files: &[&ModifiedFile],
+    removed_files: &[&ModifiedFile],
+    file_directory: &P,
+    diff_bounds: &[BoundingBox],
+) -> Result<JobOutputs> {
+    let conf = CONFIG.get().unwrap();
+    let file_url = &conf.file_hosting_url;
+    let non_abs_directory = file_directory.as_ref().to_string_lossy();
+
+    let title = "Map renderings";
+    let summary = "*This is still a beta. Please file any issues [here](https://github.com/MCHSL/mapdiffbot2/issues).*\n\nMaps with diff:";
+    let mut text = String::new();
+    let mut outputs = vec![];
+
+    for (idx, file) in added_files.iter().enumerate() {
+        let link = format!("{}/{}/a/{}/added.png", file_url, non_abs_directory, idx);
+        text.push_str(&format!(
+            include_str!("diff_template_add.txt"),
+            filename = file.filename,
+            image_link = link
+        ));
+
+        if text.len() > 60_000 {
+            outputs.push(Output {
+                title: title.to_owned(),
+                summary: summary.to_owned(),
+                text,
+            });
+            text = String::new();
+        }
+    }
+
+    for (idx, (file, bounds)) in modified_files.iter().zip(diff_bounds.iter()).enumerate() {
+        let link = format!("{}/{}/m/{}/", file_url, non_abs_directory, idx);
+        text.push_str(&format!(
+            include_str!("diff_template_mod.txt"),
+            bounds = bounds.to_string(),
+            filename = file.filename,
+            image_before_link = link.clone() + "before.png",
+            image_after_link = link.clone() + "after.png",
+            image_diff_link = link + "diff.png"
+        ));
+
+        if text.len() > 60_000 {
+            outputs.push(Output {
+                title: title.to_owned(),
+                summary: summary.to_owned(),
+                text,
+            });
+            text = String::new();
+        }
+    }
+
+    for (idx, file) in removed_files.iter().enumerate() {
+        let link = format!("{}/{}/r/{}/removed.png", file_url, non_abs_directory, idx);
+        text.push_str(&format!(
+            include_str!("diff_template_remove.txt"),
+            filename = file.filename,
+            image_link = link
+        ));
+
+        if text.len() > 60_000 {
+            outputs.push(Output {
+                title: title.to_owned(),
+                summary: summary.to_owned(),
+                text,
+            });
+            text = String::new();
+        }
+    }
+
+    if !text.is_empty() {
+        outputs.push(Output {
+            title: title.to_owned(),
+            summary: summary.to_owned(),
+            text,
+        });
+    }
+
+    let first = outputs.remove(0);
+
+    if outputs.is_empty() {
+        Ok(JobOutputs::One(first))
+    } else {
+        Ok(JobOutputs::Many(first, outputs))
+    }
+}
+
+fn do_job(job: &Job) -> Result<JobOutputs> {
     let base = &job.base;
     let head = &job.head;
     let repo = format!("https://github.com/{}", base.repo.full_name());
@@ -285,19 +355,20 @@ fn do_job(job: &Job) -> Result<Output> {
 
     if !target_dir.exists() {
         if let Ok(handle) = Handle::try_current() {
-            let _ = handle.block_on(async {
-				update_job(job, Output {
+            handle.block_on(async {
+				let output = Output {
 					title: "Cloning repo...".to_owned(),
 					summary: "The repository is being cloned, this will take a few minutes. Future runs will not require cloning.".to_owned(),
 					text: "".to_owned(),
-				}).await // we don't really care if updating the job fails, just continue
+				};
+				let _ = job.check_run.set_output(output).await; // we don't really care if updating the job fails, just continue
 			});
         }
 
         clone_repo(&repo, &target_dir).context("Cloning repo")?;
     }
 
-    let non_abs_directory = format!("images/{}/{}", job.base.repo.id, job.check_run_id);
+    let non_abs_directory = format!("images/{}/{}", job.base.repo.id, job.check_run.id());
     let directory = Path::new(&non_abs_directory)
         .absolutize()
         .context("Absolutizing images path")?;
@@ -337,50 +408,15 @@ fn do_job(job: &Job) -> Result<Output> {
     )
     .context("Doing the renderance")?;
 
-    let conf = CONFIG.get().unwrap();
-    let file_url = &conf.file_hosting_url;
+    let outputs = generate_finished_output(
+        &added_files,
+        &modified_files,
+        &removed_files,
+        &non_abs_directory,
+        &diff_bounds,
+    )?;
 
-    let title = "Map renderings";
-    let summary = "*This is still a beta. Please file any issues [here](https://github.com/MCHSL/mapdiffbot2/issues).*\n\nMaps with diff:";
-    let mut text = String::new();
-
-    for (idx, file) in added_files.iter().enumerate() {
-        let link = format!("{}/{}/a/{}/added.png", file_url, non_abs_directory, idx);
-        text.push_str(&format!(
-            include_str!("diff_template_add.txt"),
-            filename = file.filename,
-            image_link = link
-        ));
-    }
-
-    for (idx, (file, bounds)) in modified_files.iter().zip(diff_bounds.iter()).enumerate() {
-        let link = format!("{}/{}/m/{}/", file_url, non_abs_directory, idx);
-        text.push_str(&format!(
-            include_str!("diff_template_mod.txt"),
-            bounds = bounds.to_string(),
-            filename = file.filename,
-            image_before_link = link.clone() + "before.png",
-            image_after_link = link.clone() + "after.png",
-            image_diff_link = link + "diff.png"
-        ));
-    }
-
-    for (idx, file) in removed_files.iter().enumerate() {
-        let link = format!("{}/{}/r/{}/removed.png", file_url, non_abs_directory, idx);
-        text.push_str(&format!(
-            include_str!("diff_template_remove.txt"),
-            filename = file.filename,
-            image_link = link
-        ));
-    }
-
-    let output = Output {
-        title: title.to_owned(),
-        summary: summary.to_owned(),
-        text,
-    };
-
-    Ok(output)
+    Ok(outputs)
 }
 
 async fn handle_job(job: job::Job) {
@@ -389,10 +425,10 @@ async fn handle_job(job: job::Job) {
         chrono::Utc::now().to_rfc3339(),
         job.base.repo.full_name(),
         job.pull_request,
-        job.check_run_id
+        job.check_run.id()
     );
-    let _ = mark_job_started(&job).await; // TODO: Put the failed marks in a queue to retry later
-                                          //let now = Instant::now();
+    let _ = job.check_run.mark_started().await; // TODO: Put the failed marks in a queue to retry later
+                                                //let now = Instant::now();
 
     let job_clone = job.clone();
     let output = task::spawn_blocking(move || do_job(&job_clone)).await;
@@ -402,7 +438,7 @@ async fn handle_job(job: job::Job) {
         chrono::Utc::now().to_rfc3339(),
         job.base.repo.full_name(),
         job.pull_request,
-        job.check_run_id
+        job.check_run.id()
     );
 
     //eprintln!("Handling job took {}ms", now.elapsed().as_millis());
@@ -416,7 +452,7 @@ async fn handle_job(job: job::Job) {
             Err(e) => e.to_string(),
         };
         eprintln!("Join Handle error: {}", fuckup);
-        mark_job_failed(&job, &fuckup).await.unwrap();
+        let _ = job.check_run.mark_failed(&fuckup).await;
         return;
     }
 
@@ -424,11 +460,34 @@ async fn handle_job(job: job::Job) {
     if let Err(e) = output {
         let fuckup = format!("{:?}", e);
         eprintln!("Other rendering error: {}", fuckup);
-        mark_job_failed(&job, &fuckup).await.unwrap();
+        let _ = job.check_run.mark_failed(&fuckup).await;
         return;
     }
 
-    let _ = mark_job_success(&job, output.unwrap()).await;
+    match output.unwrap() {
+        JobOutputs::One(output) => {
+            let _ = job.check_run.mark_succeeded(output).await;
+        }
+        JobOutputs::Many(first, rest) => {
+            let count = rest.len() + 1;
+
+            let _ = job
+                .check_run
+                .rename(&format!("MapDiffBot2 (1/{})", count))
+                .await;
+            let _ = job.check_run.mark_succeeded(first).await;
+
+            for (i, overflow) in rest.into_iter().enumerate() {
+                if let Ok(check) = job
+                    .check_run
+                    .duplicate(&format!("MapDiffBot2 ({}/{})", i + 2, count))
+                    .await
+                {
+                    let _ = check.mark_succeeded(overflow).await;
+                }
+            }
+        }
+    }
 }
 
 async fn recover_from_journal(journal: &Arc<Mutex<job::JobJournal>>) {

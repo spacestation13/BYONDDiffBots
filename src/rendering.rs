@@ -6,6 +6,8 @@ use ahash::RandomState;
 use anyhow::{Context, Result};
 use dm::objtree::ObjectTree;
 use dmm_tools::{dmi::Image, dmm, minimap, render_passes::RenderPass, IconCache};
+use image::io::Reader as ImageReader;
+use image::{GenericImageView, ImageBuffer, Pixel};
 use rayon::prelude::*;
 
 use crate::github_types::*;
@@ -211,5 +213,24 @@ pub fn render_map_regions(
             Ok(())
         })
         .collect();
+    Ok(())
+}
+
+pub fn render_diffs_for_directory<P: AsRef<Path>>(directory: P) -> Result<()> {
+    let directory = directory.as_ref();
+    let before = ImageReader::open(directory.join("before.png"))?.decode()?;
+    let after = ImageReader::open(directory.join("after.png"))?.decode()?;
+
+    ImageBuffer::from_fn(after.width(), after.height(), |x, y| {
+        let before_pixel = before.get_pixel(x, y);
+        let after_pixel = after.get_pixel(x, y);
+        if before_pixel == after_pixel {
+            after_pixel.map_without_alpha(|c| c / 2)
+        } else {
+            image::Rgba([255, 0, 0, 255])
+        }
+    })
+    .save(directory.join("diff.png"))?;
+
     Ok(())
 }

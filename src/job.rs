@@ -1,6 +1,6 @@
 use std::collections::VecDeque;
 
-use crate::github_types::*;
+use crate::{github_api::CheckRun, github_types::*};
 use anyhow::{Context, Result};
 use flume::Sender;
 use rocket::serde::json::serde_json;
@@ -12,8 +12,7 @@ pub struct Job {
     pub head: Branch,
     pub pull_request: u64,
     pub files: Vec<ModifiedFile>,
-    pub check_run_id: u64,
-    pub installation_id: u64,
+    pub check_run: CheckRun,
 }
 
 pub struct JobSender(pub Sender<Job>);

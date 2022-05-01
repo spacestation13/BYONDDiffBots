@@ -71,7 +71,7 @@ pub struct App {
 }
 
 #[derive(Deserialize, Debug)]
-pub struct CheckRun {
+pub struct RawCheckRun {
     pub id: u64,
     pub pull_requests: Vec<PullRequest>,
     pub head_sha: String,
@@ -90,7 +90,7 @@ pub struct CheckSuitePayload {
 pub struct CheckRunPayload {
     pub action: String,
     pub repository: Repository,
-    pub check_run: CheckRun,
+    pub check_run: RawCheckRun,
     pub installation: Installation,
 }
 

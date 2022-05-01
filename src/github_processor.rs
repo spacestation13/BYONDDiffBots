@@ -17,29 +17,14 @@ use crate::CONFIG;
 
 async fn process_pull(
     pull: PullRequest,
-    run_id: u64,
+    check_run: CheckRun,
     installation: &Installation,
     job_sender: &JobSender,
     journal: &Arc<Mutex<JobJournal>>,
 ) -> Result<()> {
-    let files: Vec<ModifiedFile> = get_pull_files(installation, &pull)
-        .await
-        .context("Getting files modified by PR")?
-        .into_iter()
-        .filter(|f| f.filename.ends_with(".dmm"))
-        .collect();
-
-    let job = Job {
-        base: pull.base,
-        head: pull.head,
-        pull_request: pull.number,
-        files,
-        check_run_id: run_id,
-        installation_id: installation.id,
-    };
-
     if pull
         .title
+        .as_ref()
         .ok_or_else(|| anyhow::anyhow!("PR title is None"))?
         .to_ascii_lowercase()
         .contains("[mdb ignore]")
@@ -50,7 +35,7 @@ async fn process_pull(
             text: "".to_owned(),
         };
 
-        mark_job_skipped(&job, output).await?;
+        check_run.mark_skipped(output).await?;
 
         return Ok(());
     }
@@ -60,35 +45,50 @@ async fn process_pull(
         (&conf.blacklist, &conf.blacklist_contact)
     };
 
-    if blacklist.contains(&job.base.repo.id) {
+    if blacklist.contains(&pull.base.repo.id) {
         let output = Output {
             title: "Repo blacklisted".to_owned(),
             summary: format!(
                 "Repository {} is blacklisted. {}",
-                job.base.repo.full_name(),
+                pull.base.repo.full_name(),
                 contact
             ),
             text: "".to_owned(),
         };
 
-        mark_job_skipped(&job, output).await?;
+        check_run.mark_skipped(output).await?;
 
         return Ok(());
     }
 
-    if job.files.is_empty() {
+    let files: Vec<ModifiedFile> = get_pull_files(installation, &pull)
+        .await
+        .context("Getting files modified by PR")?
+        .into_iter()
+        .filter(|f| f.filename.ends_with(".dmm"))
+        .collect();
+
+    if files.is_empty() {
         let output = Output {
             title: "No map chages".to_owned(),
             summary: "There are no changed map files to render.".to_owned(),
             text: "".to_owned(),
         };
 
-        mark_job_skipped(&job, output).await?;
+        check_run.mark_skipped(output).await?;
 
         return Ok(());
     }
 
-    mark_job_queued(&job).await?;
+    check_run.mark_queued().await?;
+
+    let job = Job {
+        base: pull.base,
+        head: pull.head,
+        pull_request: pull.number,
+        files,
+        check_run,
+    };
 
     journal.lock().await.add_job(job.clone()).await;
     job_sender.0.send_async(job).await?;
@@ -121,16 +121,17 @@ async fn handle_pull_request(
         return Ok("PR not opened or updated");
     }
 
-    let check = submit_check(
+    let check_run = CheckRun::create(
         &payload.pull_request.base.repo.full_name(),
         &payload.pull_request.head.sha,
         payload.installation.id,
+        None,
     )
     .await?;
 
     process_pull(
         payload.pull_request,
-        check.id,
+        check_run,
         &payload.installation,
         job_sender,
         journal,
