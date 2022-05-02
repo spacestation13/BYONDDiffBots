@@ -129,6 +129,16 @@ pub struct MapWithRegions {
     pub bounding_boxes: Vec<Option<BoundingBox>>,
 }
 
+// pub fn iter_levels<'a>(&'a self) -> impl Iterator<Item=(i32, ZLevel<'a>)> + 'a {
+impl MapWithRegions {
+    pub fn iter_levels(&self) -> impl Iterator<Item = (usize, &BoundingBox)> {
+        self.bounding_boxes
+            .iter()
+            .enumerate()
+            .filter_map(|(z, bbox)| bbox.as_ref().map(|bbox| (z, bbox)))
+    }
+}
+
 pub struct MapsWithRegions {
     pub befores: Vec<MapWithRegions>,
     pub afters: Vec<MapWithRegions>,
@@ -270,31 +280,34 @@ pub fn render_map_regions(
     Ok(())
 }
 
-pub fn render_diffs_for_directory<P: AsRef<Path>>(directory: P) -> Result<()> {
+pub fn render_diffs_for_directory<P: AsRef<Path>>(directory: P) {
     let directory = directory.as_ref();
 
-    println!("{}", directory.join("*-before.png").display());
-
-    for entry in glob::glob(directory.join("*-before.png").to_str().unwrap())
+    glob::glob(directory.join("*-before.png").to_str().unwrap())
         .expect("Failed to read glob pattern")
-        .flatten()
-    {
-        let fuck = entry.to_string_lossy();
-        let replaced_entry = fuck.replace("-before.png", "-after.png");
-        let before = ImageReader::open(&entry)?.decode()?;
-        let after = ImageReader::open(&replaced_entry)?.decode()?;
+        .filter_map(|f| f.ok())
+        .par_bridge()
+        .map(|entry| {
+            let fuck = entry.to_string_lossy();
+            let replaced_entry = fuck.replace("-before.png", "-after.png");
+            let before = ImageReader::open(&entry)?.decode()?;
+            let after = ImageReader::open(&replaced_entry)?.decode()?;
 
-        ImageBuffer::from_fn(after.width(), after.height(), |x, y| {
-            let before_pixel = before.get_pixel(x, y);
-            let after_pixel = after.get_pixel(x, y);
-            if before_pixel == after_pixel {
-                after_pixel.map_without_alpha(|c| c / 3)
-            } else {
-                image::Rgba([255, 0, 0, 255])
-            }
+            ImageBuffer::from_fn(after.width(), after.height(), |x, y| {
+                let before_pixel = before.get_pixel(x, y);
+                let after_pixel = after.get_pixel(x, y);
+                if before_pixel == after_pixel {
+                    after_pixel.map_without_alpha(|c| c / 3)
+                } else {
+                    image::Rgba([255, 0, 0, 255])
+                }
+            })
+            .save(fuck.replace("-before.png", "-diff.png"))?;
+
+            Ok(())
         })
-        .save(fuck.replace("-before.png", "-diff.png"))?;
-    }
-
-    Ok(())
+        .filter_map(|r: Result<()>| r.err())
+        .for_each(|e| {
+            eprintln!("Diff rendering error: {}", e);
+        });
 }

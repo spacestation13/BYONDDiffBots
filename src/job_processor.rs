@@ -19,7 +19,7 @@ use crate::job::Job;
 use crate::rendering::*;
 use crate::{job, CONFIG};
 
-struct RenderedCrap {
+struct RenderedMaps {
     added_maps: Vec<MapWithRegions>,
     removed_maps: Vec<MapWithRegions>,
     modified_maps: MapsWithRegions,
@@ -34,7 +34,7 @@ fn render(
     output_dir: &Path,
     pull_request_number: u64,
     // feel like this is a bit of a hack but it works for now
-) -> Result<RenderedCrap> {
+) -> Result<RenderedMaps> {
     with_repo_dir(&base.repo, || {
         Command::new("git")
             .args(["checkout", &base.name])
@@ -235,8 +235,7 @@ fn render(
     print_errors(&removed_errors);
     */
 
-    // just return whatever dude
-    Ok(RenderedCrap {
+    Ok(RenderedMaps {
         added_maps,
         modified_maps,
         removed_maps,
@@ -257,9 +256,66 @@ fn clone_repo(url: &str, dir: &Path) -> Result<()> {
     Ok(())
 }
 
-enum JobOutputs {
+enum CheckOutputs {
     One(Output),
     Many(Output, Vec<Output>),
+}
+
+struct CheckOutputBuilder {
+    title: String,
+    summary: String,
+    current_text: String,
+    outputs: Vec<Output>,
+}
+
+impl CheckOutputBuilder {
+    pub fn new<S: Into<String>>(title: S, summary: S) -> Self {
+        let title = title.into();
+        let summary = summary.into();
+        Self {
+            title,
+            summary,
+            current_text: String::new(),
+            outputs: Vec::new(),
+        }
+    }
+
+    pub fn add_text(&mut self, text: &str) {
+        self.current_text.push_str(text);
+        // Leaving a 5k character safety margin is prob overkill but oh well
+        if self.current_text.len() > 60_000 {
+            let output = Output {
+                title: self.title.clone(),
+                summary: self.summary.clone(),
+                text: std::mem::take(&mut self.current_text),
+            };
+            self.outputs.push(output);
+        }
+    }
+
+    pub fn build(self) -> CheckOutputs {
+        let Self {
+            title,
+            summary,
+            current_text,
+            mut outputs,
+        } = self;
+
+        if !current_text.is_empty() {
+            let output = Output {
+                title,
+                summary,
+                text: current_text,
+            };
+            outputs.push(output);
+        }
+        let first = outputs.remove(0);
+        if outputs.is_empty() {
+            CheckOutputs::One(first)
+        } else {
+            CheckOutputs::Many(first, outputs)
+        }
+    }
 }
 
 fn generate_finished_output<P: AsRef<Path>>(
@@ -267,115 +323,79 @@ fn generate_finished_output<P: AsRef<Path>>(
     modified_files: &[&ModifiedFile],
     removed_files: &[&ModifiedFile],
     file_directory: &P,
-    crap: RenderedCrap,
-) -> Result<JobOutputs> {
+    maps: RenderedMaps,
+) -> Result<CheckOutputs> {
     let conf = CONFIG.get().unwrap();
     let file_url = &conf.file_hosting_url;
     let non_abs_directory = file_directory.as_ref().to_string_lossy();
 
-    let title = "Map renderings";
-    let summary = "*This is still a beta. Please file any issues [here](https://github.com/MCHSL/mapdiffbot2/issues).*\n\nMaps with diff:";
-    let mut text = String::new();
-    let mut outputs = vec![];
+    let mut builder = CheckOutputBuilder::new(
+    "Map renderings",
+    "*This is still a beta. Please file any issues [here](https://github.com/MCHSL/mapdiffbot2/issues).*\n\nMaps with diff:",
+	);
 
-    for (idx, file) in added_files.iter().enumerate() {
-        let bounds = &crap.added_maps[idx].bounding_boxes;
-        for (i, bound) in bounds.iter().enumerate() {
-            if bound.is_some() {
-                let link = format!(
-                    "{}/{}/a/{}/{}-added.png",
-                    file_url, non_abs_directory, idx, i
-                );
-                let name = format!("{} Z-Level {}", file.filename, i);
-                text.push_str(&format!(
+    let link_base = format!("{}/{}", file_url, non_abs_directory);
+
+    // Those are CPU bound but parallelizing would require builder to be thread safe and it's probably not worth the overhead
+    added_files
+        .iter()
+        .zip(maps.added_maps.iter())
+        .enumerate()
+        .for_each(|(file_index, (file, map))| {
+            map.iter_levels().for_each(|(level, _)| {
+                let link = format!("{}/a/{}/{}-added.png", link_base, file_index, level);
+                let name = format!("{}:{}", file.filename, level + 1);
+
+                builder.add_text(&format!(
                     include_str!("diff_template_add.txt"),
                     filename = name,
                     image_link = link
                 ));
+            });
+        });
 
-                if text.len() > 60_000 {
-                    outputs.push(Output {
-                        title: title.to_owned(),
-                        summary: summary.to_owned(),
-                        text,
-                    });
-                    text = String::new();
-                }
-            }
-        }
-    }
+    modified_files
+        .iter()
+        .zip(maps.modified_maps.befores.iter())
+        .enumerate()
+        .for_each(|(file_index, (file, map))| {
+            map.iter_levels().for_each(|(level, region)| {
+                let link = format!("{}/m/{}/{}", link_base, file_index, level);
+                let name = format!("{}:{}", file.filename, level + 1);
 
-    for (idx, file) in modified_files.iter().enumerate() {
-        let bounds = &crap.modified_maps.befores[idx].bounding_boxes;
-        for (i, bound) in bounds.iter().enumerate() {
-            if let Some(bound) = bound {
-                let link = format!("{}/{}/m/{}/", file_url, non_abs_directory, idx);
-                text.push_str(&format!(
+                #[allow(clippy::format_in_format_args)]
+                builder.add_text(&format!(
                     include_str!("diff_template_mod.txt"),
-                    bounds = bound.to_string(),
-                    filename = file.filename.clone() + &format!(" Z-Level {}", i),
-                    image_before_link = link.clone() + i.to_string().as_str() + "-before.png",
-                    image_after_link = link.clone() + i.to_string().as_str() + "-after.png",
-                    image_diff_link = link.clone() + i.to_string().as_str() + "-diff.png"
+                    bounds = region.to_string(),
+                    filename = name,
+                    image_before_link = format!("{}-before.png", link),
+                    image_after_link = format!("{}-after.png", link),
+                    image_diff_link = format!("{}-diff.png", link)
                 ));
+            });
+        });
 
-                if text.len() > 60_000 {
-                    outputs.push(Output {
-                        title: title.to_owned(),
-                        summary: summary.to_owned(),
-                        text,
-                    });
-                    text = String::new();
-                }
-            }
-        }
-    }
+    removed_files
+        .iter()
+        .zip(maps.removed_maps.iter())
+        .enumerate()
+        .for_each(|(file_index, (file, map))| {
+            map.iter_levels().for_each(|(level, _)| {
+                let link = format!("{}/r/{}/{}-removed.png", link_base, file_index, level);
+                let name = format!("{}:{}", file.filename, level + 1);
 
-    for (idx, file) in removed_files.iter().enumerate() {
-        let bounds = &crap.removed_maps[idx].bounding_boxes;
-        for (i, bound) in bounds.iter().enumerate() {
-            if bound.is_some() {
-                let link = format!(
-                    "{}/{}/r/{}/{}-removed.png",
-                    file_url, non_abs_directory, idx, i
-                );
-                let name = format!("{} Z-Level {}", file.filename, i);
-                text.push_str(&format!(
+                builder.add_text(&format!(
                     include_str!("diff_template_remove.txt"),
                     filename = name,
                     image_link = link
                 ));
-
-                if text.len() > 60_000 {
-                    outputs.push(Output {
-                        title: title.to_owned(),
-                        summary: summary.to_owned(),
-                        text,
-                    });
-                    text = String::new();
-                }
-            }
-        }
-    }
-
-    if !text.is_empty() {
-        outputs.push(Output {
-            title: title.to_owned(),
-            summary: summary.to_owned(),
-            text,
+            });
         });
-    }
 
-    let first = outputs.remove(0);
-
-    if outputs.is_empty() {
-        Ok(JobOutputs::One(first))
-    } else {
-        Ok(JobOutputs::Many(first, outputs))
-    }
+    Ok(builder.build())
 }
 
-fn do_job(job: &Job) -> Result<JobOutputs> {
+fn do_job(job: &Job) -> Result<CheckOutputs> {
     let base = &job.base;
     let head = &job.head;
     let repo = format!("https://github.com/{}", base.repo.full_name());
@@ -425,7 +445,7 @@ fn do_job(job: &Job) -> Result<JobOutputs> {
     let modified_files = filter_on_status("modified");
     let removed_files = filter_on_status("removed");
 
-    let crap = render(
+    let maps = render(
         base,
         head,
         &added_files,
@@ -441,7 +461,7 @@ fn do_job(job: &Job) -> Result<JobOutputs> {
         &modified_files,
         &removed_files,
         &non_abs_directory,
-        crap,
+        maps,
     )?;
 
     Ok(outputs)
@@ -493,10 +513,10 @@ async fn handle_job(job: job::Job) {
     }
 
     match output.unwrap() {
-        JobOutputs::One(output) => {
+        CheckOutputs::One(output) => {
             let _ = job.check_run.mark_succeeded(output).await;
         }
-        JobOutputs::Many(first, rest) => {
+        CheckOutputs::Many(first, rest) => {
             let count = rest.len() + 1;
 
             let _ = job
