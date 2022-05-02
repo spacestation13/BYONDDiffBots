@@ -19,6 +19,12 @@ use crate::job::Job;
 use crate::rendering::*;
 use crate::{job, CONFIG};
 
+struct RenderedCrap {
+    added_maps: Vec<MapWithRegions>,
+    removed_maps: Vec<MapWithRegions>,
+    modified_maps: MapsWithRegions,
+}
+
 fn render(
     base: &Branch,
     head: &Branch,
@@ -28,7 +34,7 @@ fn render(
     output_dir: &Path,
     pull_request_number: u64,
     // feel like this is a bit of a hack but it works for now
-) -> Result<Vec<BoundingBox>> {
+) -> Result<RenderedCrap> {
     with_repo_dir(&base.repo, || {
         Command::new("git")
             .args(["checkout", &base.name])
@@ -117,16 +123,17 @@ fn render(
         with_repo_dir(&base.repo, || load_maps(modified_files)).context("Loading base maps")?;
     let head_maps = with_checkout(&base.repo, &pull_branch, || load_maps(modified_files))
         .context("Loading head maps")?;
-    let diff_bounds = get_map_diff_bounding_boxes(&base_maps, &head_maps);
+    let modified_maps = get_map_diff_bounding_boxes(base_maps, head_maps);
 
     //let now = Instant::now();
-    with_repo_dir(&base.repo, || {
+    // You might think to yourself, wtf is going on here?
+    // And you'd be right.
+    let removed_maps = with_repo_dir(&base.repo, || {
         let results = rayon::join(
             || {
                 render_map_regions(
                     &base_context,
-                    &base_maps,
-                    &diff_bounds,
+                    &modified_maps.befores,
                     &head_render_passes,
                     modified_directory,
                     "before.png",
@@ -135,38 +142,34 @@ fn render(
                 .context("Rendering modified before maps")
             },
             || {
-                let maps = load_maps(removed_files).context("Loading removed maps")?;
-                let bounds = maps
-                    .iter()
-                    .map(BoundingBox::for_full_map)
-                    .collect::<Vec<BoundingBox>>();
+                let maps = load_maps_with_whole_map_regions(removed_files)
+                    .context("Loading removed maps")?;
 
                 render_map_regions(
                     &base_context,
                     &maps,
-                    &bounds,
                     &base_render_passes,
                     removed_directory,
                     "removed.png",
                     &removed_errors,
                 )
-                .context("Rendering removed maps")
+                .context("Rendering removed maps")?;
+
+                Ok(maps)
             },
         );
         results.0?;
-        results.1?;
+        results.1
         //eprintln!("Base maps took {}ms", now.elapsed().as_millis());
-        Ok(())
     })?;
 
     //let now = Instant::now();
-    with_checkout(&base.repo, &pull_branch, || {
+    let added_maps = with_checkout(&base.repo, &pull_branch, || {
         let results = rayon::join(
             || {
                 render_map_regions(
                     &head_context,
-                    &head_maps,
-                    &diff_bounds,
+                    &modified_maps.afters,
                     &head_render_passes,
                     modified_directory,
                     "after.png",
@@ -174,27 +177,24 @@ fn render(
                 )
             },
             || {
-                let maps = load_maps(added_files).context("Loading added maps")?;
-                let bounds = maps
-                    .iter()
-                    .map(BoundingBox::for_full_map)
-                    .collect::<Vec<BoundingBox>>();
+                let maps =
+                    load_maps_with_whole_map_regions(added_files).context("Loading added maps")?;
 
                 render_map_regions(
                     &head_context,
                     &maps,
-                    &bounds,
                     &head_render_passes,
                     added_directory,
                     "added.png",
                     &added_errors,
                 )
-                .context("Rendering added maps")
+                .context("Rendering added maps")?;
+
+                Ok(maps)
             },
         );
         results.0?; // Is there a better way?
-        results.1?;
-        Ok(())
+        results.1
     })
     .context("Rendering modified after and added maps")?;
     //eprintln!("Head maps took {}ms", now.elapsed().as_millis());
@@ -235,7 +235,12 @@ fn render(
     print_errors(&removed_errors);
     */
 
-    Ok(diff_bounds)
+    // just return whatever dude
+    Ok(RenderedCrap {
+        added_maps,
+        modified_maps,
+        removed_maps,
+    })
 }
 
 fn clone_repo(url: &str, dir: &Path) -> Result<()> {
@@ -262,7 +267,7 @@ fn generate_finished_output<P: AsRef<Path>>(
     modified_files: &[&ModifiedFile],
     removed_files: &[&ModifiedFile],
     file_directory: &P,
-    diff_bounds: &[BoundingBox],
+    crap: RenderedCrap,
 ) -> Result<JobOutputs> {
     let conf = CONFIG.get().unwrap();
     let file_url = &conf.file_hosting_url;
@@ -274,59 +279,82 @@ fn generate_finished_output<P: AsRef<Path>>(
     let mut outputs = vec![];
 
     for (idx, file) in added_files.iter().enumerate() {
-        let link = format!("{}/{}/a/{}/added.png", file_url, non_abs_directory, idx);
-        text.push_str(&format!(
-            include_str!("diff_template_add.txt"),
-            filename = file.filename,
-            image_link = link
-        ));
+        let bounds = &crap.added_maps[idx].bounding_boxes;
+        for (i, bound) in bounds.iter().enumerate() {
+            if bound.is_some() {
+                let link = format!(
+                    "{}/{}/a/{}/{}-added.png",
+                    file_url, non_abs_directory, idx, i
+                );
+                let name = format!("{} Z-Level {}", file.filename, i);
+                text.push_str(&format!(
+                    include_str!("diff_template_add.txt"),
+                    filename = name,
+                    image_link = link
+                ));
 
-        if text.len() > 60_000 {
-            outputs.push(Output {
-                title: title.to_owned(),
-                summary: summary.to_owned(),
-                text,
-            });
-            text = String::new();
+                if text.len() > 60_000 {
+                    outputs.push(Output {
+                        title: title.to_owned(),
+                        summary: summary.to_owned(),
+                        text,
+                    });
+                    text = String::new();
+                }
+            }
         }
     }
 
-    for (idx, (file, bounds)) in modified_files.iter().zip(diff_bounds.iter()).enumerate() {
-        let link = format!("{}/{}/m/{}/", file_url, non_abs_directory, idx);
-        text.push_str(&format!(
-            include_str!("diff_template_mod.txt"),
-            bounds = bounds.to_string(),
-            filename = file.filename,
-            image_before_link = link.clone() + "before.png",
-            image_after_link = link.clone() + "after.png",
-            image_diff_link = link + "diff.png"
-        ));
+    for (idx, file) in modified_files.iter().enumerate() {
+        let bounds = &crap.modified_maps.befores[idx].bounding_boxes;
+        for (i, bound) in bounds.iter().enumerate() {
+            if let Some(bound) = bound {
+                let link = format!("{}/{}/m/{}/", file_url, non_abs_directory, idx);
+                text.push_str(&format!(
+                    include_str!("diff_template_mod.txt"),
+                    bounds = bound.to_string(),
+                    filename = file.filename.clone() + &format!(" Z-Level {}", i),
+                    image_before_link = link.clone() + i.to_string().as_str() + "-before.png",
+                    image_after_link = link.clone() + i.to_string().as_str() + "-after.png",
+                    image_diff_link = link.clone() + i.to_string().as_str() + "-diff.png"
+                ));
 
-        if text.len() > 60_000 {
-            outputs.push(Output {
-                title: title.to_owned(),
-                summary: summary.to_owned(),
-                text,
-            });
-            text = String::new();
+                if text.len() > 60_000 {
+                    outputs.push(Output {
+                        title: title.to_owned(),
+                        summary: summary.to_owned(),
+                        text,
+                    });
+                    text = String::new();
+                }
+            }
         }
     }
 
     for (idx, file) in removed_files.iter().enumerate() {
-        let link = format!("{}/{}/r/{}/removed.png", file_url, non_abs_directory, idx);
-        text.push_str(&format!(
-            include_str!("diff_template_remove.txt"),
-            filename = file.filename,
-            image_link = link
-        ));
+        let bounds = &crap.removed_maps[idx].bounding_boxes;
+        for (i, bound) in bounds.iter().enumerate() {
+            if bound.is_some() {
+                let link = format!(
+                    "{}/{}/r/{}/{}-removed.png",
+                    file_url, non_abs_directory, idx, i
+                );
+                let name = format!("{} Z-Level {}", file.filename, i);
+                text.push_str(&format!(
+                    include_str!("diff_template_remove.txt"),
+                    filename = name,
+                    image_link = link
+                ));
 
-        if text.len() > 60_000 {
-            outputs.push(Output {
-                title: title.to_owned(),
-                summary: summary.to_owned(),
-                text,
-            });
-            text = String::new();
+                if text.len() > 60_000 {
+                    outputs.push(Output {
+                        title: title.to_owned(),
+                        summary: summary.to_owned(),
+                        text,
+                    });
+                    text = String::new();
+                }
+            }
         }
     }
 
@@ -397,7 +425,7 @@ fn do_job(job: &Job) -> Result<JobOutputs> {
     let modified_files = filter_on_status("modified");
     let removed_files = filter_on_status("removed");
 
-    let diff_bounds = render(
+    let crap = render(
         base,
         head,
         &added_files,
@@ -413,7 +441,7 @@ fn do_job(job: &Job) -> Result<JobOutputs> {
         &modified_files,
         &removed_files,
         &non_abs_directory,
-        &diff_bounds,
+        crap,
     )?;
 
     Ok(outputs)

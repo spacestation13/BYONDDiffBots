@@ -12,7 +12,7 @@ use rayon::prelude::*;
 
 use crate::github_types::*;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct BoundingBox {
     left: usize,
     bottom: usize,
@@ -52,11 +52,12 @@ impl ToString for BoundingBox {
 
 pub type RenderingErrors = RwLock<HashSet<String, RandomState>>;
 
+// Returns None if there are no differences
 pub fn get_diff_bounding_box(
     base_map: &dmm::Map,
     head_map: &dmm::Map,
     z_level: usize,
-) -> BoundingBox {
+) -> Option<BoundingBox> {
     let left_dims = base_map.dim_xyz();
     let right_dims = head_map.dim_xyz();
     if left_dims != right_dims {
@@ -94,13 +95,10 @@ pub fn get_diff_bounding_box(
     }
 
     if leftmost > rightmost {
-        leftmost = 0;
-        rightmost = 1;
-        bottommost = 0; // create a small bounding box for now if there are no changes
-        topmost = 1;
+        return None;
     }
 
-    BoundingBox::new(leftmost, bottommost, rightmost, topmost)
+    Some(BoundingBox::new(leftmost, bottommost, rightmost, topmost))
 }
 
 pub fn load_maps(files: &[&ModifiedFile]) -> Result<Vec<dmm::Map>> {
@@ -110,15 +108,56 @@ pub fn load_maps(files: &[&ModifiedFile]) -> Result<Vec<dmm::Map>> {
         .collect()
 }
 
-pub fn get_map_diff_bounding_boxes(
-    base_maps: &[dmm::Map],
-    head_maps: &[dmm::Map],
-) -> Vec<BoundingBox> {
-    base_maps
-        .par_iter()
-        .zip(head_maps.par_iter())
-        .map(|(base, head)| (get_diff_bounding_box(base, head, 0)))
+pub fn load_maps_with_whole_map_regions(files: &[&ModifiedFile]) -> Result<Vec<MapWithRegions>> {
+    files
+        .iter()
+        .map(|file| {
+            let map = dmm::Map::from_file(Path::new(&file.filename))?;
+            let bbox = BoundingBox::for_full_map(&map);
+            let zs = map.dim_z();
+            Ok(MapWithRegions {
+                map,
+                bounding_boxes: std::iter::repeat(Some(bbox)).take(zs).collect(),
+            })
+        })
         .collect()
+}
+
+pub struct MapWithRegions {
+    pub map: dmm::Map,
+    /// For each z-level, if there's a Some, render the given region
+    pub bounding_boxes: Vec<Option<BoundingBox>>,
+}
+
+pub struct MapsWithRegions {
+    pub befores: Vec<MapWithRegions>,
+    pub afters: Vec<MapWithRegions>,
+}
+
+pub fn get_map_diff_bounding_boxes(
+    base_maps: Vec<dmm::Map>,
+    head_maps: Vec<dmm::Map>,
+) -> MapsWithRegions {
+    let (befores, afters) = base_maps
+        .into_par_iter()
+        .zip(head_maps.into_par_iter())
+        .map(|(base, head)| {
+            let diffs = (0..base.dim_z())
+                .map(|z| get_diff_bounding_box(&base, &head, z))
+                .collect::<Vec<_>>();
+            let before = MapWithRegions {
+                map: base,
+                bounding_boxes: diffs.clone(),
+            };
+            let after = MapWithRegions {
+                map: head,
+                bounding_boxes: diffs,
+            };
+            (before, after)
+        })
+        .collect();
+
+    MapsWithRegions { befores, afters }
 }
 
 pub struct RenderingContext {
@@ -166,6 +205,7 @@ pub fn render_map(
     objtree: &ObjectTree,
     icon_cache: &IconCache,
     map: &dmm::Map,
+    z_level: usize,
     bounds: &BoundingBox,
     errors: &RwLock<HashSet<String, RandomState>>,
     render_passes: &[Box<dyn RenderPass>],
@@ -174,7 +214,7 @@ pub fn render_map(
     let minimap_context = minimap::Context {
         objtree,
         map,
-        level: map.z_level(0),
+        level: map.z_level(z_level),
         min: (bounds.left, bounds.bottom),
         max: (bounds.right, bounds.top),
         render_passes,
@@ -187,8 +227,7 @@ pub fn render_map(
 
 pub fn render_map_regions(
     context: &RenderingContext,
-    maps: &[dmm::Map],
-    bounds: &[BoundingBox],
+    maps: &[MapWithRegions],
     render_passes: &[Box<dyn RenderPass>],
     output_dir: &Path,
     filename: &str,
@@ -198,18 +237,33 @@ pub fn render_map_regions(
     let icon_cache = &context.icon_cache;
     let _: Result<()> = maps
         .par_iter()
-        .zip(bounds.par_iter())
         .enumerate()
-        .map(|(idx, (map, bb))| {
-            let image = render_map(objtree, icon_cache, map, bb, errors, render_passes)
-                .with_context(|| format!("Rendering map {idx}"))?;
+        .map(|(idx, map)| {
+            for z_level in 0..map.map.dim_z() {
+                if let Some(bounds) = map
+                    .bounding_boxes
+                    .get(z_level)
+                    .expect("No bounding box generated for z-level")
+                {
+                    let image = render_map(
+                        objtree,
+                        icon_cache,
+                        &map.map,
+                        z_level,
+                        bounds,
+                        errors,
+                        render_passes,
+                    )
+                    .with_context(|| format!("Rendering map {idx}"))?;
 
-            let directory = format!("{}/{}", output_dir.display(), idx);
+                    let directory = format!("{}/{}", output_dir.display(), idx);
 
-            std::fs::create_dir_all(&directory).context("Creating directories")?;
-            image
-                .to_file(format!("{}/{}", directory, filename).as_ref())
-                .with_context(|| format!("Saving image {idx}"))?;
+                    std::fs::create_dir_all(&directory).context("Creating directories")?;
+                    image
+                        .to_file(format!("{}/{}-{}", directory, z_level, filename).as_ref())
+                        .with_context(|| format!("Saving image {idx}"))?;
+                }
+            }
             Ok(())
         })
         .collect();
@@ -218,19 +272,29 @@ pub fn render_map_regions(
 
 pub fn render_diffs_for_directory<P: AsRef<Path>>(directory: P) -> Result<()> {
     let directory = directory.as_ref();
-    let before = ImageReader::open(directory.join("before.png"))?.decode()?;
-    let after = ImageReader::open(directory.join("after.png"))?.decode()?;
 
-    ImageBuffer::from_fn(after.width(), after.height(), |x, y| {
-        let before_pixel = before.get_pixel(x, y);
-        let after_pixel = after.get_pixel(x, y);
-        if before_pixel == after_pixel {
-            after_pixel.map_without_alpha(|c| c / 2)
-        } else {
-            image::Rgba([255, 0, 0, 255])
-        }
-    })
-    .save(directory.join("diff.png"))?;
+    println!("{}", directory.join("*-before.png").display());
+
+    for entry in glob::glob(directory.join("*-before.png").to_str().unwrap())
+        .expect("Failed to read glob pattern")
+        .flatten()
+    {
+        let fuck = entry.to_string_lossy();
+        let replaced_entry = fuck.replace("-before.png", "-after.png");
+        let before = ImageReader::open(&entry)?.decode()?;
+        let after = ImageReader::open(&replaced_entry)?.decode()?;
+
+        ImageBuffer::from_fn(after.width(), after.height(), |x, y| {
+            let before_pixel = before.get_pixel(x, y);
+            let after_pixel = after.get_pixel(x, y);
+            if before_pixel == after_pixel {
+                after_pixel.map_without_alpha(|c| c / 3)
+            } else {
+                image::Rgba([255, 0, 0, 255])
+            }
+        })
+        .save(fuck.replace("-before.png", "-diff.png"))?;
+    }
 
     Ok(())
 }

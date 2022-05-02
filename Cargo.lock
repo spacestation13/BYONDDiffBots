@@ -1093,6 +1093,7 @@ dependencies = [
  "dmm-tools",
  "dreammaker",
  "flume",
+ "glob",
  "image",
  "jsonwebtoken",
  "lazy_static",
