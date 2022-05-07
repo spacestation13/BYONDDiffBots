@@ -154,3 +154,65 @@ pub struct UpdateCheckRun {
 
 #[derive(Serialize, Deserialize, Clone, Copy)]
 pub struct Empty {}
+
+pub enum CheckOutputs {
+    One(Output),
+    Many(Output, Vec<Output>),
+}
+
+pub struct CheckOutputBuilder {
+    title: String,
+    summary: String,
+    current_text: String,
+    outputs: Vec<Output>,
+}
+
+impl CheckOutputBuilder {
+    pub fn new<S: Into<String>>(title: S, summary: S) -> Self {
+        let title = title.into();
+        let summary = summary.into();
+        Self {
+            title,
+            summary,
+            current_text: String::new(),
+            outputs: Vec::new(),
+        }
+    }
+
+    pub fn add_text(&mut self, text: &str) {
+        self.current_text.push_str(text);
+        // Leaving a 5k character safety margin is prob overkill but oh well
+        if self.current_text.len() > 60_000 {
+            let output = Output {
+                title: self.title.clone(),
+                summary: self.summary.clone(),
+                text: std::mem::take(&mut self.current_text),
+            };
+            self.outputs.push(output);
+        }
+    }
+
+    pub fn build(self) -> CheckOutputs {
+        let Self {
+            title,
+            summary,
+            current_text,
+            mut outputs,
+        } = self;
+
+        if !current_text.is_empty() {
+            let output = Output {
+                title,
+                summary,
+                text: current_text,
+            };
+            outputs.push(output);
+        }
+        let first = outputs.remove(0);
+        if outputs.is_empty() {
+            CheckOutputs::One(first)
+        } else {
+            CheckOutputs::Many(first, outputs)
+        }
+    }
+}

@@ -1,9 +1,12 @@
 use std::collections::VecDeque;
 
+use crate::github::{github_api::*, github_types::*};
 use anyhow::{Context, Result};
-use diffbot_lib::github::{github_api::*, github_types::*};
 use flume::Sender;
 use serde::{Deserialize, Serialize};
+
+pub trait JobRunner: Fn(&Job) -> Result<CheckOutputs> + Send + Clone + 'static {}
+impl<T> JobRunner for T where T: Fn(&Job) -> Result<CheckOutputs> + Send + Clone + 'static {}
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct Job {
@@ -25,7 +28,7 @@ pub struct JobJournal {
 impl JobJournal {
     pub async fn from_file(file: &str) -> Result<Self> {
         // TODO: maybe we should report if the file doesn't exist?
-        let jobs = rocket::tokio::fs::read_to_string(file)
+        let jobs = tokio::fs::read_to_string(file)
             .await
             .unwrap_or_else(|_| "[]".to_owned());
         let jobs: VecDeque<Job> = serde_json::from_str(&jobs).unwrap_or_default();
@@ -56,7 +59,7 @@ impl JobJournal {
 
     pub async fn save(&self) -> Result<()> {
         let jobs = serde_json::to_string(&self.jobs)?;
-        rocket::tokio::fs::write(&self.file, jobs)
+        tokio::fs::write(&self.file, jobs)
             .await
             .context("Saving job journal")?;
         Ok(())

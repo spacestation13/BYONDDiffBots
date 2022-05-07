@@ -1,21 +1,17 @@
 use anyhow::{Context, Result};
-use flume::Receiver;
 use path_absolutize::*;
 use rayon::prelude::*;
 use rocket::tokio::runtime::Handle;
-use rocket::tokio::sync::Mutex;
-use rocket::tokio::task;
 use std::path::Path;
 use std::path::PathBuf;
 use std::process::Command;
-use std::sync::Arc;
 //use std::time::Instant;
 
 extern crate dreammaker as dm;
 
-use crate::job::Job;
 use crate::rendering::*;
-use crate::{job, CONFIG};
+use crate::CONFIG;
+use diffbot_lib::job::types::Job;
 use diffbot_lib::git::git_operations::*;
 use diffbot_lib::github::github_types::*;
 
@@ -256,67 +252,6 @@ fn clone_repo(url: &str, dir: &Path) -> Result<()> {
     Ok(())
 }
 
-enum CheckOutputs {
-    One(Output),
-    Many(Output, Vec<Output>),
-}
-
-struct CheckOutputBuilder {
-    title: String,
-    summary: String,
-    current_text: String,
-    outputs: Vec<Output>,
-}
-
-impl CheckOutputBuilder {
-    pub fn new<S: Into<String>>(title: S, summary: S) -> Self {
-        let title = title.into();
-        let summary = summary.into();
-        Self {
-            title,
-            summary,
-            current_text: String::new(),
-            outputs: Vec::new(),
-        }
-    }
-
-    pub fn add_text(&mut self, text: &str) {
-        self.current_text.push_str(text);
-        // Leaving a 5k character safety margin is prob overkill but oh well
-        if self.current_text.len() > 60_000 {
-            let output = Output {
-                title: self.title.clone(),
-                summary: self.summary.clone(),
-                text: std::mem::take(&mut self.current_text),
-            };
-            self.outputs.push(output);
-        }
-    }
-
-    pub fn build(self) -> CheckOutputs {
-        let Self {
-            title,
-            summary,
-            current_text,
-            mut outputs,
-        } = self;
-
-        if !current_text.is_empty() {
-            let output = Output {
-                title,
-                summary,
-                text: current_text,
-            };
-            outputs.push(output);
-        }
-        let first = outputs.remove(0);
-        if outputs.is_empty() {
-            CheckOutputs::One(first)
-        } else {
-            CheckOutputs::Many(first, outputs)
-        }
-    }
-}
 
 fn generate_finished_output<P: AsRef<Path>>(
     added_files: &[&ModifiedFile],
@@ -395,7 +330,7 @@ fn generate_finished_output<P: AsRef<Path>>(
     Ok(builder.build())
 }
 
-fn do_job(job: &Job) -> Result<CheckOutputs> {
+pub fn do_job(job: &Job) -> Result<CheckOutputs> {
     let base = &job.base;
     let head = &job.head;
     let repo = format!("https://github.com/{}", base.repo.full_name());
@@ -467,107 +402,3 @@ fn do_job(job: &Job) -> Result<CheckOutputs> {
     Ok(outputs)
 }
 
-async fn handle_job(job: job::Job) {
-    println!(
-        "[{}] [{}#{}] [{}] Starting",
-        chrono::Utc::now().to_rfc3339(),
-        job.base.repo.full_name(),
-        job.pull_request,
-        job.check_run.id()
-    );
-    let _ = job.check_run.mark_started().await; // TODO: Put the failed marks in a queue to retry later
-                                                //let now = Instant::now();
-
-    let job_clone = job.clone();
-    let output = task::spawn_blocking(move || do_job(&job_clone)).await;
-
-    println!(
-        "[{}] [{}#{}] [{}] Finished",
-        chrono::Utc::now().to_rfc3339(),
-        job.base.repo.full_name(),
-        job.pull_request,
-        job.check_run.id()
-    );
-
-    //eprintln!("Handling job took {}ms", now.elapsed().as_millis());
-
-    if let Err(e) = output {
-        let fuckup = match e.try_into_panic() {
-            Ok(panic) => match panic.downcast_ref::<&str>() {
-                Some(s) => s.to_string(),
-                None => "*crickets*".to_owned(),
-            },
-            Err(e) => e.to_string(),
-        };
-        eprintln!("Join Handle error: {}", fuckup);
-        let _ = job.check_run.mark_failed(&fuckup).await;
-        return;
-    }
-
-    let output = output.unwrap();
-    if let Err(e) = output {
-        let fuckup = format!("{:?}", e);
-        eprintln!("Other rendering error: {}", fuckup);
-        let _ = job.check_run.mark_failed(&fuckup).await;
-        return;
-    }
-
-    match output.unwrap() {
-        CheckOutputs::One(output) => {
-            let _ = job.check_run.mark_succeeded(output).await;
-        }
-        CheckOutputs::Many(first, rest) => {
-            let count = rest.len() + 1;
-
-            let _ = job
-                .check_run
-                .rename(&format!("MapDiffBot2 (1/{})", count))
-                .await;
-            let _ = job.check_run.mark_succeeded(first).await;
-
-            for (i, overflow) in rest.into_iter().enumerate() {
-                if let Ok(check) = job
-                    .check_run
-                    .duplicate(&format!("MapDiffBot2 ({}/{})", i + 2, count))
-                    .await
-                {
-                    let _ = check.mark_succeeded(overflow).await;
-                }
-            }
-        }
-    }
-}
-
-async fn recover_from_journal(journal: &Arc<Mutex<job::JobJournal>>) {
-    let num_jobs = journal.lock().await.get_job_count();
-    if num_jobs > 0 {
-        eprintln!("Recovering {} jobs from journal", num_jobs);
-    } else {
-        eprintln!("No jobs to recover from journal");
-        return;
-    }
-
-    loop {
-        // Done this way to avoid a deadlock
-        let job = journal.lock().await.get_job();
-        if let Some(job) = job {
-            handle_job(job).await;
-            journal.lock().await.complete_job().await;
-        } else {
-            break;
-        }
-    }
-}
-
-pub async fn handle_jobs(job_receiver: Receiver<job::Job>, journal: Arc<Mutex<job::JobJournal>>) {
-    recover_from_journal(&journal).await;
-    loop {
-        let job = job_receiver.recv_async().await;
-        if let Ok(job) = job {
-            handle_job(job).await;
-            journal.lock().await.complete_job().await;
-        } else {
-            break;
-        }
-    }
-}
