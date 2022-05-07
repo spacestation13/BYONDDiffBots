@@ -1,0 +1,8 @@
+/target
+/images
+/mapdiffbot2-test
+/repos
+
+Rocket.toml
+mapdiffbot2.pem
+jobs.json
