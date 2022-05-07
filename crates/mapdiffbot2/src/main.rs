@@ -1,5 +1,4 @@
 mod github_processor;
-mod job;
 mod job_processor;
 mod rendering;
 
@@ -16,6 +15,9 @@ use rocket::figment::Figment;
 use rocket::fs::FileServer;
 use rocket::tokio::sync::Mutex;
 use serde::Deserialize;
+
+use diffbot_lib::job::runner::handle_jobs;
+use diffbot_lib::job::types::{JobJournal, JobSender};
 
 #[get("/")]
 async fn index() -> &'static str {
@@ -68,18 +70,18 @@ async fn rocket() -> _ {
     .expect("fucked up octocrab");
 
     let journal = Arc::new(Mutex::new(
-        job::JobJournal::from_file("jobs.json").await.unwrap(),
+        JobJournal::from_file("jobs.json").await.unwrap(),
     ));
 
     let (job_sender, job_receiver) = flume::unbounded();
     let journal_clone = journal.clone();
 
     rocket::tokio::spawn(
-        async move { job_processor::handle_jobs(job_receiver, journal_clone).await },
+        async move { handle_jobs(job_receiver, journal_clone, job_processor::do_job).await },
     );
 
     rocket
-        .manage(job::JobSender(job_sender))
+        .manage(JobSender(job_sender))
         .manage(journal)
         .mount(
             "/",

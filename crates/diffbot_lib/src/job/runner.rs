@@ -1,0 +1,125 @@
+use std::sync::Arc;
+
+use flume::Receiver;
+use tokio::sync::Mutex;
+
+use crate::{
+    github::github_types::CheckOutputs,
+    job::types::{Job, JobRunner},
+};
+
+use super::types::JobJournal;
+
+async fn handle_job<F>(job: Job, runner: F)
+where
+    F: JobRunner,
+{
+    println!(
+        "[{}] [{}#{}] [{}] Starting",
+        chrono::Utc::now().to_rfc3339(),
+        job.base.repo.full_name(),
+        job.pull_request,
+        job.check_run.id()
+    );
+    let _ = job.check_run.mark_started().await; // TODO: Put the failed marks in a queue to retry later
+                                                //let now = Instant::now();
+
+    let job_clone = job.clone();
+    let output = tokio::task::spawn_blocking(move || runner(&job_clone)).await;
+
+    println!(
+        "[{}] [{}#{}] [{}] Finished",
+        chrono::Utc::now().to_rfc3339(),
+        job.base.repo.full_name(),
+        job.pull_request,
+        job.check_run.id()
+    );
+
+    //eprintln!("Handling job took {}ms", now.elapsed().as_millis());
+
+    if let Err(e) = output {
+        let fuckup = match e.try_into_panic() {
+            Ok(panic) => match panic.downcast_ref::<&str>() {
+                Some(s) => s.to_string(),
+                None => "*crickets*".to_owned(),
+            },
+            Err(e) => e.to_string(),
+        };
+        eprintln!("Join Handle error: {}", fuckup);
+        let _ = job.check_run.mark_failed(&fuckup).await;
+        return;
+    }
+
+    let output = output.unwrap();
+    if let Err(e) = output {
+        let fuckup = format!("{:?}", e);
+        eprintln!("Other rendering error: {}", fuckup);
+        let _ = job.check_run.mark_failed(&fuckup).await;
+        return;
+    }
+
+    match output.unwrap() {
+        CheckOutputs::One(output) => {
+            let _ = job.check_run.mark_succeeded(output).await;
+        }
+        CheckOutputs::Many(first, rest) => {
+            let count = rest.len() + 1;
+
+            let _ = job
+                .check_run
+                .rename(&format!("MapDiffBot2 (1/{})", count))
+                .await;
+            let _ = job.check_run.mark_succeeded(first).await;
+
+            for (i, overflow) in rest.into_iter().enumerate() {
+                if let Ok(check) = job
+                    .check_run
+                    .duplicate(&format!("MapDiffBot2 ({}/{})", i + 2, count))
+                    .await
+                {
+                    let _ = check.mark_succeeded(overflow).await;
+                }
+            }
+        }
+    }
+}
+
+async fn recover_from_journal<F>(journal: &Arc<Mutex<JobJournal>>, runner: F)
+where
+    F: JobRunner,
+{
+    let num_jobs = journal.lock().await.get_job_count();
+    if num_jobs > 0 {
+        eprintln!("Recovering {} jobs from journal", num_jobs);
+    } else {
+        eprintln!("No jobs to recover from journal");
+        return;
+    }
+
+    loop {
+        // Done this way to avoid a deadlock
+        let job = journal.lock().await.get_job();
+        if let Some(job) = job {
+            handle_job(job, runner.clone()).await;
+            journal.lock().await.complete_job().await;
+        } else {
+            break;
+        }
+    }
+}
+
+pub async fn handle_jobs<F>(job_receiver: Receiver<Job>, journal: Arc<Mutex<JobJournal>>, runner: F)
+where
+    F: JobRunner,
+{
+    recover_from_journal(&journal, runner.clone()).await;
+    loop {
+        let job = job_receiver.recv_async().await;
+        if let Ok(job) = job {
+            handle_job(job, runner.clone()).await;
+            journal.lock().await.complete_job().await;
+        } else {
+            break;
+        }
+    }
+}

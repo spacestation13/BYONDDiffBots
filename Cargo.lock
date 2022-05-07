@@ -446,8 +446,11 @@ dependencies = [
  "anyhow",
  "chrono",
  "derive_builder",
+ "flume",
  "octocrab",
  "serde",
+ "serde_json",
+ "tokio",
 ]
 
 [[package]]
