@@ -1,7 +1,10 @@
 use crate::github::github_types::*;
-use anyhow::{Context, Result};
+use anyhow::{format_err, Context, Result};
 use octocrab::models::InstallationId;
 use serde::{Deserialize, Serialize};
+use std::path::PathBuf;
+use tokio::fs::File;
+use tokio::io::AsyncWriteExt;
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct CheckRun {
@@ -160,4 +163,50 @@ pub async fn get_pull_files(
         .await?;
 
     Ok(res)
+}
+
+static DOWNLOAD_DIR: &str = "download";
+
+pub async fn download_file<S: AsRef<str>>(
+    installation: u64,
+    repo: &Repository,
+    filename: S,
+    commit: S,
+) -> Result<PathBuf> {
+    let (owner, repo) = repo.name_tuple();
+    let items = octocrab::instance()
+        .installation(installation.into())
+        .repos(owner, repo)
+        .get_content()
+        .path(filename.as_ref())
+        .r#ref(commit.as_ref())
+        .send()
+        .await?
+        .take_items();
+
+    if items.len() > 1 {
+        return Err(format_err!("Directory given to download_file"));
+    }
+
+    let target = &items[0];
+
+    let mut path = PathBuf::new();
+    path.push(".");
+    path.push(DOWNLOAD_DIR);
+    path.push(&target.sha);
+    path.set_extension("dmi");
+
+    tokio::fs::create_dir_all(path.parent().unwrap()).await?;
+    let mut file = File::create(&path).await?;
+
+    let download_url = target
+        .download_url
+        .as_ref()
+        .ok_or_else(|| format_err!("No download URL given by GitHub"))?;
+
+    let response = reqwest::get(download_url).await?;
+
+    file.write_all(&response.bytes().await?).await?;
+
+    Ok(path)
 }

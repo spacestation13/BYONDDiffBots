@@ -1,9 +1,6 @@
 #![allow(non_snake_case)]
 
-mod error;
-mod github_api;
 mod github_processor;
-mod github_types;
 
 use std::{fs::File, io::Read, path::PathBuf};
 

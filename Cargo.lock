@@ -447,7 +447,9 @@ dependencies = [
  "chrono",
  "derive_builder",
  "octocrab",
+ "reqwest",
  "serde",
+ "tokio",
 ]
 
 [[package]]
@@ -902,6 +904,7 @@ dependencies = [
 name = "icondiffbot2"
 version = "0.1.0"
 dependencies = [
+ "diffbot_lib",
  "dmm-tools",
  "dreammaker",
  "jsonwebtoken",

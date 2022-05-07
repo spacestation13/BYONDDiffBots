@@ -24,6 +24,11 @@ impl Repository {
         self.url.split('/').skip(4).collect::<Vec<&str>>().join("/")
     }
 
+    pub fn name_tuple(&self) -> (String, String) {
+        let mut iter = self.url.split('/').skip(4).take(2).map(|a| a.to_string());
+        (iter.next().unwrap(), iter.next().unwrap())
+    }
+
     // pub fn owner(&self) -> String {
     //     self.url
     //         .split('/')
@@ -49,10 +54,23 @@ pub struct PullRequest {
     pub base: Branch,
     pub title: Option<String>,
 }
+
+#[derive(Serialize, Deserialize, Debug, Clone, Copy, Eq, PartialEq)]
+#[serde(rename_all = "snake_case")]
+pub enum ModifiedFileStatus {
+    Added,
+    Removed,
+    Modified,
+    Renamed,
+    Copied,
+    Changed,
+    Unchanged,
+}
+
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct ModifiedFile {
     pub filename: String,
-    pub status: String,
+    pub status: ModifiedFileStatus,
     pub sha: String,
 }
 

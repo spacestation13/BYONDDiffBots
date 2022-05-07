@@ -434,16 +434,16 @@ fn do_job(job: &Job) -> Result<CheckOutputs> {
     )
     .context("Checking out to default branch")?; // If this fails, good luck
 
-    let filter_on_status = |status: &str| {
+    let filter_on_status = |status: ModifiedFileStatus| {
         job.files
             .iter()
             .filter(|f| f.status == status)
             .collect::<Vec<&ModifiedFile>>()
     };
 
-    let added_files = filter_on_status("added");
-    let modified_files = filter_on_status("modified");
-    let removed_files = filter_on_status("removed");
+    let added_files = filter_on_status(ModifiedFileStatus::Added);
+    let modified_files = filter_on_status(ModifiedFileStatus::Modified);
+    let removed_files = filter_on_status(ModifiedFileStatus::Removed);
 
     let maps = render(
         base,

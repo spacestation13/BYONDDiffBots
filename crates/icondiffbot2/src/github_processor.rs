@@ -1,8 +1,8 @@
 use std::path::PathBuf;
 
-use crate::{
-    github_api::download_file,
-    github_types::{ModifiedFile, PullRequestEventPayload},
+use diffbot_lib::{
+    github::github_api::{download_file, get_pull_files},
+    github::github_types::{self, ModifiedFile, PullRequestEventPayload},
 };
 use dmm_tools::dmi::{Dir, IconFile, Image};
 // use dmm_tools::dmi::IconFile;
@@ -12,8 +12,6 @@ use rocket::{
     request::{FromRequest, Outcome},
     Request,
 };
-
-use crate::github_api::get_pull_files;
 
 #[derive(Debug)]
 pub struct GithubEvent(pub String);
@@ -42,7 +40,9 @@ pub async fn process_github_payload(
     let payload: PullRequestEventPayload =
         serde_json::from_str(&payload).map_err(|e| format!("{e}"))?;
 
-    let files = get_pull_files(&payload.installation, &payload.pull_request).await?;
+    let files = get_pull_files(&payload.installation, &payload.pull_request)
+        .await
+        .map_err(|e| format!("{e}"))?;
 
     let changed_dmis: Vec<ModifiedFile> = files
         .into_iter()
@@ -64,7 +64,7 @@ pub async fn handle_changed_files(
 ) {
     for dmi in changed_dmis {
         match dmi.status {
-            crate::github_types::ModifiedFileStatus::Added => {
+            github_types::ModifiedFileStatus::Added => {
                 let new = download_file(
                     payload.installation.id,
                     &payload.repository,
@@ -91,8 +91,8 @@ pub async fn handle_changed_files(
 
                 rocket::tokio::fs::remove_file(new).await.unwrap();
             }
-            crate::github_types::ModifiedFileStatus::Removed => todo!(),
-            crate::github_types::ModifiedFileStatus::Modified => {
+            github_types::ModifiedFileStatus::Removed => todo!(),
+            github_types::ModifiedFileStatus::Modified => {
                 let old = download_file(
                     payload.installation.id,
                     &payload.repository,
@@ -115,10 +115,10 @@ pub async fn handle_changed_files(
                 rocket::tokio::fs::remove_file(old).await.unwrap();
                 rocket::tokio::fs::remove_file(new).await.unwrap();
             }
-            crate::github_types::ModifiedFileStatus::Renamed => todo!(),
-            crate::github_types::ModifiedFileStatus::Copied => todo!(),
-            crate::github_types::ModifiedFileStatus::Changed => todo!(),
-            crate::github_types::ModifiedFileStatus::Unchanged => todo!(),
+            github_types::ModifiedFileStatus::Renamed => todo!(),
+            github_types::ModifiedFileStatus::Copied => todo!(),
+            github_types::ModifiedFileStatus::Changed => todo!(),
+            github_types::ModifiedFileStatus::Unchanged => todo!(),
         }
     }
 }
