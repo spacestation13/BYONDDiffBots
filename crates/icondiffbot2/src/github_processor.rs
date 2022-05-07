@@ -2,7 +2,10 @@ use std::path::PathBuf;
 
 use diffbot_lib::{
     github::github_api::{download_file, get_pull_files},
-    github::github_types::{self, ModifiedFile, PullRequestEventPayload},
+    github::{
+        github_api::CheckRun,
+        github_types::{self, ModifiedFile, PullRequestEventPayload},
+    },
 };
 use dmm_tools::dmi::{Dir, IconFile, Image};
 // use dmm_tools::dmi::IconFile;
@@ -40,6 +43,11 @@ pub async fn process_github_payload(
     let payload: PullRequestEventPayload =
         serde_json::from_str(&payload).map_err(|e| format!("{e}"))?;
 
+    if payload.action != "opened" && payload.action != "reopened" && payload.action != "synchronize"
+    {
+        return Ok("PR not opened or updated");
+    }
+
     let files = get_pull_files(&payload.installation, &payload.pull_request)
         .await
         .map_err(|e| format!("{e}"))?;
@@ -62,6 +70,17 @@ pub async fn handle_changed_files(
     payload: PullRequestEventPayload,
     changed_dmis: Vec<ModifiedFile>,
 ) {
+    let check_run = CheckRun::create(
+        &payload.pull_request.base.repo.full_name(),
+        &payload.pull_request.head.sha,
+        payload.installation.id,
+        Some("IconDiffBot2"),
+    )
+    .await
+    .unwrap();
+
+    check_run.mark_started().await.unwrap();
+
     for dmi in changed_dmis {
         match dmi.status {
             github_types::ModifiedFileStatus::Added => {
@@ -74,24 +93,24 @@ pub async fn handle_changed_files(
                 .await
                 .unwrap();
 
-                let file = IconFile::from_file(&new).unwrap();
-
-                let mut canvas = Image::new_rgba(file.metadata.width, file.metadata.height);
-
-                canvas.composite(
-                    &file.image,
-                    (0, 0),
-                    file.rect_of("hot_dispenser", Dir::South).unwrap(),
-                    [0xff, 0xff, 0xff, 0xff],
-                );
-
-                canvas.to_file(&PathBuf::from("test.png"));
-
-                dbg!(&file.metadata);
-
-                rocket::tokio::fs::remove_file(new).await.unwrap();
+                let new = read_icon_file(new).await;
+                render(None, Some(new)).await;
             }
-            github_types::ModifiedFileStatus::Removed => todo!(),
+            github_types::ModifiedFileStatus::Removed => {
+                let old = download_file(
+                    payload.installation.id,
+                    &payload.repository,
+                    &dmi.filename,
+                    &payload.pull_request.base.sha,
+                )
+                .await
+                .unwrap();
+
+                dbg!(&old);
+
+                let old = read_icon_file(old).await;
+                render(Some(old), None).await;
+            }
             github_types::ModifiedFileStatus::Modified => {
                 let old = download_file(
                     payload.installation.id,
@@ -112,8 +131,10 @@ pub async fn handle_changed_files(
 
                 dbg!(&old, &new);
 
-                rocket::tokio::fs::remove_file(old).await.unwrap();
-                rocket::tokio::fs::remove_file(new).await.unwrap();
+                let old = read_icon_file(old).await;
+                let new = read_icon_file(new).await;
+
+                render(Some(old), Some(new)).await;
             }
             github_types::ModifiedFileStatus::Renamed => todo!(),
             github_types::ModifiedFileStatus::Copied => todo!(),
@@ -121,4 +142,38 @@ pub async fn handle_changed_files(
             github_types::ModifiedFileStatus::Unchanged => todo!(),
         }
     }
+
+    check_run
+        .mark_failed("Not implemented yet lol get rekt nerd")
+        .await
+        .unwrap();
+}
+
+/// Helper to prevent files lasting longer than needed
+/// TODO: Remove when FileGuard/In Memory Only is set up
+async fn read_icon_file(path: PathBuf) -> IconFile {
+    let file = IconFile::from_file(&path).unwrap();
+    rocket::tokio::fs::remove_file(path).await.unwrap();
+    file
+}
+
+async fn render(before: Option<IconFile>, after: Option<IconFile>) {
+    if before.is_some() || after.is_none() {
+        todo!()
+    }
+
+    let after = after.unwrap();
+
+    dbg!(&after.metadata);
+
+    let mut canvas = Image::new_rgba(after.metadata.width, after.metadata.height);
+
+    canvas.composite(
+        &after.image,
+        (0, 0),
+        after.rect_of("hot_dispenser", Dir::South).unwrap(),
+        [0xff, 0xff, 0xff, 0xff],
+    );
+
+    canvas.to_file(&PathBuf::from("test.png"));
 }
