@@ -13,11 +13,11 @@ use std::sync::Arc;
 
 extern crate dreammaker as dm;
 
-use crate::git_operations::*;
-use crate::github_types::*;
 use crate::job::Job;
 use crate::rendering::*;
 use crate::{job, CONFIG};
+use diffbot_lib::git::git_operations::*;
+use diffbot_lib::github::github_types::*;
 
 struct RenderedMaps {
     added_maps: Vec<MapWithRegions>,

@@ -10,7 +10,7 @@ use image::io::Reader as ImageReader;
 use image::{GenericImageView, ImageBuffer, Pixel};
 use rayon::prelude::*;
 
-use crate::github_types::*;
+use diffbot_lib::github::github_types::*;
 
 #[derive(Debug, Clone)]
 pub struct BoundingBox {
