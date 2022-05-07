@@ -3,7 +3,6 @@ use std::collections::VecDeque;
 use crate::{github_api::CheckRun, github_types::*};
 use anyhow::{Context, Result};
 use flume::Sender;
-use rocket::serde::json::serde_json;
 use serde::{Deserialize, Serialize};
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
