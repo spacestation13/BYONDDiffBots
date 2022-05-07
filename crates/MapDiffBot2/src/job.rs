@@ -1,7 +1,7 @@
 use std::collections::VecDeque;
 
-use crate::{github_api::CheckRun, github_types::*};
 use anyhow::{Context, Result};
+use diffbot_lib::github::{github_api::*, github_types::*};
 use flume::Sender;
 use serde::{Deserialize, Serialize};
 

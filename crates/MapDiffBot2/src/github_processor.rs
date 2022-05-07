@@ -9,10 +9,10 @@ use rocket::tokio::sync::Mutex;
 use rocket::Request;
 use rocket::State;
 
-use crate::github_api::*;
-use crate::github_types::*;
 use crate::job::*;
 use crate::CONFIG;
+use diffbot_lib::github::github_api::*;
+use diffbot_lib::github::github_types::*;
 
 async fn process_pull(
     pull: PullRequest,

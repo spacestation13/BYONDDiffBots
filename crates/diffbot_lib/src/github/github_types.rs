@@ -1,6 +1,5 @@
 use derive_builder::Builder;
-use rocket::serde::Deserialize;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 
 #[derive(Deserialize, Debug, Clone)]
 pub struct User {

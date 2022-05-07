@@ -1,7 +1,7 @@
 use anyhow::Result;
 use std::{path::Path, process::Command};
 
-use crate::github_types::Repository;
+use crate::github::github_types::Repository;
 
 pub fn with_repo_dir<T>(repo: &Repository, f: impl FnOnce() -> Result<T>) -> Result<T> {
     let current_dir = std::env::current_dir()?;

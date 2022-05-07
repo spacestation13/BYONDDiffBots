@@ -1,4 +1,4 @@
-use crate::github_types::*;
+use crate::github::github_types::*;
 use anyhow::{Context, Result};
 use octocrab::models::InstallationId;
 use serde::{Deserialize, Serialize};
