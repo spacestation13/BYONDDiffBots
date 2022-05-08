@@ -69,6 +69,8 @@ async fn rocket() -> _ {
         JobJournal::from_file("jobs.json").await.unwrap(),
     ));
 
+    tokio::fs::create_dir_all("./images").await.unwrap();
+
     let (job_sender, job_receiver) = flume::unbounded();
     let journal_clone = journal.clone();
 

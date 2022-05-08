@@ -90,6 +90,7 @@ pub async fn process_github_payload(
     job_sender: &State<JobSender>,
     journal: &State<Arc<Mutex<JobJournal>>>,
 ) -> Result<&'static str, String> {
+    // TODO: Check reruns
     if event.0 != "pull_request" {
         return Ok("Not a pull request event");
     }

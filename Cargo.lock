@@ -961,6 +961,7 @@ dependencies = [
  "flume",
  "jsonwebtoken",
  "lazy_static",
+ "ndarray",
  "octocrab",
  "once_cell",
  "reqwest",

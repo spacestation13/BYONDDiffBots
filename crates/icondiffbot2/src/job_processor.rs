@@ -1,9 +1,9 @@
-use std::path::PathBuf;
+use std::path::Path;
 
 use anyhow::{format_err, Result};
 use diffbot_lib::{
     github::{
-        github_api::download_file,
+        github_api::download_url,
         github_types::{CheckOutputBuilder, CheckOutputs, ModifiedFileStatus},
     },
     job::types::Job,
@@ -17,69 +17,109 @@ pub fn do_job(job: &Job) -> Result<CheckOutputs> {
     handle.block_on(async { handle_changed_files(job).await })
 }
 
-fn status_to_sha(job: &Job, status: ModifiedFileStatus) -> (Option<String>, Option<String>) {
+fn status_to_sha(job: &Job, status: ModifiedFileStatus) -> (Option<&str>, Option<&str>) {
     match status {
-        ModifiedFileStatus::Added => (None, Some(job.head.sha.clone())),
-        ModifiedFileStatus::Removed => (Some(job.base.sha.clone()), None),
-        ModifiedFileStatus::Modified => (Some(job.base.sha.clone()), Some(job.head.sha.clone())),
+        ModifiedFileStatus::Added => (None, Some(&job.head.sha)),
+        ModifiedFileStatus::Removed => (Some(&job.base.sha), None),
+        ModifiedFileStatus::Modified => (Some(&job.base.sha), Some(&job.head.sha)),
         ModifiedFileStatus::Renamed => (None, None),
         ModifiedFileStatus::Copied => (None, None),
         ModifiedFileStatus::Changed => (None, None), // TODO: look up what this is
         ModifiedFileStatus::Unchanged => (None, None),
     }
 }
-// let new = download_file(
-//     &job.installation,
-//     &job.head.repo,
-//     &dmi.filename,
-//     &job.head.sha,
-// )
-// .await
-// .unwrap();
+
+struct IconFileWithName {
+    pub name: String,
+    pub sha: String,
+    pub icon: IconFile,
+}
+
+async fn get_if_exists(job: &Job, filename: &str, sha: Option<&str>) -> Option<IconFileWithName> {
+    if let Some(sha) = sha {
+        Some(IconFileWithName {
+            name: filename.to_string(),
+            sha: sha.to_string(),
+            icon: IconFile::from_raw(
+                download_url(&job.installation, &job.base.repo, filename, sha)
+                    .await
+                    .ok()?,
+            )
+            .ok()?,
+        })
+    } else {
+        None
+    }
+}
+
+async fn sha_to_iconfile(
+    job: &Job,
+    filename: &str,
+    sha: (Option<&str>, Option<&str>),
+) -> (Option<IconFileWithName>, Option<IconFileWithName>) {
+    (
+        get_if_exists(job, filename, sha.0).await,
+        get_if_exists(job, filename, sha.1).await,
+    )
+}
 
 pub async fn handle_changed_files(job: &Job) -> Result<CheckOutputs> {
     job.check_run.mark_started().await.unwrap();
 
-    let output_builder =
+    let mut output_builder =
         CheckOutputBuilder::new("Icon difference rendering", "Omegalul pog pog pog");
 
     for dmi in &job.files {
-        match status_to_sha(job, dmi.status) {
-            (None, None) => todo!(),
-            (None, Some(new)) => todo!(),
-            (Some(old), None) => todo!(),
-            (Some(old), Some(new)) => todo!(),
-        }
+        output_builder.add_text(
+            &render(sha_to_iconfile(job, &dmi.filename, status_to_sha(job, dmi.status)).await)
+                .await
+                .unwrap_or_else(|e| format!("Error: {e}")),
+        );
     }
 
-    Err(format_err!("Unimplemented"))
+    Ok(output_builder.build())
 }
 
-/// Helper to prevent files lasting longer than needed
-/// TODO: Remove when FileGuard/In Memory Only is set up
-async fn read_icon_file(path: PathBuf) -> IconFile {
-    let file = IconFile::from_file(&path).unwrap();
-    rocket::tokio::fs::remove_file(path).await.unwrap();
-    file
-}
-
-async fn render(before: Option<IconFile>, after: Option<IconFile>) {
-    if before.is_some() || after.is_none() {
+async fn render(diff: (Option<IconFileWithName>, Option<IconFileWithName>)) -> Result<String> {
+    if diff.0.is_some() || diff.1.is_none() {
         todo!()
     }
 
-    let after = after.unwrap();
+    let after = diff.1.unwrap();
+    let after_icon = after.icon;
 
-    dbg!(&after.metadata);
+    dbg!(&after_icon.metadata);
 
-    let mut canvas = Image::new_rgba(after.metadata.width, after.metadata.height);
+    let mut canvas = Image::new_rgba(after_icon.metadata.width, after_icon.metadata.height);
+    let no_tint = [0xff, 0xff, 0xff, 0xff];
 
-    canvas.composite(
-        &after.image,
-        (0, 0),
-        after.rect_of("hot_dispenser", Dir::South).unwrap(),
-        [0xff, 0xff, 0xff, 0xff],
-    );
+    let blank = canvas.data.clone();
 
-    canvas.to_file(&PathBuf::from("test.png")).unwrap();
+    let mut builder = String::new();
+
+    for state in &after_icon.metadata.states {
+        canvas.composite(
+            &after_icon.image,
+            (0, 0),
+            after_icon
+                .rect_of(&state.name, Dir::South)
+                .ok_or_else(|| format_err!("Failed to get icon_state {}", &state.name))?,
+            no_tint,
+        );
+        let filename = format!("{}-{}-{}.png", &after.sha, &after.name, &state.name);
+        canvas
+            .to_file(&Path::new(".").join("images").join(&filename))
+            .unwrap();
+        builder.push_str(&format!(
+            include_str!(concat!(
+                env!("CARGO_MANIFEST_DIR"),
+                "/templates/diff_line.txt"
+            )),
+            filename = filename
+        ));
+        builder.push('\n');
+        canvas.data = blank.clone();
+    }
+
+    Ok(builder)
 }

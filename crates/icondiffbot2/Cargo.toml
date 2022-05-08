@@ -20,6 +20,7 @@ diffbot_lib = { path = "../diffbot_lib" }
 anyhow = "1.0.57"
 tokio = "1.18.1"
 flume = "0.10.12"
+ndarray = "0.15.3"
 
 [dependencies.rocket]
 version = "0.5.0-rc.1"
