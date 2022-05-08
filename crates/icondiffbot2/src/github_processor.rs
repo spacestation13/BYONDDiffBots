@@ -1,20 +1,23 @@
-use std::path::PathBuf;
+use std::sync::Arc;
 
 use diffbot_lib::{
-    github::github_api::{download_file, get_pull_files},
+    github::github_api::get_pull_files,
     github::{
         github_api::CheckRun,
-        github_types::{self, ModifiedFile, PullRequestEventPayload},
+        github_types::{ModifiedFile, PullRequestEventPayload},
     },
+    job::types::{Job, JobJournal, JobSender},
 };
-use dmm_tools::dmi::{Dir, IconFile, Image};
+use octocrab::models::InstallationId;
 // use dmm_tools::dmi::IconFile;
+use anyhow::Result;
 use rocket::{
     http::Status,
     post,
     request::{FromRequest, Outcome},
-    Request,
+    Request, State,
 };
+use tokio::sync::Mutex;
 
 #[derive(Debug)]
 pub struct GithubEvent(pub String);
@@ -31,26 +34,17 @@ impl<'r> FromRequest<'r> for GithubEvent {
     }
 }
 
-#[post("/payload", format = "json", data = "<payload>")]
-pub async fn process_github_payload(
-    event: GithubEvent,
-    payload: String,
-) -> Result<&'static str, String> {
-    if event.0 != "pull_request" {
-        return Ok("Not a pull request event");
-    }
-
-    let payload: PullRequestEventPayload =
-        serde_json::from_str(&payload).map_err(|e| format!("{e}"))?;
-
+async fn handle_pull_request(
+    payload: PullRequestEventPayload,
+    job_sender: &State<JobSender>,
+    journal: &State<Arc<Mutex<JobJournal>>>,
+) -> Result<&'static str> {
     if payload.action != "opened" && payload.action != "reopened" && payload.action != "synchronize"
     {
         return Ok("PR not opened or updated");
     }
 
-    let files = get_pull_files(&payload.installation, &payload.pull_request)
-        .await
-        .map_err(|e| format!("{e}"))?;
+    let files = get_pull_files(&payload.installation, &payload.pull_request).await?;
 
     let changed_dmis: Vec<ModifiedFile> = files
         .into_iter()
@@ -61,119 +55,54 @@ pub async fn process_github_payload(
         return Ok("");
     }
 
-    rocket::tokio::spawn(handle_changed_files(payload, changed_dmis));
-
-    Ok("")
-}
-
-pub async fn handle_changed_files(
-    payload: PullRequestEventPayload,
-    changed_dmis: Vec<ModifiedFile>,
-) {
     let check_run = CheckRun::create(
         &payload.pull_request.base.repo.full_name(),
         &payload.pull_request.head.sha,
         payload.installation.id,
-        Some("IconDiffBot2"),
+        Some("icondiffbot2"),
     )
-    .await
-    .unwrap();
+    .await?;
 
-    check_run.mark_started().await.unwrap();
+    check_run.mark_queued().await?;
 
-    for dmi in changed_dmis {
-        match dmi.status {
-            github_types::ModifiedFileStatus::Added => {
-                let new = download_file(
-                    payload.installation.id,
-                    &payload.repository,
-                    &dmi.filename,
-                    &payload.pull_request.head.sha,
-                )
-                .await
-                .unwrap();
+    let pull = payload.pull_request;
+    let installation = payload.installation;
 
-                let new = read_icon_file(new).await;
-                render(None, Some(new)).await;
-            }
-            github_types::ModifiedFileStatus::Removed => {
-                let old = download_file(
-                    payload.installation.id,
-                    &payload.repository,
-                    &dmi.filename,
-                    &payload.pull_request.base.sha,
-                )
-                .await
-                .unwrap();
+    let job = Job {
+        base: pull.base,
+        head: pull.head,
+        pull_request: pull.number,
+        files: changed_dmis,
+        check_run,
+        installation: InstallationId(installation.id),
+    };
 
-                dbg!(&old);
+    journal.lock().await.add_job(job.clone()).await;
+    job_sender.0.send_async(job).await?;
 
-                let old = read_icon_file(old).await;
-                render(Some(old), None).await;
-            }
-            github_types::ModifiedFileStatus::Modified => {
-                let old = download_file(
-                    payload.installation.id,
-                    &payload.repository,
-                    &dmi.filename,
-                    &payload.pull_request.base.sha,
-                )
-                .await
-                .unwrap();
-                let new = download_file(
-                    payload.installation.id,
-                    &payload.repository,
-                    &dmi.filename,
-                    &payload.pull_request.head.sha,
-                )
-                .await
-                .unwrap();
+    Ok("Check submitted")
+}
 
-                dbg!(&old, &new);
-
-                let old = read_icon_file(old).await;
-                let new = read_icon_file(new).await;
-
-                render(Some(old), Some(new)).await;
-            }
-            github_types::ModifiedFileStatus::Renamed => todo!(),
-            github_types::ModifiedFileStatus::Copied => todo!(),
-            github_types::ModifiedFileStatus::Changed => todo!(),
-            github_types::ModifiedFileStatus::Unchanged => todo!(),
-        }
+#[post("/payload", format = "json", data = "<payload>")]
+pub async fn process_github_payload(
+    event: GithubEvent,
+    payload: String,
+    job_sender: &State<JobSender>,
+    journal: &State<Arc<Mutex<JobJournal>>>,
+) -> Result<&'static str, String> {
+    if event.0 != "pull_request" {
+        return Ok("Not a pull request event");
     }
 
-    check_run
-        .mark_failed("Not implemented yet lol get rekt nerd")
+    let payload: PullRequestEventPayload =
+        serde_json::from_str(&payload).map_err(|e| format!("{e}"))?;
+
+    handle_pull_request(payload, job_sender, journal)
         .await
-        .unwrap();
-}
+        .map_err(|e| {
+            eprintln!("Error handling event {e:?}");
+            "An error occured while handling the event"
+        })?;
 
-/// Helper to prevent files lasting longer than needed
-/// TODO: Remove when FileGuard/In Memory Only is set up
-async fn read_icon_file(path: PathBuf) -> IconFile {
-    let file = IconFile::from_file(&path).unwrap();
-    rocket::tokio::fs::remove_file(path).await.unwrap();
-    file
-}
-
-async fn render(before: Option<IconFile>, after: Option<IconFile>) {
-    if before.is_some() || after.is_none() {
-        todo!()
-    }
-
-    let after = after.unwrap();
-
-    dbg!(&after.metadata);
-
-    let mut canvas = Image::new_rgba(after.metadata.width, after.metadata.height);
-
-    canvas.composite(
-        &after.image,
-        (0, 0),
-        after.rect_of("hot_dispenser", Dir::South).unwrap(),
-        [0xff, 0xff, 0xff, 0xff],
-    );
-
-    canvas.to_file(&PathBuf::from("test.png"));
+    Ok("")
 }

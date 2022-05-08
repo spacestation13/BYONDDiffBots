@@ -1,14 +1,20 @@
 #![allow(non_snake_case)]
 
 mod github_processor;
+mod job_processor;
 
-use std::{fs::File, io::Read, path::PathBuf};
+use std::{fs::File, io::Read, path::PathBuf, sync::Arc};
 
+use diffbot_lib::job::{
+    runner::handle_jobs,
+    types::{JobJournal, JobSender},
+};
 use octocrab::OctocrabBuilder;
 use once_cell::sync::OnceCell;
 // use dmm_tools::dmi::IconFile;
 use rocket::{figment::Figment, get, launch, routes};
 use serde::Deserialize;
+use tokio::sync::Mutex;
 
 #[get("/")]
 async fn index() -> &'static str {
@@ -59,5 +65,19 @@ async fn rocket() -> _ {
     ))
     .expect("Octocrab failed to initialise");
 
-    rocket.mount("/", routes![index, github_processor::process_github_payload])
+    let journal = Arc::new(Mutex::new(
+        JobJournal::from_file("jobs.json").await.unwrap(),
+    ));
+
+    let (job_sender, job_receiver) = flume::unbounded();
+    let journal_clone = journal.clone();
+
+    rocket::tokio::spawn(async move {
+        handle_jobs(job_receiver, journal_clone, job_processor::do_job).await
+    });
+
+    rocket.manage(JobSender(job_sender)).manage(journal).mount(
+        "/",
+        routes![index, github_processor::process_github_payload],
+    )
 }

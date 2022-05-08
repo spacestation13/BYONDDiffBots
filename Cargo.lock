@@ -906,9 +906,11 @@ dependencies = [
 name = "icondiffbot2"
 version = "0.1.0"
 dependencies = [
+ "anyhow",
  "diffbot_lib",
  "dmm-tools",
  "dreammaker",
+ "flume",
  "jsonwebtoken",
  "lazy_static",
  "octocrab",
@@ -917,6 +919,7 @@ dependencies = [
  "rocket",
  "serde",
  "serde_json",
+ "tokio",
 ]
 
 [[package]]
