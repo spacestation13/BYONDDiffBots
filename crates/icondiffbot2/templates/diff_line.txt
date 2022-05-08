@@ -1,1 +1,1 @@
-Icon state: {filename}
+|{state_name}|![{old}]({old})|![{new}]({new})|

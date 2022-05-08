@@ -11,6 +11,8 @@ use diffbot_lib::{
 use dmm_tools::dmi::{Dir, IconFile, Image};
 use tokio::runtime::Handle;
 
+use crate::CONFIG;
+
 pub fn do_job(job: &Job) -> Result<CheckOutputs> {
     // TODO: Maybe have jobs just be async?
     let handle = Handle::try_current()?;
@@ -110,16 +112,27 @@ async fn render(diff: (Option<IconFileWithName>, Option<IconFileWithName>)) -> R
         canvas
             .to_file(&Path::new(".").join("images").join(&filename))
             .unwrap();
+        // TODO: tempted to use an <img> tag so i can set a style that upscales 32x32 to 64x64 and sets all the browser flags for nearest neighbor scaling
+        let url = format!("{}/{}", CONFIG.get().unwrap().file_hosting_url, filename);
         builder.push_str(&format!(
             include_str!(concat!(
                 env!("CARGO_MANIFEST_DIR"),
                 "/templates/diff_line.txt"
             )),
-            filename = filename
+            state_name = state.name,
+            old = "",
+            new = url,
         ));
         builder.push('\n');
         canvas.data = blank.clone();
     }
 
-    Ok(builder)
+    Ok(format!(
+        include_str!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/templates/diff_add.txt"
+        )),
+        filename = after.name,
+        table = builder
+    ))
 }

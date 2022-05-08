@@ -1,0 +1,10 @@
+<details>
+	<summary>
+	ADDED - {filename}
+	</summary>
+
+|State Name|Old Icon|New Icon|
+|----------|--------|--------|
+{table}
+
+</details>
