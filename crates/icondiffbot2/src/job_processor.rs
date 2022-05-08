@@ -83,21 +83,81 @@ pub async fn handle_changed_files(job: &Job) -> Result<CheckOutputs> {
 }
 
 async fn render(diff: (Option<IconFileWithName>, Option<IconFileWithName>)) -> Result<String> {
-    if diff.0.is_some() || diff.1.is_none() {
-        todo!()
+    // TODO: Generate gifs from animation frames
+    // TODO: Tile directions from left to right
+    // TODO: Don't blindly render to images/ directory
+    // TODO: Table should be |Icon State|Old|New|Changes|
+    // TODO: Sanitize icon_state to be filesystem safe
+    match diff {
+        (None, None) => Ok("".to_string()),
+        (None, Some(after)) => {
+            let urls = full_render(&after).await?;
+            // TODO: tempted to use an <img> tag so i can set a style that upscales 32x32 to 64x64 and sets all the browser flags for nearest neighbor scaling
+            let mut builder = String::new();
+            for url in urls {
+                builder.push_str(&format!(
+                    include_str!(concat!(
+                        env!("CARGO_MANIFEST_DIR"),
+                        "/templates/diff_line.txt"
+                    )),
+                    state_name = url.0,
+                    old = "",
+                    new = url.1,
+                ));
+                builder.push('\n');
+            }
+
+            Ok(format!(
+                include_str!(concat!(
+                    env!("CARGO_MANIFEST_DIR"),
+                    "/templates/diff_add.txt"
+                )),
+                filename = after.name,
+                table = builder
+            ))
+        }
+        (Some(before), None) => {
+            dbg!(&before.icon.metadata);
+            let urls = full_render(&before).await?;
+            dbg!(&urls);
+            // TODO: tempted to use an <img> tag so i can set a style that upscales 32x32 to 64x64 and sets all the browser flags for nearest neighbor scaling
+            let mut builder = String::new();
+            for url in urls {
+                builder.push_str(&format!(
+                    include_str!(concat!(
+                        env!("CARGO_MANIFEST_DIR"),
+                        "/templates/diff_line.txt"
+                    )),
+                    state_name = url.0,
+                    old = url.1,
+                    new = "",
+                ));
+                builder.push('\n');
+            }
+
+            Ok(format!(
+                include_str!(concat!(
+                    env!("CARGO_MANIFEST_DIR"),
+                    "/templates/diff_remove.txt"
+                )),
+                filename = before.name,
+                table = builder
+            ))
+        }
+        (Some(before), Some(after)) => {
+            todo!()
+        }
     }
+}
 
-    let after = diff.1.unwrap();
-    let after_icon = after.icon;
-
-    dbg!(&after_icon.metadata);
+async fn full_render(target: &IconFileWithName) -> Result<Vec<(String, String)>> {
+    let after_icon = &target.icon;
 
     let mut canvas = Image::new_rgba(after_icon.metadata.width, after_icon.metadata.height);
     let no_tint = [0xff, 0xff, 0xff, 0xff];
-
     let blank = canvas.data.clone();
 
-    let mut builder = String::new();
+    let mut vec = Vec::new();
 
     for state in &after_icon.metadata.states {
         canvas.composite(
@@ -108,31 +168,17 @@ async fn render(diff: (Option<IconFileWithName>, Option<IconFileWithName>)) -> R
                 .ok_or_else(|| format_err!("Failed to get icon_state {}", &state.name))?,
             no_tint,
         );
-        let filename = format!("{}-{}-{}.png", &after.sha, &after.name, &state.name);
+        let filename = format!("{}-{}-{}.png", &target.sha, &target.name, &state.name);
         canvas
             .to_file(&Path::new(".").join("images").join(&filename))
             .unwrap();
-        // TODO: tempted to use an <img> tag so i can set a style that upscales 32x32 to 64x64 and sets all the browser flags for nearest neighbor scaling
-        let url = format!("{}/{}", CONFIG.get().unwrap().file_hosting_url, filename);
-        builder.push_str(&format!(
-            include_str!(concat!(
-                env!("CARGO_MANIFEST_DIR"),
-                "/templates/diff_line.txt"
-            )),
-            state_name = state.name,
-            old = "",
-            new = url,
+
+        vec.push((
+            state.name.clone(),
+            format!("{}/{}", CONFIG.get().unwrap().file_hosting_url, filename),
         ));
-        builder.push('\n');
         canvas.data = blank.clone();
     }
 
-    Ok(format!(
-        include_str!(concat!(
-            env!("CARGO_MANIFEST_DIR"),
-            "/templates/diff_add.txt"
-        )),
-        filename = after.name,
-        table = builder
-    ))
+    Ok(vec)
 }
