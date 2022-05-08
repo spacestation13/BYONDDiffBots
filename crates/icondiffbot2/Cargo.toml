@@ -9,6 +9,7 @@ edition = "2021"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 octocrab = { git = "https://github.com/XAMPPRocky/octocrab" }
+# TODO: fix this when maniac merges my damn pr
 dmm-tools = { git = "https://github.com/tigercat2000/SpacemanDMM/", branch = "memory_rw", features = ["png"] }
 dreammaker = { git = "https://github.com/tigercat2000/SpacemanDMM/", branch = "memory_rw" }
 once_cell = "1.10.0"
