@@ -3,6 +3,7 @@ use std::collections::VecDeque;
 use crate::github::{github_api::*, github_types::*};
 use anyhow::{Context, Result};
 use flume::Sender;
+use octocrab::models::InstallationId;
 use serde::{Deserialize, Serialize};
 
 pub trait JobRunner: Fn(&Job) -> Result<CheckOutputs> + Send + Clone + 'static {}
@@ -15,6 +16,7 @@ pub struct Job {
     pub pull_request: u64,
     pub files: Vec<ModifiedFile>,
     pub check_run: CheckRun,
+    pub installation: InstallationId,
 }
 
 pub struct JobSender(pub Sender<Job>);

@@ -59,8 +59,5 @@ async fn rocket() -> _ {
     ))
     .expect("Octocrab failed to initialise");
 
-    rocket.mount(
-        "/",
-        routes![index, github_processor::process_github_payload],
-    )
+    rocket.mount("/", routes![index, github_processor::process_github_payload])
 }
