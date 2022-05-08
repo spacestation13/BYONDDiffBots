@@ -59,7 +59,7 @@ async fn handle_pull_request(
         &payload.pull_request.base.repo.full_name(),
         &payload.pull_request.head.sha,
         payload.installation.id,
-        Some("icondiffbot2"),
+        Some("IconDiffBot2"),
     )
     .await?;
 
