@@ -12,7 +12,7 @@ use diffbot_lib::job::{
 use octocrab::OctocrabBuilder;
 use once_cell::sync::OnceCell;
 // use dmm_tools::dmi::IconFile;
-use rocket::{figment::Figment, get, launch, routes};
+use rocket::{figment::Figment, fs::FileServer, get, launch, routes};
 use serde::Deserialize;
 use tokio::sync::Mutex;
 
@@ -76,8 +76,12 @@ async fn rocket() -> _ {
         handle_jobs(job_receiver, journal_clone, job_processor::do_job).await
     });
 
-    rocket.manage(JobSender(job_sender)).manage(journal).mount(
-        "/",
-        routes![index, github_processor::process_github_payload],
-    )
+    rocket
+        .manage(JobSender(job_sender))
+        .manage(journal)
+        .mount(
+            "/",
+            routes![index, github_processor::process_github_payload],
+        )
+        .mount("/images", FileServer::from("./images"))
 }

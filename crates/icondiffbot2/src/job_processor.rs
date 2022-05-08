@@ -4,7 +4,7 @@ use anyhow::{format_err, Result};
 use diffbot_lib::{
     github::{
         github_api::download_file,
-        github_types::{CheckOutputs, ModifiedFileStatus},
+        github_types::{CheckOutputBuilder, CheckOutputs, ModifiedFileStatus},
     },
     job::types::Job,
 };
@@ -17,68 +17,38 @@ pub fn do_job(job: &Job) -> Result<CheckOutputs> {
     handle.block_on(async { handle_changed_files(job).await })
 }
 
+fn status_to_sha(job: &Job, status: ModifiedFileStatus) -> (Option<String>, Option<String>) {
+    match status {
+        ModifiedFileStatus::Added => (None, Some(job.head.sha.clone())),
+        ModifiedFileStatus::Removed => (Some(job.base.sha.clone()), None),
+        ModifiedFileStatus::Modified => (Some(job.base.sha.clone()), Some(job.head.sha.clone())),
+        ModifiedFileStatus::Renamed => (None, None),
+        ModifiedFileStatus::Copied => (None, None),
+        ModifiedFileStatus::Changed => (None, None), // TODO: look up what this is
+        ModifiedFileStatus::Unchanged => (None, None),
+    }
+}
+// let new = download_file(
+//     &job.installation,
+//     &job.head.repo,
+//     &dmi.filename,
+//     &job.head.sha,
+// )
+// .await
+// .unwrap();
+
 pub async fn handle_changed_files(job: &Job) -> Result<CheckOutputs> {
     job.check_run.mark_started().await.unwrap();
 
+    let output_builder =
+        CheckOutputBuilder::new("Icon difference rendering", "Omegalul pog pog pog");
+
     for dmi in &job.files {
-        match dmi.status {
-            ModifiedFileStatus::Added => {
-                let new = download_file(
-                    &job.installation,
-                    &job.head.repo,
-                    &dmi.filename,
-                    &job.head.sha,
-                )
-                .await
-                .unwrap();
-
-                let new = read_icon_file(new).await;
-                render(None, Some(new)).await;
-            }
-            ModifiedFileStatus::Removed => {
-                let old = download_file(
-                    &job.installation,
-                    &job.base.repo,
-                    &dmi.filename,
-                    &job.base.sha,
-                )
-                .await
-                .unwrap();
-
-                dbg!(&old);
-
-                let old = read_icon_file(old).await;
-                render(Some(old), None).await;
-            }
-            ModifiedFileStatus::Modified => {
-                let old = download_file(
-                    &job.installation,
-                    &job.base.repo,
-                    &dmi.filename,
-                    &job.base.sha,
-                )
-                .await
-                .unwrap();
-                let new = download_file(
-                    &job.installation,
-                    &job.head.repo,
-                    &dmi.filename,
-                    &job.head.sha,
-                )
-                .await
-                .unwrap();
-
-                dbg!(&old, &new);
-
-                let old = read_icon_file(old).await;
-                let new = read_icon_file(new).await;
-
-                render(Some(old), Some(new)).await;
-            }
-            ModifiedFileStatus::Renamed => todo!(),
-            ModifiedFileStatus::Copied => todo!(),
-            ModifiedFileStatus::Changed => todo!(),
-            ModifiedFileStatus::Unchanged => todo!(),
+        match status_to_sha(job, dmi.status) {
+            (None, None) => todo!(),
+            (None, Some(new)) => todo!(),
+            (Some(old), None) => todo!(),
+            (Some(old), Some(new)) => todo!(),
         }
     }
 

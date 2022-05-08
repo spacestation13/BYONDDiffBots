@@ -1,5 +1,6 @@
 use crate::github::github_types::*;
 use anyhow::{format_err, Context, Result};
+use octocrab::models::repos::Content;
 use octocrab::models::InstallationId;
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
@@ -167,12 +168,12 @@ pub async fn get_pull_files(
 
 static DOWNLOAD_DIR: &str = "download";
 
-pub async fn download_file<S: AsRef<str>>(
+async fn find_content<S: AsRef<str>>(
     installation: &InstallationId,
     repo: &Repository,
     filename: S,
     commit: S,
-) -> Result<PathBuf> {
+) -> Result<Content> {
     let (owner, repo) = repo.name_tuple();
     let items = octocrab::instance()
         .installation(*installation)
@@ -185,10 +186,40 @@ pub async fn download_file<S: AsRef<str>>(
         .take_items();
 
     if items.len() > 1 {
-        return Err(format_err!("Directory given to download_file"));
+        return Err(format_err!("Directory given to find_content"));
     }
 
-    let target = &items[0];
+    items
+        .into_iter()
+        .next()
+        .ok_or_else(|| format_err!("No content was found"))
+}
+
+pub async fn download_url<S: AsRef<str>>(
+    installation: &InstallationId,
+    repo: &Repository,
+    filename: S,
+    commit: S,
+) -> Result<Vec<u8>> {
+    let target = find_content(installation, repo, filename, commit).await?;
+
+    let download_url = target
+        .download_url
+        .as_ref()
+        .ok_or_else(|| format_err!("No download URL given by GitHub"))?;
+
+    let response = reqwest::get(download_url).await?;
+
+    Ok(response.bytes().await?.to_vec())
+}
+
+pub async fn download_file<S: AsRef<str>>(
+    installation: &InstallationId,
+    repo: &Repository,
+    filename: S,
+    commit: S,
+) -> Result<PathBuf> {
+    let target = find_content(installation, repo, &filename, &commit).await?;
 
     let mut path = PathBuf::new();
     path.push(".");
@@ -199,14 +230,7 @@ pub async fn download_file<S: AsRef<str>>(
     tokio::fs::create_dir_all(path.parent().unwrap()).await?;
     let mut file = File::create(&path).await?;
 
-    let download_url = target
-        .download_url
-        .as_ref()
-        .ok_or_else(|| format_err!("No download URL given by GitHub"))?;
-
-    let response = reqwest::get(download_url).await?;
-
-    file.write_all(&response.bytes().await?).await?;
-
+    let data = download_url(installation, repo, &filename, &commit).await?;
+    file.write_all(&data).await?;
     Ok(path)
 }

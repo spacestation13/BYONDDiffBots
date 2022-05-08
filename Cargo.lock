@@ -161,6 +161,16 @@ checksum = "bef38d45163c2f1dde094a7dfd33ccf595c92905c8f8f4fdc18d06fb1037718a"
 [[package]]
 name = "builtins-proc-macro"
 version = "0.0.0"
+source = "git+https://github.com/tigercat2000/SpacemanDMM/?branch=memory_rw#9735b3d3c9861942de3533d7d72f9afb6e38dfc6"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn",
+]
+
+[[package]]
+name = "builtins-proc-macro"
+version = "0.0.0"
 source = "git+https://github.com/SpaceManiac/SpacemanDMM/#a0430d44e3f0c95df3e7768e632fdea2c69372f2"
 dependencies = [
  "proc-macro2",
@@ -463,12 +473,29 @@ checksum = "212d0f5754cb6769937f4501cc0e67f4f4483c8d2c3e1e922ee9edbe4ab4c7c0"
 [[package]]
 name = "dmm-tools"
 version = "0.1.0"
+source = "git+https://github.com/tigercat2000/SpacemanDMM/?branch=memory_rw#9735b3d3c9861942de3533d7d72f9afb6e38dfc6"
+dependencies = [
+ "ahash",
+ "bumpalo",
+ "bytemuck",
+ "dreammaker 0.1.0 (git+https://github.com/tigercat2000/SpacemanDMM/?branch=memory_rw)",
+ "indexmap",
+ "inflate",
+ "lodepng",
+ "ndarray",
+ "png",
+ "rand",
+]
+
+[[package]]
+name = "dmm-tools"
+version = "0.1.0"
 source = "git+https://github.com/SpaceManiac/SpacemanDMM/#a0430d44e3f0c95df3e7768e632fdea2c69372f2"
 dependencies = [
  "ahash",
  "bumpalo",
  "bytemuck",
- "dreammaker",
+ "dreammaker 0.1.0 (git+https://github.com/SpaceManiac/SpacemanDMM/)",
  "indexmap",
  "inflate",
  "lodepng",
@@ -486,15 +513,36 @@ checksum = "fea41bba32d969b513997752735605054bc0dfa92b4c56bf1189f2e174be7a10"
 [[package]]
 name = "dreammaker"
 version = "0.1.0"
+source = "git+https://github.com/tigercat2000/SpacemanDMM/?branch=memory_rw#9735b3d3c9861942de3533d7d72f9afb6e38dfc6"
+dependencies = [
+ "ahash",
+ "bitflags",
+ "builtins-proc-macro 0.0.0 (git+https://github.com/tigercat2000/SpacemanDMM/?branch=memory_rw)",
+ "color_space",
+ "guard",
+ "indexmap",
+ "interval-tree 0.8.0 (git+https://github.com/tigercat2000/SpacemanDMM/?branch=memory_rw)",
+ "lodepng",
+ "ordered-float",
+ "phf",
+ "serde",
+ "serde_derive",
+ "termcolor",
+ "toml",
+]
+
+[[package]]
+name = "dreammaker"
+version = "0.1.0"
 source = "git+https://github.com/SpaceManiac/SpacemanDMM/#a0430d44e3f0c95df3e7768e632fdea2c69372f2"
 dependencies = [
  "ahash",
  "bitflags",
- "builtins-proc-macro",
+ "builtins-proc-macro 0.0.0 (git+https://github.com/SpaceManiac/SpacemanDMM/)",
  "color_space",
  "guard",
  "indexmap",
- "interval-tree",
+ "interval-tree 0.8.0 (git+https://github.com/SpaceManiac/SpacemanDMM/)",
  "lodepng",
  "ordered-float",
  "phf",
@@ -908,8 +956,8 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "diffbot_lib",
- "dmm-tools",
- "dreammaker",
+ "dmm-tools 0.1.0 (git+https://github.com/tigercat2000/SpacemanDMM/?branch=memory_rw)",
+ "dreammaker 0.1.0 (git+https://github.com/tigercat2000/SpacemanDMM/?branch=memory_rw)",
  "flume",
  "jsonwebtoken",
  "lazy_static",
@@ -993,6 +1041,11 @@ checksum = "7a5bbe824c507c5da5956355e86a746d82e0e1464f65d862cc5e71da70e94b2c"
 dependencies = [
  "cfg-if",
 ]
+
+[[package]]
+name = "interval-tree"
+version = "0.8.0"
+source = "git+https://github.com/tigercat2000/SpacemanDMM/?branch=memory_rw#9735b3d3c9861942de3533d7d72f9afb6e38dfc6"
 
 [[package]]
 name = "interval-tree"
@@ -1123,8 +1176,8 @@ dependencies = [
  "chrono",
  "derive_builder",
  "diffbot_lib",
- "dmm-tools",
- "dreammaker",
+ "dmm-tools 0.1.0 (git+https://github.com/SpaceManiac/SpacemanDMM/)",
+ "dreammaker 0.1.0 (git+https://github.com/SpaceManiac/SpacemanDMM/)",
  "flume",
  "glob",
  "image",
