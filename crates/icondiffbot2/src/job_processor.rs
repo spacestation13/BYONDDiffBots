@@ -1,4 +1,4 @@
-use std::path::Path;
+use std::{path::Path, sync::Arc};
 
 use anyhow::{format_err, Result};
 use diffbot_lib::{
@@ -9,7 +9,7 @@ use diffbot_lib::{
     job::types::Job,
 };
 use dmm_tools::dmi::{Dir, IconFile, Image};
-use tokio::runtime::Handle;
+use tokio::{runtime::Handle, sync::Mutex};
 
 use crate::CONFIG;
 
@@ -71,18 +71,26 @@ pub async fn handle_changed_files(job: &Job) -> Result<CheckOutputs> {
     let mut output_builder =
         CheckOutputBuilder::new("Icon difference rendering", "Omegalul pog pog pog");
 
+    let protected_job = Arc::new(Mutex::new(job));
+
     for dmi in &job.files {
         output_builder.add_text(
-            &render(sha_to_iconfile(job, &dmi.filename, status_to_sha(job, dmi.status)).await)
-                .await
-                .unwrap_or_else(|e| format!("Error: {e}")),
+            &render(
+                Arc::clone(&protected_job),
+                sha_to_iconfile(job, &dmi.filename, status_to_sha(job, dmi.status)).await,
+            )
+            .await
+            .unwrap_or_else(|e| format!("Error: {e}")),
         );
     }
 
     Ok(output_builder.build())
 }
 
-async fn render(diff: (Option<IconFileWithName>, Option<IconFileWithName>)) -> Result<String> {
+async fn render(
+    job: Arc<Mutex<&Job>>,
+    diff: (Option<IconFileWithName>, Option<IconFileWithName>),
+) -> Result<String> {
     // TODO: Generate gifs from animation frames
     // TODO: Tile directions from left to right
     // TODO: Don't blindly render to images/ directory
@@ -91,7 +99,7 @@ async fn render(diff: (Option<IconFileWithName>, Option<IconFileWithName>)) -> R
     match diff {
         (None, None) => Ok("".to_string()),
         (None, Some(after)) => {
-            let urls = full_render(&after).await?;
+            let urls = full_render(job, &after).await?;
             // TODO: tempted to use an <img> tag so i can set a style that upscales 32x32 to 64x64 and sets all the browser flags for nearest neighbor scaling
             let mut builder = String::new();
             for url in urls {
@@ -118,7 +126,7 @@ async fn render(diff: (Option<IconFileWithName>, Option<IconFileWithName>)) -> R
         }
         (Some(before), None) => {
             dbg!(&before.icon.metadata);
-            let urls = full_render(&before).await?;
+            let urls = full_render(job, &before).await?;
             dbg!(&urls);
             // TODO: tempted to use an <img> tag so i can set a style that upscales 32x32 to 64x64 and sets all the browser flags for nearest neighbor scaling
             let mut builder = String::new();
@@ -144,13 +152,16 @@ async fn render(diff: (Option<IconFileWithName>, Option<IconFileWithName>)) -> R
                 table = builder
             ))
         }
-        (Some(before), Some(after)) => {
+        (Some(_before), Some(_after)) => {
             todo!()
         }
     }
 }
 
-async fn full_render(target: &IconFileWithName) -> Result<Vec<(String, String)>> {
+async fn full_render(
+    job: Arc<Mutex<&Job>>,
+    target: &IconFileWithName,
+) -> Result<Vec<(String, String)>> {
     let after_icon = &target.icon;
 
     let mut canvas = Image::new_rgba(after_icon.metadata.width, after_icon.metadata.height);
@@ -168,10 +179,16 @@ async fn full_render(target: &IconFileWithName) -> Result<Vec<(String, String)>>
                 .ok_or_else(|| format_err!("Failed to get icon_state {}", &state.name))?,
             no_tint,
         );
-        let filename = format!("{}-{}-{}.png", &target.sha, &target.name, &state.name);
-        canvas
-            .to_file(&Path::new(".").join("images").join(&filename))
-            .unwrap();
+        let access = job.lock().await;
+        let prefix = format!("{}/{}", access.installation, access.pull_request);
+        drop(access);
+        let filename = format!(
+            "{}/{}-{}-{}.png",
+            prefix, &target.sha, &target.name, &state.name
+        );
+        let path = Path::new(".").join("images").join(&filename);
+        tokio::fs::create_dir_all(&path.parent().unwrap()).await?;
+        canvas.to_file(&path).unwrap();
 
         vec.push((
             state.name.clone(),
