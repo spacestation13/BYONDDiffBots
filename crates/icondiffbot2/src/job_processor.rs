@@ -250,6 +250,7 @@ async fn render_state(state: &State, icon: &IconFile, filename: &str) -> Result<
     new_render_result.size = (first_frame.width, first_frame.height);
     new_render_result.frames = frames;
 
+    // TODO: produce png for unanimated
     IconFile::write_gif(std::fs::File::create(path)?, &new_render_result)?;
     Ok(filename)
 }
