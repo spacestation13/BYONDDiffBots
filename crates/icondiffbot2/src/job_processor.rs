@@ -1,6 +1,6 @@
 use std::{path::Path, sync::Arc};
 
-use anyhow::{format_err, Result};
+use anyhow::Result;
 use diffbot_lib::{
     github::{
         github_api::download_url,
@@ -8,7 +8,7 @@ use diffbot_lib::{
     },
     job::types::Job,
 };
-use dmm_tools::dmi::{Dir, IconFile, Image};
+use dmm_tools::dmi::{Dir, IconFile, Image, State};
 use tokio::{runtime::Handle, sync::Mutex};
 
 use crate::CONFIG;
@@ -164,38 +164,92 @@ async fn full_render(
 ) -> Result<Vec<(String, String)>> {
     let after_icon = &target.icon;
 
-    let mut canvas = Image::new_rgba(after_icon.metadata.width, after_icon.metadata.height);
-    let no_tint = [0xff, 0xff, 0xff, 0xff];
-    let blank = canvas.data.clone();
-
     let mut vec = Vec::new();
 
     for state in &after_icon.metadata.states {
-        canvas.composite(
-            &after_icon.image,
-            (0, 0),
-            after_icon
-                .rect_of(&state.name, Dir::South)
-                .ok_or_else(|| format_err!("Failed to get icon_state {}", &state.name))?,
-            no_tint,
-        );
         let access = job.lock().await;
         let prefix = format!("{}/{}", access.installation, access.pull_request);
         drop(access);
         let filename = format!(
-            "{}/{}-{}-{}.png",
+            "{}/{}-{}-{}",
             prefix, &target.sha, &target.name, &state.name
         );
-        let path = Path::new(".").join("images").join(&filename);
-        tokio::fs::create_dir_all(&path.parent().unwrap()).await?;
-        canvas.to_file(&path).unwrap();
+        let filename = render_state(state, after_icon, &filename).await?;
+
+        // let path = Path::new(".").join("images").join(&filename);
+        // tokio::fs::create_dir_all(&path.parent().unwrap()).await?;
+        // canvas.to_file(&path).unwrap();
 
         vec.push((
             state.name.clone(),
             format!("{}/{}", CONFIG.get().unwrap().file_hosting_url, filename),
         ));
-        canvas.data = blank.clone();
     }
 
     Ok(vec)
+}
+
+async fn render_state(state: &State, icon: &IconFile, filename: &str) -> Result<String> {
+    let renders = match state.dirs {
+        dmm_tools::dmi::Dirs::One => [icon.render(&state.name, Dir::South)?].to_vec(),
+        dmm_tools::dmi::Dirs::Four => [
+            icon.render(&state.name, Dir::South)?,
+            icon.render(&state.name, Dir::North)?,
+            icon.render(&state.name, Dir::East)?,
+            icon.render(&state.name, Dir::West)?,
+        ]
+        .to_vec(),
+        dmm_tools::dmi::Dirs::Eight => [
+            icon.render(&state.name, Dir::South)?,
+            icon.render(&state.name, Dir::North)?,
+            icon.render(&state.name, Dir::East)?,
+            icon.render(&state.name, Dir::West)?,
+            icon.render(&state.name, Dir::Northeast)?,
+            icon.render(&state.name, Dir::Northwest)?,
+            icon.render(&state.name, Dir::Southeast)?,
+            icon.render(&state.name, Dir::Southwest)?,
+        ]
+        .to_vec(),
+    };
+
+    let first_dir = renders.get(0).unwrap();
+    let first_frame = first_dir.frames.get(0).unwrap();
+
+    let frames: Vec<Image> = if renders.len() > 1 {
+        (0..first_dir.frames.len())
+            .map(|frame| {
+                let mut canvas = Image::new_rgba(
+                    first_frame.width * (renders.len() as u32),
+                    first_frame.height,
+                );
+                renders.iter().enumerate().for_each(|(dir_no, dir)| {
+                    let dir_frame = dir.frames.get(frame).unwrap();
+                    let crop = (0, 0, dir_frame.width, dir_frame.height);
+                    let no_tint = [0xff, 0xff, 0xff, 0xff];
+                    canvas.composite(
+                        dir_frame,
+                        (first_frame.width * (dir_no as u32), 0),
+                        crop,
+                        no_tint,
+                    );
+                });
+                canvas
+            })
+            .collect()
+    } else {
+        // gotta go fast
+        first_dir.frames.clone()
+    };
+    let first_frame = frames.get(0).unwrap();
+
+    let filename = format!("{}.gif", filename);
+    let path = Path::new(".").join("images").join(&filename);
+    tokio::fs::create_dir_all(&path.parent().unwrap()).await?;
+
+    let mut new_render_result = first_dir.clone();
+    new_render_result.size = (first_frame.width, first_frame.height);
+    new_render_result.frames = frames;
+
+    IconFile::write_gif(std::fs::File::create(path)?, &new_render_result)?;
+    Ok(filename)
 }

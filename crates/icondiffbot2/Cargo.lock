@@ -327,48 +327,10 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "212d0f5754cb6769937f4501cc0e67f4f4483c8d2c3e1e922ee9edbe4ab4c7c0"
 
 [[package]]
-name = "dmm-tools"
-version = "0.1.0"
-source = "git+https://github.com/SpaceManiac/SpacemanDMM/#a0430d44e3f0c95df3e7768e632fdea2c69372f2"
-dependencies = [
- "ahash",
- "bumpalo",
- "bytemuck",
- "dreammaker",
- "indexmap",
- "inflate",
- "lodepng",
- "ndarray",
- "png",
- "rand",
-]
-
-[[package]]
 name = "doc-comment"
 version = "0.3.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "fea41bba32d969b513997752735605054bc0dfa92b4c56bf1189f2e174be7a10"
-
-[[package]]
-name = "dreammaker"
-version = "0.1.0"
-source = "git+https://github.com/SpaceManiac/SpacemanDMM/#a0430d44e3f0c95df3e7768e632fdea2c69372f2"
-dependencies = [
- "ahash",
- "bitflags",
- "builtins-proc-macro",
- "color_space",
- "guard",
- "indexmap",
- "interval-tree",
- "lodepng",
- "ordered-float",
- "phf",
- "serde",
- "serde_derive",
- "termcolor",
- "toml",
-]
 
 [[package]]
 name = "either"
