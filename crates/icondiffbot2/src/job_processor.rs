@@ -92,11 +92,8 @@ async fn render(
     job: Arc<Mutex<&Job>>,
     diff: (Option<IconFileWithName>, Option<IconFileWithName>),
 ) -> Result<String> {
-    // TODO: Generate gifs from animation frames
-    // TODO: Tile directions from left to right
     // TODO: Don't blindly render to images/ directory
     // TODO: Table should be |Icon State|Old|New|Changes|
-    // TODO: Sanitize icon_state to be filesystem safe
     match diff {
         (None, None) => Ok("".to_string()),
         (None, Some(after)) => {
