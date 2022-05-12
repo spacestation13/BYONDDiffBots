@@ -1,6 +1,6 @@
-use std::{path::Path, sync::Arc};
+use std::{collections::BTreeMap, path::Path, sync::Arc};
 
-use anyhow::Result;
+use anyhow::{format_err, Result};
 use diffbot_lib::{
     github::{
         github_api::download_url,
@@ -8,7 +8,8 @@ use diffbot_lib::{
     },
     job::types::Job,
 };
-use dmm_tools::dmi::{Dir, IconFile, Image, State};
+use dmm_tools::dmi::render::IconRenderer;
+use dmm_tools::dmi::IconFile;
 use tokio::{runtime::Handle, sync::Mutex};
 
 use crate::CONFIG;
@@ -80,7 +81,7 @@ pub async fn handle_changed_files(job: &Job) -> Result<CheckOutputs> {
                 sha_to_iconfile(job, &dmi.filename, status_to_sha(job, dmi.status)).await,
             )
             .await
-            .unwrap_or_else(|e| format!("Error: {e}")),
+            .unwrap(), // .unwrap_or_else(|e| format!("Error: {e}")),
         );
     }
 
@@ -102,13 +103,28 @@ async fn render(
             let urls = full_render(job, &after).await?;
             // TODO: tempted to use an <img> tag so i can set a style that upscales 32x32 to 64x64 and sets all the browser flags for nearest neighbor scaling
             let mut builder = String::new();
+            let mut seen_names: BTreeMap<String, u32> = BTreeMap::new();
             for url in urls {
+                let mut state_name = url.0;
+                // Mark default states
+                if state_name.is_empty() {
+                    state_name = "{{DEFAULT}}".to_string();
+                }
+
+                // Deduplicate state names
+                if let Some(value) = seen_names.get_mut(&state_name) {
+                    *value += 1;
+                    state_name = format!("{state_name}{value}");
+                } else {
+                    seen_names.insert(state_name.clone(), 1);
+                }
+
                 builder.push_str(&format!(
                     include_str!(concat!(
                         env!("CARGO_MANIFEST_DIR"),
                         "/templates/diff_line.txt"
                     )),
-                    state_name = url.0,
+                    state_name = state_name,
                     old = "",
                     new = url.1,
                 ));
@@ -130,13 +146,29 @@ async fn render(
             dbg!(&urls);
             // TODO: tempted to use an <img> tag so i can set a style that upscales 32x32 to 64x64 and sets all the browser flags for nearest neighbor scaling
             let mut builder = String::new();
+            let mut seen_names: BTreeMap<String, u32> = BTreeMap::new();
             for url in urls {
+                let mut state_name = url.0;
+                // Mark default states
+                if state_name.is_empty() {
+                    state_name = "{{DEFAULT}}".to_string();
+                }
+
+                // Deduplicate state names
+                if let Some(value) = seen_names.get_mut(&state_name) {
+                    *value += 1;
+                    state_name = format!("{state_name}{value}");
+                } else {
+                    seen_names.insert(state_name.clone(), 1);
+                }
+
+                // Build the output line
                 builder.push_str(&format!(
                     include_str!(concat!(
                         env!("CARGO_MANIFEST_DIR"),
                         "/templates/diff_line.txt"
                     )),
-                    state_name = url.0,
+                    state_name = state_name,
                     old = url.1,
                     new = "",
                 ));
@@ -162,95 +194,52 @@ async fn full_render(
     job: Arc<Mutex<&Job>>,
     target: &IconFileWithName,
 ) -> Result<Vec<(String, String)>> {
-    let after_icon = &target.icon;
+    let icon = &target.icon;
 
     let mut vec = Vec::new();
 
-    for state in &after_icon.metadata.states {
+    let mut renderer = IconRenderer::new(icon);
+
+    for (state_no, state) in icon.metadata.states.iter().enumerate() {
         let access = job.lock().await;
         let prefix = format!("{}/{}", access.installation, access.pull_request);
+        let directory = Path::new(".").join("images").join(&prefix);
+        // Always remember to mkdir -p your paths
+        std::fs::create_dir_all(&directory)?;
         drop(access);
         let filename = format!(
-            "{}/{}-{}-{}",
-            prefix, &target.sha, &target.name, &state.name
+            "{}-{}-{}-{}",
+            // Differentiate between before-after files
+            &target.sha,
+            // Differentiate between different files in the same commit
+            &target.name.replace(".dmi", ""),
+            // Differentiate between duplicate states
+            state_no,
+            // Diffentiate between states.
+            sanitize_filename::sanitize(&state.name)
         );
-        let filename = render_state(state, after_icon, &filename).await?;
 
-        // let path = Path::new(".").join("images").join(&filename);
-        // tokio::fs::create_dir_all(&path.parent().unwrap()).await?;
-        // canvas.to_file(&path).unwrap();
+        let path = directory.join(&filename);
+        // dbg!(&path, &state.frames);
+        let corrected_path = renderer.render_state(state, path)?;
+        let extension = corrected_path
+            .extension()
+            .ok_or_else(|| format_err!("Unable to get extension that was written to"))?;
+        // dbg!(&corrected_path, &extension);
 
         vec.push((
             state.name.clone(),
-            format!("{}/{}", CONFIG.get().unwrap().file_hosting_url, filename),
+            format!(
+                "{}/{}/{}.{}",
+                CONFIG.get().unwrap().file_hosting_url,
+                prefix,
+                filename,
+                extension.to_string_lossy()
+            ),
         ));
     }
 
+    dbg!(&vec);
+
     Ok(vec)
-}
-
-async fn render_state(state: &State, icon: &IconFile, filename: &str) -> Result<String> {
-    let renders = match state.dirs {
-        dmm_tools::dmi::Dirs::One => [icon.render(&state.name, Dir::South)?].to_vec(),
-        dmm_tools::dmi::Dirs::Four => [
-            icon.render(&state.name, Dir::South)?,
-            icon.render(&state.name, Dir::North)?,
-            icon.render(&state.name, Dir::East)?,
-            icon.render(&state.name, Dir::West)?,
-        ]
-        .to_vec(),
-        dmm_tools::dmi::Dirs::Eight => [
-            icon.render(&state.name, Dir::South)?,
-            icon.render(&state.name, Dir::North)?,
-            icon.render(&state.name, Dir::East)?,
-            icon.render(&state.name, Dir::West)?,
-            icon.render(&state.name, Dir::Northeast)?,
-            icon.render(&state.name, Dir::Northwest)?,
-            icon.render(&state.name, Dir::Southeast)?,
-            icon.render(&state.name, Dir::Southwest)?,
-        ]
-        .to_vec(),
-    };
-
-    let first_dir = renders.get(0).unwrap();
-    let first_frame = first_dir.frames.get(0).unwrap();
-
-    let frames: Vec<Image> = if renders.len() > 1 {
-        (0..first_dir.frames.len())
-            .map(|frame| {
-                let mut canvas = Image::new_rgba(
-                    first_frame.width * (renders.len() as u32),
-                    first_frame.height,
-                );
-                renders.iter().enumerate().for_each(|(dir_no, dir)| {
-                    let dir_frame = dir.frames.get(frame).unwrap();
-                    let crop = (0, 0, dir_frame.width, dir_frame.height);
-                    let no_tint = [0xff, 0xff, 0xff, 0xff];
-                    canvas.composite(
-                        dir_frame,
-                        (first_frame.width * (dir_no as u32), 0),
-                        crop,
-                        no_tint,
-                    );
-                });
-                canvas
-            })
-            .collect()
-    } else {
-        // gotta go fast
-        first_dir.frames.clone()
-    };
-    let first_frame = frames.get(0).unwrap();
-
-    let filename = format!("{}.gif", filename);
-    let path = Path::new(".").join("images").join(&filename);
-    tokio::fs::create_dir_all(&path.parent().unwrap()).await?;
-
-    let mut new_render_result = first_dir.clone();
-    new_render_result.size = (first_frame.width, first_frame.height);
-    new_render_result.frames = frames;
-
-    // TODO: produce png for unanimated
-    IconFile::write_gif(std::fs::File::create(path)?, &new_render_result)?;
-    Ok(filename)
 }
