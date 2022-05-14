@@ -69,7 +69,7 @@ async fn process_pull(
 
     if files.is_empty() {
         let output = Output {
-            title: "No map chages".to_owned(),
+            title: "No map changes".to_owned(),
             summary: "There are no changed map files to render.".to_owned(),
             text: "".to_owned(),
         };
