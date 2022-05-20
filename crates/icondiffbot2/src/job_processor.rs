@@ -1,4 +1,11 @@
-use std::{collections::BTreeMap, path::Path, sync::Arc};
+// should fix but lazy
+#![allow(clippy::format_push_string)]
+
+use std::{
+    collections::HashSet,
+    path::{Path, PathBuf},
+    sync::Arc,
+};
 
 use anyhow::{format_err, Result};
 use diffbot_lib::{
@@ -9,7 +16,7 @@ use diffbot_lib::{
     job::types::Job,
 };
 use dmm_tools::dmi::render::IconRenderer;
-use dmm_tools::dmi::IconFile;
+use dmm_tools::dmi::{IconFile, State};
 use tokio::{runtime::Handle, sync::Mutex};
 
 use crate::CONFIG;
@@ -100,20 +107,11 @@ async fn render(
             let urls = full_render(job, &after).await?;
             // TODO: tempted to use an <img> tag so i can set a style that upscales 32x32 to 64x64 and sets all the browser flags for nearest neighbor scaling
             let mut builder = String::new();
-            let mut seen_names: BTreeMap<String, u32> = BTreeMap::new();
             for url in urls {
                 let mut state_name = url.0;
                 // Mark default states
                 if state_name.is_empty() {
                     state_name = "{{DEFAULT}}".to_string();
-                }
-
-                // Deduplicate state names
-                if let Some(value) = seen_names.get_mut(&state_name) {
-                    *value += 1;
-                    state_name = format!("{state_name}{value}");
-                } else {
-                    seen_names.insert(state_name.clone(), 1);
                 }
 
                 builder.push_str(&format!(
@@ -124,6 +122,7 @@ async fn render(
                     state_name = state_name,
                     old = "",
                     new = url.1,
+                    change_text = "Created",
                 ));
                 builder.push('\n');
             }
@@ -138,25 +137,16 @@ async fn render(
             ))
         }
         (Some(before), None) => {
-            dbg!(&before.icon.metadata);
+            // dbg!(&before.icon.metadata);
             let urls = full_render(job, &before).await?;
-            dbg!(&urls);
+            // dbg!(&urls);
             // TODO: tempted to use an <img> tag so i can set a style that upscales 32x32 to 64x64 and sets all the browser flags for nearest neighbor scaling
             let mut builder = String::new();
-            let mut seen_names: BTreeMap<String, u32> = BTreeMap::new();
             for url in urls {
                 let mut state_name = url.0;
                 // Mark default states
                 if state_name.is_empty() {
                     state_name = "{{DEFAULT}}".to_string();
-                }
-
-                // Deduplicate state names
-                if let Some(value) = seen_names.get_mut(&state_name) {
-                    *value += 1;
-                    state_name = format!("{state_name}{value}");
-                } else {
-                    seen_names.insert(state_name.clone(), 1);
                 }
 
                 // Build the output line
@@ -168,6 +158,7 @@ async fn render(
                     state_name = state_name,
                     old = url.1,
                     new = "",
+                    change_text = "Deleted",
                 ));
                 builder.push('\n');
             }
@@ -181,10 +172,142 @@ async fn render(
                 table = builder
             ))
         }
-        (Some(_before), Some(_after)) => {
-            todo!()
+        (Some(before), Some(after)) => {
+            let before_states: HashSet<String> =
+                before.icon.metadata.state_names.keys().cloned().collect();
+            let after_states: HashSet<String> =
+                after.icon.metadata.state_names.keys().cloned().collect();
+
+            let access = job.lock().await;
+            let prefix = format!("{}/{}", access.installation, access.pull_request);
+            drop(access);
+
+            let mut builder = String::new();
+            let mut before_renderer = IconRenderer::new(&before.icon);
+            let mut after_renderer = IconRenderer::new(&after.icon);
+
+            for state in before_states.symmetric_difference(&after_states) {
+                if before_states.contains(state) {
+                    let (name, url) = render_state(
+                        &prefix,
+                        &before,
+                        before.icon.metadata.get_icon_state(state).unwrap(),
+                        &mut before_renderer,
+                    )
+                    .await?;
+                    builder.push_str(&format!(
+                        include_str!(concat!(
+                            env!("CARGO_MANIFEST_DIR"),
+                            "/templates/diff_line.txt"
+                        )),
+                        state_name = name,
+                        old = url,
+                        new = "",
+                        change_text = "Deleted",
+                    ));
+                    builder.push('\n');
+                } else {
+                    let (name, url) = render_state(
+                        &prefix,
+                        &after,
+                        after.icon.metadata.get_icon_state(state).unwrap(),
+                        &mut after_renderer,
+                    )
+                    .await?;
+                    builder.push_str(&format!(
+                        include_str!(concat!(
+                            env!("CARGO_MANIFEST_DIR"),
+                            "/templates/diff_line.txt"
+                        )),
+                        state_name = name,
+                        old = "",
+                        new = url,
+                        change_text = "Created",
+                    ));
+                    builder.push('\n');
+                }
+            }
+
+            for state in before_states.intersection(&after_states) {
+                let before_state_render = before_renderer.render_to_images(state)?;
+                let after_state_render = after_renderer.render_to_images(state)?;
+
+                if before_state_render != after_state_render {
+                    let before_state = before.icon.metadata.get_icon_state(state).unwrap();
+                    let after_state = after.icon.metadata.get_icon_state(state).unwrap();
+
+                    let (_, before_url) =
+                        render_state(&prefix, &before, before_state, &mut before_renderer).await?;
+                    let (_, after_url) =
+                        render_state(&prefix, &after, after_state, &mut after_renderer).await?;
+
+                    builder.push_str(&format!(
+                        include_str!(concat!(
+                            env!("CARGO_MANIFEST_DIR"),
+                            "/templates/diff_line.txt"
+                        )),
+                        state_name = state,
+                        old = before_url,
+                        new = after_url,
+                        change_text = "Modified",
+                    ));
+                    builder.push('\n');
+                } else {
+                    println!("No difference detected for {}", state);
+                }
+            }
+
+            Ok(format!(
+                include_str!(concat!(
+                    env!("CARGO_MANIFEST_DIR"),
+                    "/templates/diff_modify.txt"
+                )),
+                filename = before.name,
+                table = builder
+            ))
         }
     }
+}
+
+async fn render_state<'a, S: AsRef<str>>(
+    prefix: S,
+    target: &IconFileWithName,
+    state: &State,
+    renderer: &mut IconRenderer<'a>,
+) -> Result<(String, String)> {
+    let directory = Path::new(".").join("images").join(prefix.as_ref());
+    // Always remember to mkdir -p your paths
+    std::fs::create_dir_all(&directory)?;
+
+    let filename = format!(
+        "{}-{}-{}-{}",
+        // Differentiate between before-after files
+        &target.sha,
+        // Differentiate between different files in the same commit
+        &target.name.replace(".dmi", ""),
+        // Differentiate between duplicate states
+        state.duplicate.unwrap_or(0),
+        // Diffentiate between states.
+        sanitize_filename::sanitize(&state.name)
+    );
+
+    let path = directory.join(&filename);
+    // dbg!(&path, &state.frames);
+    let corrected_path = renderer.render_state(state, path)?;
+    let extension = corrected_path
+        .extension()
+        .ok_or_else(|| format_err!("Unable to get extension that was written to"))?;
+    // dbg!(&corrected_path, &extension);
+
+    let url = format!(
+        "{}/{}/{}.{}",
+        CONFIG.get().unwrap().file_hosting_url,
+        prefix.as_ref(),
+        filename,
+        extension.to_string_lossy()
+    );
+
+    Ok((state.get_state_name_index(), url))
 }
 
 async fn full_render(
@@ -197,46 +320,16 @@ async fn full_render(
 
     let mut renderer = IconRenderer::new(icon);
 
-    for (state_no, state) in icon.metadata.states.iter().enumerate() {
-        let access = job.lock().await;
-        let prefix = format!("{}/{}", access.installation, access.pull_request);
-        let directory = Path::new(".").join("images").join(&prefix);
-        // Always remember to mkdir -p your paths
-        std::fs::create_dir_all(&directory)?;
-        drop(access);
-        let filename = format!(
-            "{}-{}-{}-{}",
-            // Differentiate between before-after files
-            &target.sha,
-            // Differentiate between different files in the same commit
-            &target.name.replace(".dmi", ""),
-            // Differentiate between duplicate states
-            state_no,
-            // Diffentiate between states.
-            sanitize_filename::sanitize(&state.name)
-        );
+    let access = job.lock().await;
+    let prefix = format!("{}/{}", access.installation, access.pull_request);
+    drop(access);
 
-        let path = directory.join(&filename);
-        // dbg!(&path, &state.frames);
-        let corrected_path = renderer.render_state(state, path)?;
-        let extension = corrected_path
-            .extension()
-            .ok_or_else(|| format_err!("Unable to get extension that was written to"))?;
-        // dbg!(&corrected_path, &extension);
-
-        vec.push((
-            state.name.clone(),
-            format!(
-                "{}/{}/{}.{}",
-                CONFIG.get().unwrap().file_hosting_url,
-                prefix,
-                filename,
-                extension.to_string_lossy()
-            ),
-        ));
+    for state in icon.metadata.states.iter() {
+        let (name, url) = render_state(&prefix, target, state, &mut renderer).await?;
+        vec.push((name, url));
     }
 
-    dbg!(&vec);
+    // dbg!(&vec);
 
     Ok(vec)
 }

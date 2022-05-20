@@ -3,8 +3,8 @@
 	REMOVED - {filename}
 	</summary>
 
-|State Name|Old Icon|New Icon|
-|----------|--------|--------|
+|State Name|Old Icon|New Icon|Status|
+|----------|--------|--------|------|
 {table}
 
 </details>

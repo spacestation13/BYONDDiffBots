@@ -199,7 +199,7 @@ dependencies = [
 [[package]]
 name = "builtins-proc-macro"
 version = "0.0.0"
-source = "git+https://github.com/tigercat2000/SpacemanDMM/?branch=gif#312eab2c955ec36a40c621949d20c77c37b9d2e6"
+source = "git+https://github.com/tigercat2000/SpacemanDMM/?branch=gif#5f059f1c3b7e88dc4890ddbd1a3adf8843faa281"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -554,7 +554,7 @@ dependencies = [
 [[package]]
 name = "dmm-tools"
 version = "0.1.0"
-source = "git+https://github.com/tigercat2000/SpacemanDMM/?branch=gif#312eab2c955ec36a40c621949d20c77c37b9d2e6"
+source = "git+https://github.com/tigercat2000/SpacemanDMM/?branch=gif#5f059f1c3b7e88dc4890ddbd1a3adf8843faa281"
 dependencies = [
  "ahash",
  "bumpalo",
@@ -595,7 +595,7 @@ checksum = "fea41bba32d969b513997752735605054bc0dfa92b4c56bf1189f2e174be7a10"
 [[package]]
 name = "dreammaker"
 version = "0.1.0"
-source = "git+https://github.com/tigercat2000/SpacemanDMM/?branch=gif#312eab2c955ec36a40c621949d20c77c37b9d2e6"
+source = "git+https://github.com/tigercat2000/SpacemanDMM/?branch=gif#5f059f1c3b7e88dc4890ddbd1a3adf8843faa281"
 dependencies = [
  "ahash",
  "bitflags",
@@ -972,9 +972,9 @@ dependencies = [
 
 [[package]]
 name = "http-body"
-version = "0.4.4"
+version = "0.4.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1ff4f84919677303da5f147645dbea6b1881f368d03ac84e1dc09031ebd7b2c6"
+checksum = "d5f38f16d184e36f2408a55281cd658ecbd3ca05cce6d6510a176eca393e26d1"
 dependencies = [
  "bytes",
  "http",
@@ -1143,7 +1143,7 @@ dependencies = [
 [[package]]
 name = "interval-tree"
 version = "0.8.0"
-source = "git+https://github.com/tigercat2000/SpacemanDMM/?branch=gif#312eab2c955ec36a40c621949d20c77c37b9d2e6"
+source = "git+https://github.com/tigercat2000/SpacemanDMM/?branch=gif#5f059f1c3b7e88dc4890ddbd1a3adf8843faa281"
 
 [[package]]
 name = "interval-tree"
@@ -1930,9 +1930,9 @@ dependencies = [
 
 [[package]]
 name = "regex"
-version = "1.5.5"
+version = "1.5.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1a11647b6b25ff05a515cb92c365cec08801e83423a235b51e231e1808747286"
+checksum = "d83f127d94bdbcda4c8cc2e50f6f84f4b611f69c902699ca385a39c3a75f9ff1"
 dependencies = [
  "regex-syntax",
 ]
@@ -1948,9 +1948,9 @@ dependencies = [
 
 [[package]]
 name = "regex-syntax"
-version = "0.6.25"
+version = "0.6.26"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f497285884f3fcff424ffc933e56d7cbca511def0c9831a7f9b5f6153e3cc89b"
+checksum = "49b3de9ec5dc0a3417da371aab17d729997c15010e7fd24ff707773a33bddb64"
 
 [[package]]
 name = "remove_dir_all"
