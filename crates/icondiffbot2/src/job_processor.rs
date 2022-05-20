@@ -85,7 +85,7 @@ pub async fn handle_changed_files(job: &Job) -> Result<CheckOutputs> {
                 sha_to_iconfile(job, &dmi.filename, status_to_sha(job, dmi.status)).await,
             )
             .await
-            .unwrap_or_else(|e| format!("Error: {e}")),
+            .unwrap_or_else(|e| format!("Error: {:?}", e)),
         );
     }
 
