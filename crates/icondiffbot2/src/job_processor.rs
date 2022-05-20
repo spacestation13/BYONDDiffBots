@@ -1,13 +1,9 @@
 // should fix but lazy
 #![allow(clippy::format_push_string)]
 
-use std::{
-    collections::HashSet,
-    path::{Path, PathBuf},
-    sync::Arc,
-};
+use std::{collections::HashSet, path::Path, sync::Arc};
 
-use anyhow::{format_err, Result};
+use anyhow::{format_err, Context, Result};
 use diffbot_lib::{
     github::{
         github_api::download_url,
@@ -88,7 +84,7 @@ pub async fn handle_changed_files(job: &Job) -> Result<CheckOutputs> {
                 sha_to_iconfile(job, &dmi.filename, status_to_sha(job, dmi.status)).await,
             )
             .await
-            .unwrap(), // .unwrap_or_else(|e| format!("Error: {e}")),
+            .unwrap_or_else(|e| format!("Error: {e}")),
         );
     }
 
@@ -105,7 +101,9 @@ async fn render(
     match diff {
         (None, None) => Ok("".to_string()),
         (None, Some(after)) => {
-            let urls = full_render(job, &after).await?;
+            let urls = full_render(job, &after)
+                .await
+                .context("Failed to render new icon file")?;
             // TODO: tempted to use an <img> tag so i can set a style that upscales 32x32 to 64x64 and sets all the browser flags for nearest neighbor scaling
             let mut builder = String::new();
             for url in urls {
@@ -139,7 +137,9 @@ async fn render(
         }
         (Some(before), None) => {
             // dbg!(&before.icon.metadata);
-            let urls = full_render(job, &before).await?;
+            let urls = full_render(job, &before)
+                .await
+                .context("Failed to render deleted icon file")?;
             // dbg!(&urls);
             // TODO: tempted to use an <img> tag so i can set a style that upscales 32x32 to 64x64 and sets all the browser flags for nearest neighbor scaling
             let mut builder = String::new();
@@ -195,7 +195,8 @@ async fn render(
                         before.icon.metadata.get_icon_state(state).unwrap(),
                         &mut before_renderer,
                     )
-                    .await?;
+                    .await
+                    .with_context(|| format!("Failed to render before-state {state}"))?;
                     builder.push_str(&format!(
                         include_str!(concat!(
                             env!("CARGO_MANIFEST_DIR"),
@@ -214,7 +215,8 @@ async fn render(
                         after.icon.metadata.get_icon_state(state).unwrap(),
                         &mut after_renderer,
                     )
-                    .await?;
+                    .await
+                    .with_context(|| format!("Failed to render after-state {state}"))?;
                     builder.push_str(&format!(
                         include_str!(concat!(
                             env!("CARGO_MANIFEST_DIR"),
@@ -238,9 +240,17 @@ async fn render(
                     let after_state = after.icon.metadata.get_icon_state(state).unwrap();
 
                     let (_, before_url) =
-                        render_state(&prefix, &before, before_state, &mut before_renderer).await?;
+                        render_state(&prefix, &before, before_state, &mut before_renderer)
+                            .await
+                            .with_context(|| {
+                                format!("Failed to render modified before-state {state}")
+                            })?;
                     let (_, after_url) =
-                        render_state(&prefix, &after, after_state, &mut after_renderer).await?;
+                        render_state(&prefix, &after, after_state, &mut after_renderer)
+                            .await
+                            .with_context(|| {
+                                format!("Failed to render modified before-state {state}")
+                            })?;
 
                     builder.push_str(&format!(
                         include_str!(concat!(
@@ -278,7 +288,8 @@ async fn render_state<'a, S: AsRef<str>>(
 ) -> Result<(String, String)> {
     let directory = Path::new(".").join("images").join(prefix.as_ref());
     // Always remember to mkdir -p your paths
-    std::fs::create_dir_all(&directory)?;
+    std::fs::create_dir_all(&directory)
+        .with_context(|| format!("Failed to create directory {:?}", directory))?;
 
     let filename = format!(
         "{}-{}-{}-{}",
@@ -294,7 +305,9 @@ async fn render_state<'a, S: AsRef<str>>(
 
     let path = directory.join(&filename);
     // dbg!(&path, &state.frames);
-    let corrected_path = renderer.render_state(state, path)?;
+    let corrected_path = renderer
+        .render_state(state, path)
+        .with_context(|| format!("Failed to render state {}", state.name))?;
     let extension = corrected_path
         .extension()
         .ok_or_else(|| format_err!("Unable to get extension that was written to"))?;
@@ -326,7 +339,9 @@ async fn full_render(
     drop(access);
 
     for state in icon.metadata.states.iter() {
-        let (name, url) = render_state(&prefix, target, state, &mut renderer).await?;
+        let (name, url) = render_state(&prefix, target, state, &mut renderer)
+            .await
+            .with_context(|| format!("Failed to render state {}", state.name))?;
         vec.push((name, url));
     }
 
