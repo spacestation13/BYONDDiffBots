@@ -1,7 +1,11 @@
 // should fix but lazy
 #![allow(clippy::format_push_string)]
 
-use std::{collections::HashSet, path::Path, sync::Arc};
+use std::{
+    collections::HashSet,
+    path::{Path, PathBuf},
+    sync::Arc,
+};
 
 use anyhow::{format_err, Context, Result};
 use diffbot_lib::{
@@ -36,25 +40,38 @@ fn status_to_sha(job: &Job, status: ModifiedFileStatus) -> (Option<&str>, Option
 }
 
 struct IconFileWithName {
-    pub name: String,
+    pub short_name: String,
+    pub full_name: String,
     pub sha: String,
     pub icon: IconFile,
 }
 
-async fn get_if_exists(job: &Job, filename: &str, sha: Option<&str>) -> Option<IconFileWithName> {
+async fn get_if_exists(
+    job: &Job,
+    filename: &str,
+    sha: Option<&str>,
+) -> Result<Option<IconFileWithName>> {
+    let short_name = PathBuf::from(filename)
+        .file_name()
+        .context("Failed to get file name")?
+        .to_str()
+        .context("Failed to convert file name to UTF8")?
+        .to_string();
+
     if let Some(sha) = sha {
-        Some(IconFileWithName {
-            name: filename.to_string(),
+        Ok(Some(IconFileWithName {
+            full_name: filename.to_string(),
+            short_name,
             sha: sha.to_string(),
             icon: IconFile::from_raw(
                 download_url(&job.installation, &job.base.repo, filename, sha)
                     .await
-                    .ok()?,
+                    .with_context(|| format!("Failed to download file {:?}", filename))?,
             )
-            .ok()?,
-        })
+            .with_context(|| format!("IconFile::from_raw failed for {:?}", filename))?,
+        }))
     } else {
-        None
+        Ok(None)
     }
 }
 
@@ -62,15 +79,15 @@ async fn sha_to_iconfile(
     job: &Job,
     filename: &str,
     sha: (Option<&str>, Option<&str>),
-) -> (Option<IconFileWithName>, Option<IconFileWithName>) {
-    (
-        get_if_exists(job, filename, sha.0).await,
-        get_if_exists(job, filename, sha.1).await,
-    )
+) -> Result<(Option<IconFileWithName>, Option<IconFileWithName>)> {
+    Ok((
+        get_if_exists(job, filename, sha.0).await?,
+        get_if_exists(job, filename, sha.1).await?,
+    ))
 }
 
 pub async fn handle_changed_files(job: &Job) -> Result<CheckOutputs> {
-    job.check_run.mark_started().await.unwrap();
+    job.check_run.mark_started().await?;
 
     // TODO: not omegalul
     let mut output_builder =
@@ -82,7 +99,7 @@ pub async fn handle_changed_files(job: &Job) -> Result<CheckOutputs> {
         output_builder.add_text(
             &render(
                 Arc::clone(&protected_job),
-                sha_to_iconfile(job, &dmi.filename, status_to_sha(job, dmi.status)).await,
+                sha_to_iconfile(job, &dmi.filename, status_to_sha(job, dmi.status)).await?,
             )
             .await
             .unwrap_or_else(|e| format!("Error: {:?}", e)),
@@ -132,7 +149,7 @@ async fn render(
                     env!("CARGO_MANIFEST_DIR"),
                     "/templates/diff_add.txt"
                 )),
-                filename = after.name,
+                filename = after.full_name,
                 table = builder
             ))
         }
@@ -170,7 +187,7 @@ async fn render(
                     env!("CARGO_MANIFEST_DIR"),
                     "/templates/diff_remove.txt"
                 )),
-                filename = before.name,
+                filename = before.full_name,
                 table = builder
             ))
         }
@@ -274,7 +291,7 @@ async fn render(
                     env!("CARGO_MANIFEST_DIR"),
                     "/templates/diff_modify.txt"
                 )),
-                filename = before.name,
+                filename = before.full_name,
                 table = builder
             ))
         }
@@ -297,7 +314,7 @@ async fn render_state<'a, S: AsRef<str>>(
         // Differentiate between before-after files
         &target.sha,
         // Differentiate between different files in the same commit
-        &target.name.replace(".dmi", ""),
+        &target.short_name.replace(".dmi", ""),
         // Differentiate between duplicate states
         state.duplicate.unwrap_or(0),
         // Diffentiate between states.
@@ -307,8 +324,8 @@ async fn render_state<'a, S: AsRef<str>>(
     let path = directory.join(&filename);
     // dbg!(&path, &state.frames);
     let corrected_path = renderer
-        .render_state(state, path)
-        .with_context(|| format!("Failed to render state {}", state.name))?;
+        .render_state(state, &path)
+        .with_context(|| format!("Failed to render state {} to file {:?}", state.name, path))?;
     let extension = corrected_path
         .extension()
         .ok_or_else(|| format_err!("Unable to get extension that was written to"))?;
