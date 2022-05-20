@@ -72,6 +72,7 @@ async fn sha_to_iconfile(
 pub async fn handle_changed_files(job: &Job) -> Result<CheckOutputs> {
     job.check_run.mark_started().await.unwrap();
 
+    // TODO: not omegalul
     let mut output_builder =
         CheckOutputBuilder::new("Icon difference rendering", "Omegalul pog pog pog");
 
