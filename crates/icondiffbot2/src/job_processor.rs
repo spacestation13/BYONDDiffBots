@@ -99,8 +99,9 @@ async fn render(
     job: Arc<Mutex<&Job>>,
     diff: (Option<IconFileWithName>, Option<IconFileWithName>),
 ) -> Result<String> {
-    // TODO: Don't blindly render to images/ directory
-    // TODO: Table should be |Icon State|Old|New|Changes|
+    // TODO: Alphabetize
+    // TODO: Test more edge cases
+    // TODO: Parallelize?
     match diff {
         (None, None) => Ok("".to_string()),
         (None, Some(after)) => {
