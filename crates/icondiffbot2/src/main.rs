@@ -24,6 +24,7 @@ async fn index() -> &'static str {
 #[derive(Debug, Deserialize)]
 pub struct Config {
     pub private_key_path: String,
+    // TODO: use regular url and append /images in code
     pub file_hosting_url: String,
     pub app_id: u64,
     // TODO: Blacklist support
