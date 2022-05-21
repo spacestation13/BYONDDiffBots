@@ -2,8 +2,9 @@
 #![allow(clippy::format_push_string)]
 
 use std::{
-    collections::HashSet,
-    path::{Path, PathBuf},
+    collections::{hash_map::DefaultHasher, HashSet},
+    hash::{Hash, Hasher},
+    path::Path,
     sync::Arc,
 };
 
@@ -40,9 +41,9 @@ fn status_to_sha(job: &Job, status: ModifiedFileStatus) -> (Option<&str>, Option
 }
 
 struct IconFileWithName {
-    pub short_name: String,
     pub full_name: String,
     pub sha: String,
+    pub hash: u64,
     pub icon: IconFile,
 }
 
@@ -51,24 +52,21 @@ async fn get_if_exists(
     filename: &str,
     sha: Option<&str>,
 ) -> Result<Option<IconFileWithName>> {
-    let short_name = PathBuf::from(filename)
-        .file_name()
-        .context("Failed to get file name")?
-        .to_str()
-        .context("Failed to convert file name to UTF8")?
-        .to_string();
-
     if let Some(sha) = sha {
+        let raw = download_url(&job.installation, &job.base.repo, filename, sha)
+            .await
+            .with_context(|| format!("Failed to download file {:?}", filename))?;
+
+        let mut hasher = DefaultHasher::new();
+        raw.hash(&mut hasher);
+        let hash = hasher.finish();
+
         Ok(Some(IconFileWithName {
             full_name: filename.to_string(),
-            short_name,
             sha: sha.to_string(),
-            icon: IconFile::from_raw(
-                download_url(&job.installation, &job.base.repo, filename, sha)
-                    .await
-                    .with_context(|| format!("Failed to download file {:?}", filename))?,
-            )
-            .with_context(|| format!("IconFile::from_raw failed for {:?}", filename))?,
+            hash,
+            icon: IconFile::from_raw(raw)
+                .with_context(|| format!("IconFile::from_raw failed for {:?}", filename))?,
         }))
     } else {
         Ok(None)
@@ -309,19 +307,15 @@ async fn render_state<'a, S: AsRef<str>>(
     std::fs::create_dir_all(&directory)
         .with_context(|| format!("Failed to create directory {:?}", directory))?;
 
-    // TODO: Discriminate harder
-    let filename = format!(
-        "{}-{}-{}-{}",
-        // Differentiate between before-after files
-        &target.sha,
-        // Differentiate between different files in the same commit
-        &target.short_name.replace(".dmi", ""),
-        // Differentiate between duplicate states
-        state.duplicate.unwrap_or(0),
-        // Diffentiate between states.
-        sanitize_filename::sanitize(&state.name)
-    );
+    let mut hasher = DefaultHasher::new();
+    target.sha.hash(&mut hasher);
+    target.full_name.hash(&mut hasher);
+    target.hash.hash(&mut hasher);
+    state.duplicate.unwrap_or(0).hash(&mut hasher);
+    state.name.hash(&mut hasher);
+    let filename = hasher.finish().to_string();
 
+    // TODO: Calculate file extension separately so that we can Error here if we overwrite a file
     let path = directory.join(&filename);
     // dbg!(&path, &state.frames);
     let corrected_path = renderer
