@@ -89,9 +89,9 @@ async fn sha_to_iconfile(
 pub async fn handle_changed_files(job: &Job) -> Result<CheckOutputs> {
     job.check_run.mark_started().await?;
 
-    // TODO: not omegalul
     let mut output_builder =
-        CheckOutputBuilder::new("Icon difference rendering", "Omegalul pog pog pog");
+        CheckOutputBuilder::new("Icon difference rendering",
+        "*This is still a beta. Please file any issues [here](https://github.com/spacestation13/BYONDDiffBots/).*\n\nIcons with diff:",);
 
     let protected_job = Arc::new(Mutex::new(job));
 
@@ -309,6 +309,7 @@ async fn render_state<'a, S: AsRef<str>>(
     std::fs::create_dir_all(&directory)
         .with_context(|| format!("Failed to create directory {:?}", directory))?;
 
+    // TODO: Discriminate harder
     let filename = format!(
         "{}-{}-{}-{}",
         // Differentiate between before-after files
