@@ -1,6 +1,6 @@
 use super::values::*;
 use nom::{
-    bytes::complete::tag, character::complete::alpha1, combinator::map_opt,
+    bytes::complete::tag, character::complete::alpha1, combinator::map_res,
     sequence::separated_pair, IResult,
 };
 
@@ -75,20 +75,23 @@ pub enum KeyValue {
 }
 
 pub fn key_value(input: &str) -> IResult<&str, KeyValue> {
-    map_opt(
+    map_res(
         separated_pair(key, tag(" = "), atom),
         |(key, value)| match (key, value) {
-            (Key::Version, Value::Float(x)) => Some(KeyValue::Version(x)),
-            (Key::State, Value::String(x)) => Some(KeyValue::State(x)),
-            (Key::Dirs, Value::Int(x)) => Some(KeyValue::Dirs(x.try_into().ok()?)),
-            (Key::Frames, Value::Int(x)) => Some(KeyValue::Frames(x)),
-            (Key::Delay, Value::List(x)) => Some(KeyValue::Delay(x)),
-            (Key::Loop, Value::Int(x)) => Some(KeyValue::Loop(x > 0)),
-            (Key::Rewind, Value::Int(x)) => Some(KeyValue::Rewind(x > 0)),
-            (Key::Movement, Value::Int(x)) => Some(KeyValue::Movement(x > 0)),
-            (Key::Hotspot, Value::List(x)) => Some(KeyValue::Hotspot(x)),
-            (Key::Unk(key), atom) => Some(KeyValue::Unk(key, atom)),
-            _ => None,
+            (Key::Version, Value::Float(x)) => Ok(KeyValue::Version(x)),
+            (Key::State, Value::String(x)) => Ok(KeyValue::State(x)),
+            (Key::Dirs, Value::Int(x)) => Ok(KeyValue::Dirs(x.try_into()?)),
+            (Key::Frames, Value::Int(x)) => Ok(KeyValue::Frames(x)),
+            (Key::Delay, Value::List(x)) => Ok(KeyValue::Delay(x)),
+            (Key::Loop, Value::Int(x)) => Ok(KeyValue::Loop(x > 0)),
+            (Key::Rewind, Value::Int(x)) => Ok(KeyValue::Rewind(x > 0)),
+            (Key::Movement, Value::Int(x)) => Ok(KeyValue::Movement(x > 0)),
+            (Key::Hotspot, Value::List(x)) => Ok(KeyValue::Hotspot(x)),
+            (Key::Unk(key), atom) => Ok(KeyValue::Unk(key, atom)),
+            _ => Err(std::io::Error::new(
+                std::io::ErrorKind::InvalidData,
+                "Unable to find matching key/value",
+            )),
         },
     )(input)
 }
