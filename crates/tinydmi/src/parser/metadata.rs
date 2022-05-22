@@ -1,4 +1,4 @@
-use nom::{bytes::complete::tag, combinator::recognize, IResult};
+use nom::{bytes::complete::tag, IResult};
 
 pub fn begin_dmi(input: &str) -> IResult<&str, &str> {
     tag("# BEGIN DMI")(input)
@@ -12,7 +12,7 @@ pub fn end_dmi(input: &str) -> IResult<&str, &str> {
 mod tests {
     #[test]
     fn metadata() {
-        let description = r#"
+        let _description = r#"
 # BEGIN DMI
 version = 4.0
     width = 32

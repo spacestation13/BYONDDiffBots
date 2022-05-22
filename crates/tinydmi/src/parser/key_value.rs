@@ -1,10 +1,7 @@
 use super::atoms::*;
 use nom::{
-    bytes::complete::tag,
-    character::complete::alpha1,
-    combinator::{map_opt, map_res},
-    sequence::separated_pair,
-    IResult,
+    bytes::complete::tag, character::complete::alpha1, combinator::map_opt,
+    sequence::separated_pair, IResult,
 };
 
 #[derive(Debug, PartialEq, Eq)]

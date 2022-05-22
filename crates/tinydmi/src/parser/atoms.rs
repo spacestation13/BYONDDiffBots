@@ -1,9 +1,9 @@
 use nom::{
     branch::alt,
     bytes::complete::tag,
-    character::complete::{alpha1, anychar, digit1, none_of},
-    combinator::{map, map_parser, not, recognize},
-    multi::{fold_many1, many1},
+    character::complete::{digit1, none_of},
+    combinator::{map, map_parser, recognize},
+    multi::fold_many1,
     sequence::{delimited, tuple},
     IResult,
 };
@@ -57,7 +57,7 @@ pub fn atom_u32(input: &str) -> IResult<&str, Atom> {
 }
 
 pub fn atom_string(input: &str) -> IResult<&str, Atom> {
-    map(string, |s| Atom::String(s))(input)
+    map(string, Atom::String)(input)
 }
 
 pub fn atom_list(input: &str) -> IResult<&str, Atom> {
