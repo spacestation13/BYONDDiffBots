@@ -1,4 +1,4 @@
-use super::atoms::*;
+use super::values::*;
 use nom::{
     bytes::complete::tag, character::complete::alpha1, combinator::map_opt,
     sequence::separated_pair, IResult,
@@ -48,22 +48,22 @@ pub enum KeyValue {
     Rewind(bool),
     Movement(bool),
     Hotspot(Vec<f32>),
-    Unk(String, Atom),
+    Unk(String, Value),
 }
 
 pub fn key_value(input: &str) -> IResult<&str, KeyValue> {
     map_opt(
         separated_pair(key, tag(" = "), atom),
         |(key, value)| match (key, value) {
-            (Key::Version, Atom::Float(x)) => Some(KeyValue::Version(x)),
-            (Key::State, Atom::String(x)) => Some(KeyValue::State(x)),
-            (Key::Dirs, Atom::Int(x)) => Some(KeyValue::Dirs(x)),
-            (Key::Frames, Atom::Int(x)) => Some(KeyValue::Frames(x)),
-            (Key::Delay, Atom::List(x)) => Some(KeyValue::Delay(x)),
-            (Key::Loop, Atom::Int(x)) => Some(KeyValue::Loop(x > 0)),
-            (Key::Rewind, Atom::Int(x)) => Some(KeyValue::Rewind(x > 0)),
-            (Key::Movement, Atom::Int(x)) => Some(KeyValue::Movement(x > 0)),
-            (Key::Hotspot, Atom::List(x)) => Some(KeyValue::Hotspot(x)),
+            (Key::Version, Value::Float(x)) => Some(KeyValue::Version(x)),
+            (Key::State, Value::String(x)) => Some(KeyValue::State(x)),
+            (Key::Dirs, Value::Int(x)) => Some(KeyValue::Dirs(x)),
+            (Key::Frames, Value::Int(x)) => Some(KeyValue::Frames(x)),
+            (Key::Delay, Value::List(x)) => Some(KeyValue::Delay(x)),
+            (Key::Loop, Value::Int(x)) => Some(KeyValue::Loop(x > 0)),
+            (Key::Rewind, Value::Int(x)) => Some(KeyValue::Rewind(x > 0)),
+            (Key::Movement, Value::Int(x)) => Some(KeyValue::Movement(x > 0)),
+            (Key::Hotspot, Value::List(x)) => Some(KeyValue::Hotspot(x)),
             (Key::Unk(key), atom) => Some(KeyValue::Unk(key, atom)),
             _ => None,
         },

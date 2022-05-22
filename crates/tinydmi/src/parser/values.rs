@@ -35,7 +35,7 @@ pub fn string(input: &str) -> IResult<&str, String> {
 }
 
 #[derive(Debug, PartialEq)]
-pub enum Atom {
+pub enum Value {
     Float(f32),
     Int(u32),
     String(String),
@@ -46,28 +46,28 @@ pub fn rec_float(input: &str) -> IResult<&str, &str> {
     recognize(tuple((digit1, decimal, digit1)))(input)
 }
 
-pub fn atom_float(input: &str) -> IResult<&str, Atom> {
+pub fn atom_float(input: &str) -> IResult<&str, Value> {
     map(map_parser(rec_float, nom::number::complete::float), |f| {
-        Atom::Float(f)
+        Value::Float(f)
     })(input)
 }
 
-pub fn atom_u32(input: &str) -> IResult<&str, Atom> {
-    map(nom::character::complete::u32, Atom::Int)(input)
+pub fn atom_u32(input: &str) -> IResult<&str, Value> {
+    map(nom::character::complete::u32, Value::Int)(input)
 }
 
-pub fn atom_string(input: &str) -> IResult<&str, Atom> {
-    map(string, Atom::String)(input)
+pub fn atom_string(input: &str) -> IResult<&str, Value> {
+    map(string, Value::String)(input)
 }
 
-pub fn atom_list(input: &str) -> IResult<&str, Atom> {
+pub fn atom_list(input: &str) -> IResult<&str, Value> {
     map(
         separated_list1_nonoptional(tag(","), nom::number::complete::float),
-        Atom::List,
+        Value::List,
     )(input)
 }
 
-pub fn atom(input: &str) -> IResult<&str, Atom> {
+pub fn atom(input: &str) -> IResult<&str, Value> {
     alt((atom_list, atom_float, atom_u32, atom_string))(input)
 }
 
@@ -81,12 +81,15 @@ mod tests {
         let int = r#"32"#;
         let string = r#""duplicate""#;
         let list = r#"1,2,5.4"#;
-        assert_eq!(atom(float), Ok(("", Atom::Float(4.0))));
-        assert_eq!(atom(int), Ok(("", Atom::Int(32))));
+        assert_eq!(atom(float), Ok(("", Value::Float(4.0))));
+        assert_eq!(atom(int), Ok(("", Value::Int(32))));
         assert_eq!(
             atom(string),
-            Ok(("", Atom::String("duplicate".to_string())))
+            Ok(("", Value::String("duplicate".to_string())))
         );
-        assert_eq!(atom(list), Ok(("", Atom::List(Vec::from([1.0, 2.0, 5.4])))));
+        assert_eq!(
+            atom(list),
+            Ok(("", Value::List(Vec::from([1.0, 2.0, 5.4]))))
+        );
     }
 }
