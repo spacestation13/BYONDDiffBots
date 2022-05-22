@@ -1,5 +1,11 @@
 use super::atoms::*;
-use nom::{bytes::complete::tag, character::complete::alpha1, sequence::separated_pair, IResult};
+use nom::{
+    bytes::complete::tag,
+    character::complete::alpha1,
+    combinator::{map_opt, map_res},
+    sequence::separated_pair,
+    IResult,
+};
 
 #[derive(Debug, PartialEq, Eq)]
 pub enum Key {
@@ -45,54 +51,26 @@ pub enum KeyValue {
     Rewind(bool),
     Movement(bool),
     Hotspot(Vec<f32>),
-    Unk(Key, Atom),
-}
-
-macro_rules! kv {
-    ($in:pat => $out:expr, $value:expr, $tail:expr) => {{
-        match $value {
-            $in => Ok(($tail, $out)),
-            _ => Err(nom::Err::Failure(nom::error::Error::new(
-                $tail,
-                nom::error::ErrorKind::MapRes,
-            ))),
-        }
-    }};
+    Unk(String, Atom),
 }
 
 pub fn key_value(input: &str) -> IResult<&str, KeyValue> {
-    let (tail, (key, value)) = separated_pair(key, tag(" = "), atom)(input)?;
-
-    match key {
-        Key::Version => {
-            kv!(Atom::Float(x) => KeyValue::Version(x), value, tail)
-        }
-        Key::State => {
-            kv!(Atom::String(x) => KeyValue::State(x), value, tail)
-        }
-        Key::Dirs => {
-            kv!(Atom::Int(x) => KeyValue::Dirs(x), value, tail)
-        }
-        Key::Frames => {
-            kv!(Atom::Int(x) => KeyValue::Frames(x), value, tail)
-        }
-        Key::Delay => {
-            kv!(Atom::List(x) => KeyValue::Delay(x), value, tail)
-        }
-        Key::Loop => {
-            kv!(Atom::Int(x) => KeyValue::Loop(x > 0), value, tail)
-        }
-        Key::Rewind => {
-            kv!(Atom::Int(x) => KeyValue::Rewind(x > 0), value, tail)
-        }
-        Key::Movement => {
-            kv!(Atom::Int(x) => KeyValue::Movement(x > 0), value, tail)
-        }
-        Key::Hotspot => {
-            kv!(Atom::List(x) => KeyValue::Hotspot(x), value, tail)
-        }
-        Key::Unk(_) => Ok((tail, KeyValue::Unk(key, value))),
-    }
+    map_opt(
+        separated_pair(key, tag(" = "), atom),
+        |(key, value)| match (key, value) {
+            (Key::Version, Atom::Float(x)) => Some(KeyValue::Version(x)),
+            (Key::State, Atom::String(x)) => Some(KeyValue::State(x)),
+            (Key::Dirs, Atom::Int(x)) => Some(KeyValue::Dirs(x)),
+            (Key::Frames, Atom::Int(x)) => Some(KeyValue::Frames(x)),
+            (Key::Delay, Atom::List(x)) => Some(KeyValue::Delay(x)),
+            (Key::Loop, Atom::Int(x)) => Some(KeyValue::Loop(x > 0)),
+            (Key::Rewind, Atom::Int(x)) => Some(KeyValue::Rewind(x > 0)),
+            (Key::Movement, Atom::Int(x)) => Some(KeyValue::Movement(x > 0)),
+            (Key::Hotspot, Atom::List(x)) => Some(KeyValue::Hotspot(x)),
+            (Key::Unk(key), atom) => Some(KeyValue::Unk(key, atom)),
+            _ => None,
+        },
+    )(input)
 }
 
 #[cfg(test)]
