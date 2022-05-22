@@ -1,8 +1,9 @@
 use nom::{
     branch::alt,
     bytes::complete::tag,
-    character::complete::{alpha1, digit1},
-    combinator::{map, map_parser, recognize},
+    character::complete::{alpha1, anychar, digit1, none_of},
+    combinator::{map, map_parser, not, recognize},
+    multi::{fold_many1, many1},
     sequence::{delimited, tuple},
     IResult,
 };
@@ -17,8 +18,20 @@ pub fn decimal(input: &str) -> IResult<&str, char> {
     nom::character::complete::char('.')(input)
 }
 
-pub fn string(input: &str) -> IResult<&str, &str> {
-    delimited(quote, alpha1, quote)(input)
+pub fn character(input: &str) -> IResult<&str, char> {
+    let (input, c) = none_of("\"")(input)?;
+    Ok((input, c))
+}
+
+pub fn string(input: &str) -> IResult<&str, String> {
+    delimited(
+        quote,
+        fold_many1(character, String::new, |mut string, c| {
+            string.push(c);
+            string
+        }),
+        quote,
+    )(input)
 }
 
 #[derive(Debug, PartialEq)]
@@ -44,7 +57,7 @@ pub fn atom_u32(input: &str) -> IResult<&str, Atom> {
 }
 
 pub fn atom_string(input: &str) -> IResult<&str, Atom> {
-    map(string, |s| Atom::String(s.to_string()))(input)
+    map(string, |s| Atom::String(s))(input)
 }
 
 pub fn atom_list(input: &str) -> IResult<&str, Atom> {
