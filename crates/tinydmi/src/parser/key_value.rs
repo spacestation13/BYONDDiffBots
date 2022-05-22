@@ -37,11 +37,34 @@ pub fn key(input: &str) -> IResult<&str, Key> {
     ))
 }
 
+#[derive(Debug, PartialEq, Eq)]
+pub enum Dirs {
+    One,
+    Four,
+    Eight,
+}
+
+impl TryFrom<u32> for Dirs {
+    type Error = std::io::Error;
+
+    fn try_from(value: u32) -> Result<Self, Self::Error> {
+        match value {
+            1 => Ok(Dirs::One),
+            4 => Ok(Dirs::Four),
+            8 => Ok(Dirs::Eight),
+            x => Err(std::io::Error::new(
+                std::io::ErrorKind::InvalidInput,
+                format!("Invalid value {} for dirs", x),
+            )),
+        }
+    }
+}
+
 #[derive(Debug, PartialEq)]
 pub enum KeyValue {
     Version(f32),
     State(String),
-    Dirs(u32),
+    Dirs(Dirs),
     Frames(u32),
     Delay(Vec<f32>),
     Loop(bool),
@@ -57,7 +80,7 @@ pub fn key_value(input: &str) -> IResult<&str, KeyValue> {
         |(key, value)| match (key, value) {
             (Key::Version, Value::Float(x)) => Some(KeyValue::Version(x)),
             (Key::State, Value::String(x)) => Some(KeyValue::State(x)),
-            (Key::Dirs, Value::Int(x)) => Some(KeyValue::Dirs(x)),
+            (Key::Dirs, Value::Int(x)) => Some(KeyValue::Dirs(x.try_into().ok()?)),
             (Key::Frames, Value::Int(x)) => Some(KeyValue::Frames(x)),
             (Key::Delay, Value::List(x)) => Some(KeyValue::Delay(x)),
             (Key::Loop, Value::Int(x)) => Some(KeyValue::Loop(x > 0)),
@@ -92,7 +115,10 @@ mod tests {
 
     #[test]
     fn dirs() {
-        assert_eq!(key_value(r#"dirs = 4"#), Ok(("", (KeyValue::Dirs(4)))));
+        assert_eq!(
+            key_value(r#"dirs = 4"#),
+            Ok(("", (KeyValue::Dirs(Dirs::Four))))
+        );
     }
 
     #[test]
