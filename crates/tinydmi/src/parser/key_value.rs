@@ -7,6 +7,8 @@ use nom::{
 #[derive(Debug, PartialEq, Eq)]
 pub enum Key {
     Version,
+    Width,
+    Height,
     State,
     Dirs,
     Frames,
@@ -24,6 +26,8 @@ pub fn key(input: &str) -> IResult<&str, Key> {
         tail,
         match key {
             "version" => Key::Version,
+            "width" => Key::Width,
+            "height" => Key::Height,
             "state" => Key::State,
             "dirs" => Key::Dirs,
             "frames" => Key::Frames,
@@ -63,6 +67,8 @@ impl TryFrom<u32> for Dirs {
 #[derive(Debug, PartialEq)]
 pub enum KeyValue {
     Version(f32),
+    Width(u32),
+    Height(u32),
     State(String),
     Dirs(Dirs),
     Frames(u32),
@@ -79,6 +85,8 @@ pub fn key_value(input: &str) -> IResult<&str, KeyValue> {
         separated_pair(key, tag(" = "), atom),
         |(key, value)| match (key, value) {
             (Key::Version, Value::Float(x)) => Ok(KeyValue::Version(x)),
+            (Key::Width, Value::Int(x)) => Ok(KeyValue::Width(x)),
+            (Key::Height, Value::Int(x)) => Ok(KeyValue::Height(x)),
             (Key::State, Value::String(x)) => Ok(KeyValue::State(x)),
             (Key::Dirs, Value::Int(x)) => Ok(KeyValue::Dirs(x.try_into()?)),
             (Key::Frames, Value::Int(x)) => Ok(KeyValue::Frames(x)),
@@ -105,6 +113,19 @@ mod tests {
         assert_eq!(
             key_value(r#"version = 4.0"#),
             Ok(("", (KeyValue::Version(4.0))))
+        );
+    }
+
+    #[test]
+    fn width() {
+        assert_eq!(key_value(r#"width = 32"#), Ok(("", (KeyValue::Width(32)))));
+    }
+
+    #[test]
+    fn height() {
+        assert_eq!(
+            key_value(r#"height = 32"#),
+            Ok(("", (KeyValue::Height(32))))
         );
     }
 
