@@ -107,6 +107,14 @@ pub struct Metadata {
     pub states: Vec<State>,
 }
 
+impl Metadata {
+    pub fn load<S: AsRef<str>>(input: S) -> Result<Metadata, std::io::Error> {
+        Ok(metadata(input.as_ref())
+            .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e.to_string()))?
+            .1)
+    }
+}
+
 pub fn metadata(input: &str) -> IResult<&str, Metadata> {
     let (tail, (header, states)) =
         all_consuming(delimited(begin_dmi, pair(header, many0(state)), end_dmi))(input)?;
