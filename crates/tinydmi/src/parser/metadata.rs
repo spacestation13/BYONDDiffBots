@@ -115,6 +115,8 @@ pub fn metadata(input: &str) -> IResult<&str, Metadata> {
 
 #[cfg(test)]
 mod tests {
+    use crate::parser::{key_value::Dirs, state::Frames};
+
     use super::*;
     #[test]
     fn test_metadata() {
@@ -123,13 +125,16 @@ mod tests {
 version = 4.0
     width = 32
     height = 32
-state = "duplicate"
-    dirs = 1
-    frames = 1
-state = "duplicate"
-    dirs = 1
-    frames = 1
-state = "duplicate"
+state = "state1"
+    dirs = 4
+    frames = 2
+    delay = 1.2,1
+    movement = 1
+    loop = 1
+    rewind = 0
+    hotspot = 12,13,0
+    future = "lmao"
+state = "state2"
     dirs = 1
     frames = 1
 # END DMI
@@ -138,6 +143,25 @@ state = "duplicate"
 
         let (tail, metadata) = metadata(description).unwrap();
         assert_eq!(tail, "");
+
+        assert_eq!(metadata.header.version, 4.0);
+        assert_eq!(metadata.header.width, 32);
+        assert_eq!(metadata.header.height, 32);
+
+        assert_eq!(metadata.states[0].name, "state1".to_string());
+        assert_eq!(metadata.states[0].dirs, Dirs::Four);
+        assert_eq!(
+            metadata.states[0].frames,
+            Frames::Delays(Vec::from([1.2, 1.0]))
+        );
+        assert!(metadata.states[0].movement);
+        assert!(metadata.states[0].r#loop);
+        assert!(!metadata.states[0].rewind);
+        assert_eq!(metadata.states[0].hotspot, Some([12.0, 13.0, 0.0]));
+
+        assert_eq!(metadata.states[1].name, "state2".to_string());
+        assert_eq!(metadata.states[1].dirs, Dirs::One);
+        assert_eq!(metadata.states[1].frames, Frames::One);
 
         dbg!(metadata);
     }

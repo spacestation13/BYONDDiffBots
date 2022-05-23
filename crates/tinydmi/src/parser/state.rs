@@ -74,7 +74,11 @@ impl TryFrom<(KeyValue, Vec<KeyValue>)> for State {
                 KeyValue::Dirs(d) => dirs = Some(d),
                 KeyValue::Frames(f) => {
                     if matches!(frames, Frames::One) {
-                        frames = Frames::Count(f);
+                        if f == 1 {
+                            frames = Frames::One
+                        } else {
+                            frames = Frames::Count(f);
+                        }
                     } else {
                         return Err(Error::new(
                             ErrorKind::InvalidData,
