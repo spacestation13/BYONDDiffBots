@@ -28,7 +28,7 @@ pub struct Header {
     pub version: f32,
     pub width: u32,
     pub height: u32,
-    pub other: Option<HashMap<String, Value>>,
+    pub unk: Option<HashMap<String, Value>>,
 }
 
 impl TryFrom<(KeyValue, Vec<KeyValue>)> for Header {
@@ -51,7 +51,7 @@ impl TryFrom<(KeyValue, Vec<KeyValue>)> for Header {
 
         let mut width = None;
         let mut height = None;
-        let mut other: Option<HashMap<String, Value>> = None;
+        let mut unk: Option<HashMap<String, Value>> = None;
 
         for value in kvs {
             match value {
@@ -62,12 +62,12 @@ impl TryFrom<(KeyValue, Vec<KeyValue>)> for Header {
                     height = Some(h);
                 }
                 KeyValue::Unk(key, value) => {
-                    if let Some(map) = &mut other {
+                    if let Some(map) = &mut unk {
                         map.insert(key, value);
                     } else {
                         let mut new_map = HashMap::new();
                         new_map.insert(key, value);
-                        other = Some(new_map);
+                        unk = Some(new_map);
                     }
                 }
                 x => {
@@ -84,7 +84,7 @@ impl TryFrom<(KeyValue, Vec<KeyValue>)> for Header {
             width: width.ok_or_else(|| Error::new(ErrorKind::InvalidData, "Never found width"))?,
             height: height
                 .ok_or_else(|| Error::new(ErrorKind::InvalidData, "Never found height"))?,
-            other,
+            unk,
         })
     }
 }
