@@ -3,7 +3,7 @@ use nom::{
     bytes::complete::tag,
     character::complete::{digit1, none_of},
     combinator::{map, map_parser, recognize},
-    multi::fold_many1,
+    multi::fold_many0,
     sequence::{delimited, tuple},
     IResult,
 };
@@ -26,7 +26,7 @@ pub fn character(input: &str) -> IResult<&str, char> {
 pub fn string(input: &str) -> IResult<&str, String> {
     delimited(
         quote,
-        fold_many1(character, String::new, |mut string, c| {
+        fold_many0(character, String::new, |mut string, c| {
             string.push(c);
             string
         }),
@@ -91,5 +91,11 @@ mod tests {
             atom(list),
             Ok(("", Value::List(Vec::from([1.0, 2.0, 5.4]))))
         );
+    }
+
+    #[test]
+    fn test_empty_str() {
+        let empty_str = r#""""#;
+        assert_eq!(atom(empty_str), Ok(("", Value::String("".to_string()))));
     }
 }
