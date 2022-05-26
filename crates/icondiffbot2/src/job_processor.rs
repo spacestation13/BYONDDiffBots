@@ -248,10 +248,24 @@ async fn render(
             }
 
             for state in before_states.intersection(&after_states) {
-                let before_state_render = before_renderer.render_to_images(state)?;
-                let after_state_render = after_renderer.render_to_images(state)?;
+                let before_state = before.icon.metadata.get_icon_state(state).unwrap();
+                let after_state = after.icon.metadata.get_icon_state(state).unwrap();
 
-                if before_state_render != after_state_render {
+                let difference = {
+                    if before_state != after_state {
+                        true
+                    } else {
+                        let before_state_render = before_renderer.render_to_images(state)?;
+                        let after_state_render = after_renderer.render_to_images(state)?;
+                        if before_state_render != after_state_render {
+                            true
+                        } else {
+                            false
+                        }
+                    }
+                };
+
+                if difference {
                     let before_state = before.icon.metadata.get_icon_state(state).unwrap();
                     let after_state = after.icon.metadata.get_icon_state(state).unwrap();
 
