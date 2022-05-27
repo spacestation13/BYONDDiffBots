@@ -120,7 +120,7 @@ pub struct PullRequestEventPayload {
     pub installation: Installation,
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, Debug)]
 pub struct Output {
     pub title: String,
     pub summary: String,
@@ -155,11 +155,13 @@ pub struct UpdateCheckRun {
 #[derive(Serialize, Deserialize, Clone, Copy)]
 pub struct Empty {}
 
+#[derive(Debug)]
 pub enum CheckOutputs {
     One(Output),
     Many(Output, Vec<Output>),
 }
 
+#[derive(Debug)]
 pub struct CheckOutputBuilder {
     title: String,
     summary: String,

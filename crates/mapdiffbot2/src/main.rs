@@ -77,7 +77,13 @@ async fn rocket() -> _ {
     let journal_clone = journal.clone();
 
     rocket::tokio::spawn(async move {
-        handle_jobs(job_receiver, journal_clone, job_processor::do_job).await
+        handle_jobs(
+            "MapDiffBot2",
+            job_receiver,
+            journal_clone,
+            job_processor::do_job,
+        )
+        .await
     });
 
     rocket

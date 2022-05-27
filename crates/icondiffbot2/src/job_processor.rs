@@ -257,11 +257,7 @@ async fn render(
                     } else {
                         let before_state_render = before_renderer.render_to_images(state)?;
                         let after_state_render = after_renderer.render_to_images(state)?;
-                        if before_state_render != after_state_render {
-                            true
-                        } else {
-                            false
-                        }
+                        before_state_render != after_state_render
                     }
                 };
 
