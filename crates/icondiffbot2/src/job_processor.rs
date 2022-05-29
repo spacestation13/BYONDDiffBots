@@ -105,33 +105,42 @@ pub async fn handle_changed_files(job: &Job) -> Result<CheckOutputs> {
         map.insert(dmi.filename.clone(), states);
     }
 
-    let mut details: Vec<(String, String)> = Vec::new();
+    let mut details: Vec<(String, String, String)> = Vec::new();
     let mut current_table = String::new();
 
-    for (key, states) in map.iter() {
+    for (key, (file_type, states)) in map.iter() {
         for state in states {
             current_table.push_str(state);
             current_table.push('\n');
             if current_table.len() > 60_000 {
-                details.push((key.clone(), std::mem::take(&mut current_table)));
+                details.push((
+                    key.clone(),
+                    file_type.clone(),
+                    std::mem::take(&mut current_table),
+                ));
             }
         }
         if !current_table.is_empty() {
-            details.push((key.clone(), std::mem::take(&mut current_table)));
+            details.push((
+                key.clone(),
+                file_type.clone(),
+                std::mem::take(&mut current_table),
+            ));
         }
     }
 
     let mut chunks: Vec<Output> = Vec::new();
     let mut current_output_text = String::new();
 
-    for (name, table) in details.iter() {
+    for (name, file_type, table) in details.iter() {
         current_output_text.push_str(&format!(
             include_str!(concat!(
                 env!("CARGO_MANIFEST_DIR"),
-                "/templates/diff_add.txt" // TODO: fix
+                "/templates/diff_details.txt"
             )),
             filename = name,
-            table = table
+            table = table,
+            typ = file_type,
         ));
         if current_output_text.len() > 60_000 {
             chunks.push(Output {
@@ -160,12 +169,12 @@ pub async fn handle_changed_files(job: &Job) -> Result<CheckOutputs> {
 async fn render(
     job: Arc<Mutex<&Job>>,
     diff: (Option<IconFileWithName>, Option<IconFileWithName>),
-) -> Result<Vec<String>> {
+) -> Result<(String, Vec<String>)> {
     // TODO: Alphabetize
     // TODO: Test more edge cases
     // TODO: Parallelize?
     match diff {
-        (None, None) => Ok(Vec::new()),
+        (None, None) => unreachable!("Diffing (None, None) makes no sense"),
         (None, Some(after)) => {
             let urls = full_render(job, &after)
                 .await
@@ -190,7 +199,7 @@ async fn render(
                 ));
             }
 
-            Ok(builder)
+            Ok(("ADDED".to_owned(), builder))
         }
         (Some(before), None) => {
             // dbg!(&before.icon.metadata);
@@ -219,7 +228,7 @@ async fn render(
                 ));
             }
 
-            Ok(builder)
+            Ok(("DELETED".to_owned(), builder))
         }
         (Some(before), Some(after)) => {
             let before_states: HashSet<String> =
@@ -282,6 +291,7 @@ async fn render(
                 let after_state = after.icon.metadata.get_icon_state(state).unwrap();
 
                 let difference = {
+                    dbg!(before_state, after_state);
                     if before_state != after_state {
                         true
                     } else {
@@ -324,7 +334,7 @@ async fn render(
                 } */
             }
 
-            Ok(builder)
+            Ok(("MODIFIED".to_owned(), builder))
         }
     }
 }

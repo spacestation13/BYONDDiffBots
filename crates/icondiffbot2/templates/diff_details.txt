@@ -1,6 +1,6 @@
 <details>
 	<summary>
-	ADDED - {filename}
+	{typ} - {filename}
 	</summary>
 
 |State Name|Old Icon|New Icon|Status|

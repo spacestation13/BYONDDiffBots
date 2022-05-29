@@ -211,7 +211,7 @@ dependencies = [
 [[package]]
 name = "builtins-proc-macro"
 version = "0.0.0"
-source = "git+https://github.com/tigercat2000/SpacemanDMM/?branch=gif#574991b731f4c3dec24ca40a32bb1e76f6bcead5"
+source = "git+https://github.com/tigercat2000/SpacemanDMM/?branch=gif#fa3ad0685442dd4ed3728811ee13fbbbdafa181c"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -552,6 +552,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "derivative"
+version = "2.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "fcc3dd5e9e9c0b295d6e1e4d811fb6f157d5ffd784b8d202fc62eac8035a770b"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn",
+]
+
+[[package]]
 name = "derive_builder"
 version = "0.11.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -644,7 +655,7 @@ dependencies = [
 [[package]]
 name = "dmm-tools"
 version = "0.1.0"
-source = "git+https://github.com/tigercat2000/SpacemanDMM/?branch=gif#574991b731f4c3dec24ca40a32bb1e76f6bcead5"
+source = "git+https://github.com/tigercat2000/SpacemanDMM/?branch=gif#fa3ad0685442dd4ed3728811ee13fbbbdafa181c"
 dependencies = [
  "ahash",
  "bumpalo",
@@ -686,12 +697,13 @@ checksum = "fea41bba32d969b513997752735605054bc0dfa92b4c56bf1189f2e174be7a10"
 [[package]]
 name = "dreammaker"
 version = "0.1.0"
-source = "git+https://github.com/tigercat2000/SpacemanDMM/?branch=gif#574991b731f4c3dec24ca40a32bb1e76f6bcead5"
+source = "git+https://github.com/tigercat2000/SpacemanDMM/?branch=gif#fa3ad0685442dd4ed3728811ee13fbbbdafa181c"
 dependencies = [
  "ahash",
  "bitflags",
  "builtins-proc-macro 0.0.0 (git+https://github.com/tigercat2000/SpacemanDMM/?branch=gif)",
  "color_space",
+ "derivative",
  "guard",
  "indexmap",
  "interval-tree 0.8.0 (git+https://github.com/tigercat2000/SpacemanDMM/?branch=gif)",
@@ -790,13 +802,11 @@ dependencies = [
 
 [[package]]
 name = "flate2"
-version = "1.0.23"
+version = "1.0.24"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b39522e96686d38f4bc984b9198e3a0613264abaebaff2c5c918bfa6b6da09af"
+checksum = "f82b0f4c27ad9f8bfd1f3208d882da2b09c301bc1c828fd3a00d0216d2fbbff6"
 dependencies = [
- "cfg-if",
  "crc32fast",
- "libc",
  "miniz_oxide",
 ]
 
@@ -1086,9 +1096,9 @@ checksum = "c4a1e36c821dbe04574f602848a19f742f4fb3c98d40449f11bcad18d6b17421"
 
 [[package]]
 name = "hyper"
-version = "0.14.18"
+version = "0.14.19"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b26ae0a80afebe130861d90abf98e3814a4f28a4c6ffeb5ab8ebb2be311e0ef2"
+checksum = "42dc3c131584288d375f2d07f822b0cb012d8c6fb899a5b9fdb3cb7eb9b6004f"
 dependencies = [
  "bytes",
  "futures-channel",
@@ -1198,9 +1208,9 @@ dependencies = [
 
 [[package]]
 name = "indexmap"
-version = "1.8.1"
+version = "1.8.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0f647032dfaa1f8b6dc29bd3edb7bbef4861b8b8007ebb118d6db284fd59f6ee"
+checksum = "e6012d540c5baa3589337a98ce73408de9b5a25ec9fc2c6fd6be8f0d39e0ca5a"
 dependencies = [
  "autocfg",
  "hashbrown",
@@ -1234,7 +1244,7 @@ dependencies = [
 [[package]]
 name = "interval-tree"
 version = "0.8.0"
-source = "git+https://github.com/tigercat2000/SpacemanDMM/?branch=gif#574991b731f4c3dec24ca40a32bb1e76f6bcead5"
+source = "git+https://github.com/tigercat2000/SpacemanDMM/?branch=gif#fa3ad0685442dd4ed3728811ee13fbbbdafa181c"
 
 [[package]]
 name = "interval-tree"
