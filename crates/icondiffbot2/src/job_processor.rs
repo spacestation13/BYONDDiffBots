@@ -2,7 +2,7 @@
 #![allow(clippy::format_push_string)]
 
 use std::{
-    collections::{hash_map::DefaultHasher, HashSet},
+    collections::{hash_map::DefaultHasher, HashMap, HashSet},
     hash::{Hash, Hasher},
     path::Path,
     sync::Arc,
@@ -12,7 +12,7 @@ use anyhow::{format_err, Context, Result};
 use diffbot_lib::{
     github::{
         github_api::download_url,
-        github_types::{CheckOutputBuilder, CheckOutputs, ModifiedFileStatus},
+        github_types::{CheckOutputs, ModifiedFileStatus, Output},
     },
     job::types::Job,
 };
@@ -86,42 +86,91 @@ async fn sha_to_iconfile(
 
 pub async fn handle_changed_files(job: &Job) -> Result<CheckOutputs> {
     job.check_run.mark_started().await?;
+    // TODO: tempted to use an <img> tag so i can set a style that upscales 32x32 to 64x64 and sets all the browser flags for nearest neighbor scaling
 
-    let mut output_builder =
-        CheckOutputBuilder::new("Icon difference rendering",
-        "*This is still a beta. Please file any issues [here](https://github.com/spacestation13/BYONDDiffBots/).*\n\nIcons with diff:",);
+    // let mut output_builder =
+    //     CheckOutputBuilder::new("Icon difference rendering",
+    //     "*This is still a beta. Please file any issues [here](https://github.com/spacestation13/BYONDDiffBots/).*\n\nIcons with diff:",);
 
     let protected_job = Arc::new(Mutex::new(job));
 
+    let mut map = HashMap::new();
+
     for dmi in &job.files {
-        output_builder.add_text(
-            &render(
-                Arc::clone(&protected_job),
-                sha_to_iconfile(job, &dmi.filename, status_to_sha(job, dmi.status)).await?,
-            )
-            .await
-            .unwrap_or_else(|e| format!("Error: {:?}", e)),
-        );
+        let states = render(
+            Arc::clone(&protected_job),
+            sha_to_iconfile(job, &dmi.filename, status_to_sha(job, dmi.status)).await?,
+        )
+        .await?;
+        map.insert(dmi.filename.clone(), states);
     }
 
-    Ok(output_builder.build())
+    let mut details: Vec<(String, String)> = Vec::new();
+    let mut current_table = String::new();
+
+    for (key, states) in map.iter() {
+        for state in states {
+            current_table.push_str(state);
+            current_table.push('\n');
+            if current_table.len() > 60_000 {
+                details.push((key.clone(), std::mem::take(&mut current_table)));
+            }
+        }
+        if !current_table.is_empty() {
+            details.push((key.clone(), std::mem::take(&mut current_table)));
+        }
+    }
+
+    let mut chunks: Vec<Output> = Vec::new();
+    let mut current_output_text = String::new();
+
+    for (name, table) in details.iter() {
+        current_output_text.push_str(&format!(
+            include_str!(concat!(
+                env!("CARGO_MANIFEST_DIR"),
+                "/templates/diff_add.txt" // TODO: fix
+            )),
+            filename = name,
+            table = table
+        ));
+        if current_output_text.len() > 60_000 {
+            chunks.push(Output {
+                title: "Icon difference rendering".to_owned(),
+                summary: "*This is still a beta. Please file any issues [here](https://github.com/spacestation13/BYONDDiffBots/).*\n\nIcons with diff:".to_owned(),
+                text: std::mem::take(&mut current_output_text)
+            });
+        }
+    }
+    if !current_output_text.is_empty() {
+        chunks.push(Output {
+            title: "Icon difference rendering".to_owned(),
+            summary: "*This is still a beta. Please file any issues [here](https://github.com/spacestation13/BYONDDiffBots/).*\n\nIcons with diff:".to_owned(),
+            text: std::mem::take(&mut current_output_text)
+        });
+    }
+
+    let first = chunks.drain(0..1).next().unwrap();
+    if !chunks.is_empty() {
+        Ok(CheckOutputs::Many(first, chunks))
+    } else {
+        Ok(CheckOutputs::One(first))
+    }
 }
 
 async fn render(
     job: Arc<Mutex<&Job>>,
     diff: (Option<IconFileWithName>, Option<IconFileWithName>),
-) -> Result<String> {
+) -> Result<Vec<String>> {
     // TODO: Alphabetize
     // TODO: Test more edge cases
     // TODO: Parallelize?
     match diff {
-        (None, None) => Ok("".to_string()),
+        (None, None) => Ok(Vec::new()),
         (None, Some(after)) => {
             let urls = full_render(job, &after)
                 .await
                 .context("Failed to render new icon file")?;
-            // TODO: tempted to use an <img> tag so i can set a style that upscales 32x32 to 64x64 and sets all the browser flags for nearest neighbor scaling
-            let mut builder = String::new();
+            let mut builder = Vec::new();
             for url in urls {
                 let mut state_name = url.0;
                 // Mark default states
@@ -129,7 +178,7 @@ async fn render(
                     state_name = "{{DEFAULT}}".to_string();
                 }
 
-                builder.push_str(&format!(
+                builder.push(format!(
                     include_str!(concat!(
                         env!("CARGO_MANIFEST_DIR"),
                         "/templates/diff_line.txt"
@@ -139,17 +188,9 @@ async fn render(
                     new = url.1,
                     change_text = "Created",
                 ));
-                builder.push('\n');
             }
 
-            Ok(format!(
-                include_str!(concat!(
-                    env!("CARGO_MANIFEST_DIR"),
-                    "/templates/diff_add.txt"
-                )),
-                filename = after.full_name,
-                table = builder
-            ))
+            Ok(builder)
         }
         (Some(before), None) => {
             // dbg!(&before.icon.metadata);
@@ -157,8 +198,7 @@ async fn render(
                 .await
                 .context("Failed to render deleted icon file")?;
             // dbg!(&urls);
-            // TODO: tempted to use an <img> tag so i can set a style that upscales 32x32 to 64x64 and sets all the browser flags for nearest neighbor scaling
-            let mut builder = String::new();
+            let mut builder = Vec::new();
             for url in urls {
                 let mut state_name = url.0;
                 // Mark default states
@@ -167,7 +207,7 @@ async fn render(
                 }
 
                 // Build the output line
-                builder.push_str(&format!(
+                builder.push(format!(
                     include_str!(concat!(
                         env!("CARGO_MANIFEST_DIR"),
                         "/templates/diff_line.txt"
@@ -177,17 +217,9 @@ async fn render(
                     new = "",
                     change_text = "Deleted",
                 ));
-                builder.push('\n');
             }
 
-            Ok(format!(
-                include_str!(concat!(
-                    env!("CARGO_MANIFEST_DIR"),
-                    "/templates/diff_remove.txt"
-                )),
-                filename = before.full_name,
-                table = builder
-            ))
+            Ok(builder)
         }
         (Some(before), Some(after)) => {
             let before_states: HashSet<String> =
@@ -199,7 +231,7 @@ async fn render(
             let prefix = format!("{}/{}", access.installation, access.pull_request);
             drop(access);
 
-            let mut builder = String::new();
+            let mut builder = Vec::new();
             let mut before_renderer = IconRenderer::new(&before.icon);
             let mut after_renderer = IconRenderer::new(&after.icon);
 
@@ -213,7 +245,7 @@ async fn render(
                     )
                     .await
                     .with_context(|| format!("Failed to render before-state {state}"))?;
-                    builder.push_str(&format!(
+                    builder.push(format!(
                         include_str!(concat!(
                             env!("CARGO_MANIFEST_DIR"),
                             "/templates/diff_line.txt"
@@ -223,7 +255,6 @@ async fn render(
                         new = "",
                         change_text = "Deleted",
                     ));
-                    builder.push('\n');
                 } else {
                     let (name, url) = render_state(
                         &prefix,
@@ -233,7 +264,7 @@ async fn render(
                     )
                     .await
                     .with_context(|| format!("Failed to render after-state {state}"))?;
-                    builder.push_str(&format!(
+                    builder.push(format!(
                         include_str!(concat!(
                             env!("CARGO_MANIFEST_DIR"),
                             "/templates/diff_line.txt"
@@ -243,7 +274,6 @@ async fn render(
                         new = url,
                         change_text = "Created",
                     ));
-                    builder.push('\n');
                 }
             }
 
@@ -278,7 +308,7 @@ async fn render(
                                 format!("Failed to render modified before-state {state}")
                             })?;
 
-                    builder.push_str(&format!(
+                    builder.push(format!(
                         include_str!(concat!(
                             env!("CARGO_MANIFEST_DIR"),
                             "/templates/diff_line.txt"
@@ -288,20 +318,13 @@ async fn render(
                         new = after_url,
                         change_text = "Modified",
                     ));
-                    builder.push('\n');
-                } else {
-                    println!("No difference detected for {}", state);
                 }
+                /* else {
+                    println!("No difference detected for {}", state);
+                } */
             }
 
-            Ok(format!(
-                include_str!(concat!(
-                    env!("CARGO_MANIFEST_DIR"),
-                    "/templates/diff_modify.txt"
-                )),
-                filename = before.full_name,
-                table = builder
-            ))
+            Ok(builder)
         }
     }
 }
