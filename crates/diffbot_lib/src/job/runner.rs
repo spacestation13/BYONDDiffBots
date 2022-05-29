@@ -60,7 +60,13 @@ where
 
     match output.unwrap() {
         CheckOutputs::One(output) => {
-            let _ = job.check_run.mark_succeeded(output).await;
+            let res = job.check_run.mark_succeeded(output).await;
+            if res.is_err() {
+                let _ = job
+                    .check_run
+                    .mark_failed(&format!("Failed to upload job output: {:?}", res))
+                    .await;
+            }
         }
         CheckOutputs::Many(first, rest) => {
             let count = rest.len() + 1;
@@ -69,7 +75,14 @@ where
                 .check_run
                 .rename(&format!("{} (1/{})", name.as_ref(), count))
                 .await;
-            let _ = job.check_run.mark_succeeded(first).await;
+            let res = job.check_run.mark_succeeded(first).await;
+            if res.is_err() {
+                let _ = job
+                    .check_run
+                    .mark_failed(&format!("Failed to upload job output: {:?}", res))
+                    .await;
+                return;
+            }
 
             for (i, overflow) in rest.into_iter().enumerate() {
                 if let Ok(check) = job
@@ -77,7 +90,14 @@ where
                     .duplicate(&format!("{} ({}/{})", name.as_ref(), i + 2, count))
                     .await
                 {
-                    let _ = check.mark_succeeded(overflow).await;
+                    let res = check.mark_succeeded(overflow).await;
+                    if res.is_err() {
+                        let _ = job
+                            .check_run
+                            .mark_failed(&format!("Failed to upload job output: {:?}", res))
+                            .await;
+                        return;
+                    }
                 }
             }
         }
