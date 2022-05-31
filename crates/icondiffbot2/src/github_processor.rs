@@ -4,7 +4,7 @@ use diffbot_lib::{
     github::github_api::get_pull_files,
     github::{
         github_api::CheckRun,
-        github_types::{ModifiedFile, PullRequestEventPayload},
+        github_types::{ModifiedFile, Output, PullRequestEventPayload},
     },
     job::types::{Job, JobJournal, JobSender},
 };
@@ -38,10 +38,36 @@ async fn handle_pull_request(
     payload: PullRequestEventPayload,
     job_sender: &State<JobSender>,
     journal: &State<Arc<Mutex<JobJournal>>>,
-) -> Result<&'static str> {
+) -> Result<()> {
     if payload.action != "opened" && payload.action != "reopened" && payload.action != "synchronize"
     {
-        return Ok("PR not opened or updated");
+        return Ok(());
+    }
+
+    let check_run = CheckRun::create(
+        &payload.pull_request.base.repo.full_name(),
+        &payload.pull_request.head.sha,
+        payload.installation.id,
+        Some("IconDiffBot2"),
+    )
+    .await?;
+
+    if payload
+        .pull_request
+        .title
+        .as_ref()
+        .ok_or_else(|| anyhow::anyhow!("PR title is None"))?
+        .to_ascii_lowercase()
+        .contains("[idb ignore]")
+    {
+        let output = Output {
+            title: "PR Ignored".to_owned(),
+            summary: "This PR has `[IDB IGNORE]` in the title. Aborting.".to_owned(),
+            text: "".to_owned(),
+        };
+
+        check_run.mark_skipped(output).await?;
+        return Ok(());
     }
 
     let files = get_pull_files(&payload.installation, &payload.pull_request).await?;
@@ -52,16 +78,16 @@ async fn handle_pull_request(
         .collect();
 
     if changed_dmis.is_empty() {
-        return Ok("");
-    }
+        let output = Output {
+            title: "No icon chages".to_owned(),
+            summary: "There are no changed icon files to render.".to_owned(),
+            text: "".to_owned(),
+        };
 
-    let check_run = CheckRun::create(
-        &payload.pull_request.base.repo.full_name(),
-        &payload.pull_request.head.sha,
-        payload.installation.id,
-        Some("IconDiffBot2"),
-    )
-    .await?;
+        check_run.mark_skipped(output).await?;
+
+        return Ok(());
+    }
 
     check_run.mark_queued().await?;
 
@@ -80,7 +106,7 @@ async fn handle_pull_request(
     journal.lock().await.add_job(job.clone()).await;
     job_sender.0.send_async(job).await?;
 
-    Ok("Check submitted")
+    Ok(())
 }
 
 #[post("/payload", format = "json", data = "<payload>")]

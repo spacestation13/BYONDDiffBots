@@ -88,10 +88,6 @@ pub async fn handle_changed_files(job: &Job) -> Result<CheckOutputs> {
     job.check_run.mark_started().await?;
     // TODO: tempted to use an <img> tag so i can set a style that upscales 32x32 to 64x64 and sets all the browser flags for nearest neighbor scaling
 
-    // let mut output_builder =
-    //     CheckOutputBuilder::new("Icon difference rendering",
-    //     "*This is still a beta. Please file any issues [here](https://github.com/spacestation13/BYONDDiffBots/).*\n\nIcons with diff:",);
-
     let protected_job = Arc::new(Mutex::new(job));
 
     let mut map = HashMap::new();
@@ -102,30 +98,22 @@ pub async fn handle_changed_files(job: &Job) -> Result<CheckOutputs> {
             sha_to_iconfile(job, &dmi.filename, status_to_sha(job, dmi.status)).await?,
         )
         .await?;
-        map.insert(dmi.filename.clone(), states);
+        map.insert(dmi.filename.as_str(), states);
     }
 
-    let mut details: Vec<(String, String, String)> = Vec::new();
+    let mut details: Vec<(&str, &str, String)> = Vec::new();
     let mut current_table = String::new();
 
     for (key, (file_type, states)) in map.iter() {
         for state in states {
-            current_table.push_str(state);
+            current_table.push_str(state.as_str());
             current_table.push('\n');
             if current_table.len() > 60_000 {
-                details.push((
-                    key.clone(),
-                    file_type.clone(),
-                    std::mem::take(&mut current_table),
-                ));
+                details.push((key, file_type, std::mem::take(&mut current_table)));
             }
         }
         if !current_table.is_empty() {
-            details.push((
-                key.clone(),
-                file_type.clone(),
-                std::mem::take(&mut current_table),
-            ));
+            details.push((key, file_type, std::mem::take(&mut current_table)));
         }
     }
 
