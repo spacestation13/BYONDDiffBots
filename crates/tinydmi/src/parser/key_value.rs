@@ -1,4 +1,5 @@
 use super::values::*;
+use anyhow::format_err;
 use nom::{
     bytes::complete::tag, character::complete::alpha1, combinator::map_res,
     sequence::separated_pair, IResult,
@@ -41,7 +42,7 @@ pub fn key(input: &str) -> IResult<&str, Key> {
     ))
 }
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Dirs {
     One,
     Four,
@@ -49,17 +50,24 @@ pub enum Dirs {
 }
 
 impl TryFrom<u32> for Dirs {
-    type Error = std::io::Error;
+    type Error = anyhow::Error;
 
     fn try_from(value: u32) -> Result<Self, Self::Error> {
         match value {
             1 => Ok(Dirs::One),
             4 => Ok(Dirs::Four),
             8 => Ok(Dirs::Eight),
-            x => Err(std::io::Error::new(
-                std::io::ErrorKind::InvalidInput,
-                format!("Invalid value {} for dirs", x),
-            )),
+            x => Err(format_err!("Invalid value {} for dirs", x)),
+        }
+    }
+}
+
+impl Into<u32> for Dirs {
+    fn into(self) -> u32 {
+        match self {
+            Dirs::One => 1,
+            Dirs::Four => 4,
+            Dirs::Eight => 8,
         }
     }
 }
@@ -96,10 +104,7 @@ pub fn key_value(input: &str) -> IResult<&str, KeyValue> {
             (Key::Movement, Value::Int(x)) => Ok(KeyValue::Movement(x > 0)),
             (Key::Hotspot, Value::List(x)) => Ok(KeyValue::Hotspot(x)),
             (Key::Unk(key), atom) => Ok(KeyValue::Unk(key, atom)),
-            _ => Err(std::io::Error::new(
-                std::io::ErrorKind::InvalidData,
-                "Unable to find matching key/value",
-            )),
+            _ => Err(format_err!("Unable to find matching key/value")),
         },
     )(input)
 }

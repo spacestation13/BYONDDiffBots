@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 
+use anyhow::{format_err, Context};
 use nom::{
     character::complete::{newline, space1},
     combinator::{map_res, verify},
@@ -13,14 +14,24 @@ use super::{
     values::Value,
 };
 
-#[derive(Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub enum Frames {
     One,
     Count(u32),
     Delays(Vec<f32>),
 }
 
-#[derive(Debug, PartialEq)]
+impl Into<u32> for Frames {
+    fn into(self) -> u32 {
+        match self {
+            Frames::One => 1,
+            Frames::Count(u) => u,
+            Frames::Delays(v) => v.len() as u32,
+        }
+    }
+}
+
+#[derive(Clone, Debug, PartialEq)]
 pub struct State {
     pub name: String,
     pub dirs: Dirs,
@@ -33,11 +44,9 @@ pub struct State {
 }
 
 impl TryFrom<(KeyValue, Vec<KeyValue>)> for State {
-    // TODO: anyhow
-    type Error = std::io::Error;
+    type Error = anyhow::Error;
 
     fn try_from((state, kvs): (KeyValue, Vec<KeyValue>)) -> Result<Self, Self::Error> {
-        use std::io::{Error, ErrorKind};
         let name = match state {
             KeyValue::State(name) => name,
             _ => unreachable!(),
@@ -53,24 +62,6 @@ impl TryFrom<(KeyValue, Vec<KeyValue>)> for State {
 
         for kv in kvs {
             match kv {
-                KeyValue::Version(_) => {
-                    return Err(Error::new(
-                        ErrorKind::InvalidData,
-                        "Version not allowed here",
-                    ))
-                }
-                KeyValue::Width(_) => {
-                    return Err(Error::new(ErrorKind::InvalidData, "Width not allowed here"))
-                }
-                KeyValue::Height(_) => {
-                    return Err(Error::new(
-                        ErrorKind::InvalidData,
-                        "Height not allowed here",
-                    ))
-                }
-                KeyValue::State(_) => {
-                    return Err(Error::new(ErrorKind::InvalidData, "State not allowed here"))
-                }
                 KeyValue::Dirs(d) => dirs = Some(d),
                 KeyValue::Frames(f) => {
                     if matches!(frames, Frames::One) {
@@ -80,20 +71,14 @@ impl TryFrom<(KeyValue, Vec<KeyValue>)> for State {
                             frames = Frames::Count(f);
                         }
                     } else {
-                        return Err(Error::new(
-                            ErrorKind::InvalidData,
-                            "Found frames in illegal position",
-                        ));
+                        return Err(format_err!("Found `frames` in illegal position"));
                     }
                 }
                 KeyValue::Delay(f) => {
                     if matches!(frames, Frames::Count(_)) {
                         frames = Frames::Delays(f)
                     } else {
-                        return Err(Error::new(
-                            ErrorKind::InvalidData,
-                            "Found delay information without frame information",
-                        ));
+                        return Err(format_err!("Found `delay` key without `frames` key"));
                     }
                 }
                 KeyValue::Loop(do_loop) => r#loop = do_loop,
@@ -105,10 +90,7 @@ impl TryFrom<(KeyValue, Vec<KeyValue>)> for State {
                         buf.copy_from_slice(&h[0..3]);
                         hotspot = Some(buf);
                     } else {
-                        return Err(Error::new(
-                            ErrorKind::InvalidData,
-                            "Hotspot information was not length 3",
-                        ));
+                        return Err(format_err!("Hotspot information was not length 3"));
                     }
                 }
                 KeyValue::Unk(key, value) => {
@@ -120,12 +102,15 @@ impl TryFrom<(KeyValue, Vec<KeyValue>)> for State {
                         unk = Some(new_map);
                     }
                 }
+                x => {
+                    return Err(format_err!("{:?} not allowed here", x));
+                }
             }
         }
 
         Ok(State {
             name,
-            dirs: dirs.ok_or_else(|| Error::new(ErrorKind::InvalidData, "Never found dirs"))?,
+            dirs: dirs.context("Required field `dirs` was not found")?,
             frames,
             r#loop,
             rewind,

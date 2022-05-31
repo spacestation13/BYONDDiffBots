@@ -34,7 +34,7 @@ pub fn string(input: &str) -> IResult<&str, String> {
     )(input)
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub enum Value {
     Float(f32),
     Int(u32),

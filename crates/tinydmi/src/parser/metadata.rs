@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 
+use anyhow::{format_err, Context};
 use nom::{
     bytes::complete::tag,
     character::complete::{multispace0, newline, space1},
@@ -32,21 +33,16 @@ pub struct Header {
 }
 
 impl TryFrom<(KeyValue, Vec<KeyValue>)> for Header {
-    // TODO: anyhow
-    type Error = std::io::Error;
+    type Error = anyhow::Error;
 
     fn try_from((state, kvs): (KeyValue, Vec<KeyValue>)) -> Result<Self, Self::Error> {
-        use std::io::{Error, ErrorKind};
         let version = match state {
             KeyValue::Version(version) => version,
             _ => unreachable!(),
         };
 
         if version != 4.0 {
-            return Err(Error::new(
-                ErrorKind::Unsupported,
-                format!("Version {} not supported, only 4.0", version),
-            ));
+            return Err(format_err!("Version {} not supported, only 4.0", version));
         }
 
         let mut width = None;
@@ -71,19 +67,15 @@ impl TryFrom<(KeyValue, Vec<KeyValue>)> for Header {
                     }
                 }
                 x => {
-                    return Err(Error::new(
-                        ErrorKind::InvalidData,
-                        format!("{:?} not allowed here", x),
-                    ));
+                    return Err(format_err!("{:?} not allowed here", x));
                 }
             }
         }
 
         Ok(Header {
             version,
-            width: width.ok_or_else(|| Error::new(ErrorKind::InvalidData, "Never found width"))?,
-            height: height
-                .ok_or_else(|| Error::new(ErrorKind::InvalidData, "Never found height"))?,
+            width: width.context("Required field `width` was not found")?,
+            height: height.context("Required field `height` was not found")?,
             unk,
         })
     }
@@ -108,10 +100,10 @@ pub struct Metadata {
 }
 
 impl Metadata {
-    pub fn load<S: AsRef<str>>(input: S) -> Result<Metadata, std::io::Error> {
-        Ok(metadata(input.as_ref())
-            .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e.to_string()))?
-            .1)
+    pub fn load<S: AsRef<str>>(input: S) -> Result<Metadata, anyhow::Error> {
+        let (_, metadata) = metadata(input.as_ref())
+            .map_err(|e| format_err!("Failed to create metadata: {}", e.to_string()))?;
+        Ok(metadata)
     }
 }
 

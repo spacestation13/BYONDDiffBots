@@ -2710,6 +2710,8 @@ dependencies = [
  "criterion",
  "ndarray",
  "nom",
+ "png",
+ "rayon",
  "tokio",
 ]
 
