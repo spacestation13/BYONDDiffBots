@@ -39,9 +39,12 @@ async fn handle_pull_request(
     job_sender: &State<JobSender>,
     journal: &State<Arc<Mutex<JobJournal>>>,
 ) -> Result<()> {
-    if payload.action != "opened" && payload.action != "reopened" && payload.action != "synchronize"
-    {
-        return Ok(());
+    match payload.action.as_str() {
+        "opened" => {}
+        #[cfg(debug_assertions)]
+        "reopened" => {}
+        "synchronize" => {}
+        _ => return Ok(()),
     }
 
     let check_run = CheckRun::create(
