@@ -5,7 +5,6 @@ use std::{
     collections::{hash_map::DefaultHasher, HashMap, HashSet},
     hash::{Hash, Hasher},
     path::Path,
-    sync::Arc,
 };
 
 use anyhow::{format_err, Context, Result};
@@ -18,7 +17,7 @@ use diffbot_lib::{
 };
 use dmm_tools::dmi::render::IconRenderer;
 use dmm_tools::dmi::{IconFile, State};
-use tokio::{runtime::Handle, sync::Mutex};
+use tokio::runtime::Handle;
 
 use crate::CONFIG;
 
@@ -88,13 +87,11 @@ pub async fn handle_changed_files(job: &Job) -> Result<CheckOutputs> {
     job.check_run.mark_started().await?;
     // TODO: tempted to use an <img> tag so i can set a style that upscales 32x32 to 64x64 and sets all the browser flags for nearest neighbor scaling
 
-    let protected_job = Arc::new(Mutex::new(job));
-
     let mut map = HashMap::new();
 
     for dmi in &job.files {
         let states = render(
-            Arc::clone(&protected_job),
+            job,
             sha_to_iconfile(job, &dmi.filename, status_to_sha(job, dmi.status)).await?,
         )
         .await?;
@@ -174,7 +171,7 @@ pub async fn handle_changed_files(job: &Job) -> Result<CheckOutputs> {
 }
 
 async fn render(
-    job: Arc<Mutex<&Job>>,
+    job: &Job,
     diff: (Option<IconFileWithName>, Option<IconFileWithName>),
 ) -> Result<(String, Vec<String>)> {
     // TODO: Alphabetize
@@ -243,9 +240,7 @@ async fn render(
             let after_states: HashSet<String> =
                 after.icon.metadata.state_names.keys().cloned().collect();
 
-            let access = job.lock().await;
-            let prefix = format!("{}/{}", access.installation, access.pull_request);
-            drop(access);
+            let prefix = format!("{}/{}", job.installation, job.pull_request);
 
             let mut builder = Vec::new();
             let mut before_renderer = IconRenderer::new(&before.icon);
@@ -388,19 +383,14 @@ async fn render_state<'a, S: AsRef<str>>(
     Ok((state.get_state_name_index(), url))
 }
 
-async fn full_render(
-    job: Arc<Mutex<&Job>>,
-    target: &IconFileWithName,
-) -> Result<Vec<(String, String)>> {
+async fn full_render(job: &Job, target: &IconFileWithName) -> Result<Vec<(String, String)>> {
     let icon = &target.icon;
 
     let mut vec = Vec::new();
 
     let mut renderer = IconRenderer::new(icon);
 
-    let access = job.lock().await;
-    let prefix = format!("{}/{}", access.installation, access.pull_request);
-    drop(access);
+    let prefix = format!("{}/{}", job.installation, job.pull_request);
 
     for state in icon.metadata.states.iter() {
         let (name, url) = render_state(&prefix, target, state, &mut renderer)
