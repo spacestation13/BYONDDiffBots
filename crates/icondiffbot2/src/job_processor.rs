@@ -103,10 +103,8 @@ async fn render(
             Ok(("DELETED".to_owned(), builder))
         }
         (Some(before), Some(after)) => {
-            let before_states: HashSet<String> =
-                before.icon.metadata.state_names.keys().cloned().collect();
-            let after_states: HashSet<String> =
-                after.icon.metadata.state_names.keys().cloned().collect();
+            let before_states: HashSet<&String> = before.icon.metadata.state_names.keys().collect();
+            let after_states: HashSet<&String> = after.icon.metadata.state_names.keys().collect();
 
             let prefix = format!("{}/{}", job.installation, job.pull_request);
 
