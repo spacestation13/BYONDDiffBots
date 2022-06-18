@@ -1,6 +1,7 @@
 #![allow(non_snake_case)]
 
 mod github_processor;
+mod helpers;
 mod job_processor;
 
 use std::{fs::File, io::Read, path::PathBuf, sync::Arc};
