@@ -1,10 +1,7 @@
-#![allow(non_snake_case)]
-
 mod github_processor;
-mod helpers;
 mod job_processor;
-
-use std::{fs::File, io::Read, path::PathBuf, sync::Arc};
+mod sha;
+mod table_builder;
 
 use diffbot_lib::job::{
     runner::handle_jobs,
@@ -12,9 +9,9 @@ use diffbot_lib::job::{
 };
 use octocrab::OctocrabBuilder;
 use once_cell::sync::OnceCell;
-// use dmm_tools::dmi::IconFile;
 use rocket::{figment::Figment, fs::FileServer, get, launch, routes};
 use serde::Deserialize;
+use std::{fs::File, io::Read, path::PathBuf, sync::Arc};
 use tokio::sync::Mutex;
 
 #[get("/")]

@@ -1,20 +1,17 @@
-// should fix but lazy
-#![allow(clippy::format_push_string)]
-
+use anyhow::{format_err, Context, Result};
+use diffbot_lib::{github::github_types::CheckOutputs, job::types::Job};
+use dmm_tools::dmi::render::IconRenderer;
+use dmm_tools::dmi::State;
 use std::{
     collections::{hash_map::DefaultHasher, HashSet},
     hash::{Hash, Hasher},
     path::Path,
 };
-
-use anyhow::{format_err, Context, Result};
-use diffbot_lib::{github::github_types::CheckOutputs, job::types::Job};
-use dmm_tools::dmi::render::IconRenderer;
-use dmm_tools::dmi::State;
 use tokio::runtime::Handle;
 
 use crate::{
-    helpers::{sha_to_iconfile, status_to_sha, IconFileWithName, OutputTableBuilder},
+    sha::{sha_to_iconfile, status_to_sha, IconFileWithName},
+    table_builder::OutputTableBuilder,
     CONFIG,
 };
 
