@@ -4,11 +4,11 @@ use diffbot_lib::{
     github::github_api::get_pull_files,
     github::{
         github_api::CheckRun,
-        github_types::{ModifiedFile, Output, PullRequestEventPayload},
+        github_types::{Output, PullRequestEventPayload},
     },
     job::types::{Job, JobJournal, JobSender},
 };
-use octocrab::models::InstallationId;
+use octocrab::models::{pulls::FileDiff, InstallationId};
 // use dmm_tools::dmi::IconFile;
 use anyhow::Result;
 use rocket::{
@@ -75,7 +75,7 @@ async fn handle_pull_request(
 
     let files = get_pull_files(&payload.installation, &payload.pull_request).await?;
 
-    let changed_dmis: Vec<ModifiedFile> = files
+    let changed_dmis: Vec<FileDiff> = files
         .into_iter()
         .filter(|e| e.filename.ends_with(".dmi"))
         .collect();

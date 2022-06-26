@@ -2,6 +2,7 @@
 members = [
     "crates/diffbot_lib",
     "crates/icondiffbot2",
+    "crates/icondiffbot_test_generator",
     "crates/mapdiffbot2",
 ]
 

@@ -1,3 +1,8 @@
+use crate::{
+    sha::{sha_to_iconfile, status_to_sha, IconFileWithName},
+    table_builder::OutputTableBuilder,
+    CONFIG,
+};
 use anyhow::{format_err, Context, Result};
 use diffbot_lib::{github::github_types::CheckOutputs, job::types::Job};
 use dmm_tools::dmi::render::IconRenderer;
@@ -8,19 +13,16 @@ use std::{
     path::Path,
 };
 use tokio::runtime::Handle;
+use tracing::{info_span, Instrument};
 
-use crate::{
-    sha::{sha_to_iconfile, status_to_sha, IconFileWithName},
-    table_builder::OutputTableBuilder,
-    CONFIG,
-};
-
+#[tracing::instrument]
 pub fn do_job(job: &Job) -> Result<CheckOutputs> {
     // TODO: Maybe have jobs just be async?
     let handle = Handle::try_current()?;
     handle.block_on(async { handle_changed_files(job).await })
 }
 
+#[tracing::instrument]
 pub async fn handle_changed_files(job: &Job) -> Result<CheckOutputs> {
     job.check_run.mark_started().await?;
 
@@ -29,15 +31,16 @@ pub async fn handle_changed_files(job: &Job) -> Result<CheckOutputs> {
     for dmi in &job.files {
         let states = render(
             job,
-            sha_to_iconfile(job, &dmi.filename, status_to_sha(job, dmi.status)).await?,
+            sha_to_iconfile(job, &dmi.filename, status_to_sha(job, &dmi.status)).await?,
         )
         .await?;
         map.insert(dmi.filename.as_str(), states);
     }
 
-    map.build().await
+    map.build().instrument(info_span!("Building table")).await
 }
 
+#[tracing::instrument]
 async fn render(
     job: &Job,
     diff: (Option<IconFileWithName>, Option<IconFileWithName>),
@@ -208,7 +211,8 @@ async fn render(
     }
 }
 
-async fn render_state<'a, S: AsRef<str>>(
+#[tracing::instrument]
+async fn render_state<'a, S: AsRef<str> + std::fmt::Debug>(
     prefix: S,
     target: &IconFileWithName,
     state: &State,
@@ -249,6 +253,7 @@ async fn render_state<'a, S: AsRef<str>>(
     Ok((state.get_state_name_index(), url))
 }
 
+#[tracing::instrument]
 async fn full_render(job: &Job, target: &IconFileWithName) -> Result<Vec<(String, String)>> {
     let icon = &target.icon;
 

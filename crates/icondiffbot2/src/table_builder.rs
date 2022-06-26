@@ -12,6 +12,7 @@ impl<'a> OutputTableBuilder<'a> {
         Default::default()
     }
 
+    #[tracing::instrument]
     pub fn insert(
         &mut self,
         k: &'a str,
@@ -20,6 +21,7 @@ impl<'a> OutputTableBuilder<'a> {
         self.map.insert(k, v)
     }
 
+    #[tracing::instrument]
     pub async fn build(&self) -> Result<CheckOutputs> {
         // TODO: Make this not shit
         let mut file_names: HashMap<&str, u32> = HashMap::new();

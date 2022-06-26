@@ -31,6 +31,8 @@ pub struct Config {
 }
 
 static CONFIG: OnceCell<Config> = OnceCell::new();
+// static FLAME_LAYER_GUARD: OnceCell<tracing_flame::FlushGuard<std::io::BufWriter<File>>> =
+// OnceCell::new();
 
 fn init_config(figment: &Figment) -> &Config {
     let config: Config = figment
@@ -40,6 +42,23 @@ fn init_config(figment: &Figment) -> &Config {
     CONFIG.set(config).expect("Failed to set config");
     CONFIG.get().unwrap()
 }
+
+// fn init_global_subscriber() {
+//     use tracing_subscriber::prelude::*;
+
+//     let fmt_layer = tracing_subscriber::fmt::Layer::default();
+
+//     let (flame_layer, guard) = tracing_flame::FlameLayer::with_file("./tracing.folded").unwrap();
+
+//     tracing_subscriber::registry()
+//         .with(fmt_layer)
+//         .with(flame_layer)
+//         .init();
+
+//     FLAME_LAYER_GUARD
+//         .set(guard)
+//         .expect("Failed to store flame layer guard");
+// }
 
 fn read_key(path: PathBuf) -> Vec<u8> {
     let mut key_file =
@@ -55,6 +74,7 @@ fn read_key(path: PathBuf) -> Vec<u8> {
 
 #[launch]
 async fn rocket() -> _ {
+    // init_global_subscriber();
     let rocket = rocket::build();
     let config = init_config(rocket.figment());
 
