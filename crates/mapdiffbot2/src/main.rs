@@ -1,6 +1,6 @@
-mod github_processor;
-mod job_processor;
-mod rendering;
+pub(crate) mod github_processor;
+pub(crate) mod job_processor;
+pub(crate) mod rendering;
 
 #[macro_use]
 extern crate rocket;
@@ -76,9 +76,15 @@ async fn rocket() -> _ {
     let (job_sender, job_receiver) = flume::unbounded();
     let journal_clone = journal.clone();
 
-    rocket::tokio::spawn(
-        async move { handle_jobs(job_receiver, journal_clone, job_processor::do_job).await },
-    );
+    rocket::tokio::spawn(async move {
+        handle_jobs(
+            "MapDiffBot2",
+            job_receiver,
+            journal_clone,
+            job_processor::do_job,
+        )
+        .await
+    });
 
     rocket
         .manage(JobSender(job_sender))

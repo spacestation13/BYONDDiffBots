@@ -1,0 +1,1 @@
+|{state_name}|![{old}]({old})|![{new}]({new})|{change_text}|

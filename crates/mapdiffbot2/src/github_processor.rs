@@ -1,6 +1,8 @@
 use std::sync::Arc;
 
 use anyhow::{Context, Result};
+use octocrab::models::pulls::FileDiff;
+use octocrab::models::InstallationId;
 use rocket::http::Status;
 use rocket::outcome::Outcome;
 use rocket::request;
@@ -12,7 +14,7 @@ use rocket::State;
 use crate::CONFIG;
 use diffbot_lib::github::github_api::*;
 use diffbot_lib::github::github_types::*;
-use diffbot_lib::job::types::{JobSender, JobJournal, Job};
+use diffbot_lib::job::types::{Job, JobJournal, JobSender};
 
 async fn process_pull(
     pull: PullRequest,
@@ -60,7 +62,7 @@ async fn process_pull(
         return Ok(());
     }
 
-    let files: Vec<ModifiedFile> = get_pull_files(installation, &pull)
+    let files: Vec<FileDiff> = get_pull_files(installation, &pull)
         .await
         .context("Getting files modified by PR")?
         .into_iter()
@@ -87,6 +89,7 @@ async fn process_pull(
         pull_request: pull.number,
         files,
         check_run,
+        installation: InstallationId(installation.id),
     };
 
     journal.lock().await.add_job(job.clone()).await;

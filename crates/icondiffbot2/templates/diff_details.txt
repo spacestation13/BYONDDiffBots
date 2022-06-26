@@ -1,0 +1,10 @@
+<details>
+	<summary>
+	{typ} - {filename}
+	</summary>
+
+|State Name|Old Icon|New Icon|Status|
+|----------|--------|--------|------|
+{table}
+
+</details>

@@ -8,9 +8,8 @@ use dm::objtree::ObjectTree;
 use dmm_tools::{dmi::Image, dmm, minimap, render_passes::RenderPass, IconCache};
 use image::io::Reader as ImageReader;
 use image::{GenericImageView, ImageBuffer, Pixel};
+use octocrab::models::pulls::FileDiff;
 use rayon::prelude::*;
-
-use diffbot_lib::github::github_types::*;
 
 #[derive(Debug, Clone)]
 pub struct BoundingBox {
@@ -101,14 +100,14 @@ pub fn get_diff_bounding_box(
     Some(BoundingBox::new(leftmost, bottommost, rightmost, topmost))
 }
 
-pub fn load_maps(files: &[&ModifiedFile]) -> Result<Vec<dmm::Map>> {
+pub fn load_maps(files: &[&FileDiff]) -> Result<Vec<dmm::Map>> {
     files
         .iter()
         .map(|file| dmm::Map::from_file(Path::new(&file.filename)).map_err(|e| anyhow::anyhow!(e)))
         .collect()
 }
 
-pub fn load_maps_with_whole_map_regions(files: &[&ModifiedFile]) -> Result<Vec<MapWithRegions>> {
+pub fn load_maps_with_whole_map_regions(files: &[&FileDiff]) -> Result<Vec<MapWithRegions>> {
     files
         .iter()
         .map(|file| {

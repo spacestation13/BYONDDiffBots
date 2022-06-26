@@ -1,7 +1,9 @@
 [workspace]
 members = [
     "crates/diffbot_lib",
-    "crates/mapdiffbot2"
+    "crates/icondiffbot2",
+    "crates/icondiffbot_test_generator",
+    "crates/mapdiffbot2",
 ]
 
 [profile.dev]

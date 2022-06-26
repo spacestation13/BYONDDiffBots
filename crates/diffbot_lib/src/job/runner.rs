@@ -10,7 +10,7 @@ use crate::{
 
 use super::types::JobJournal;
 
-async fn handle_job<F>(job: Job, runner: F)
+async fn handle_job<S: AsRef<str>, F>(name: S, job: Job, runner: F)
 where
     F: JobRunner,
 {
@@ -60,32 +60,55 @@ where
 
     match output.unwrap() {
         CheckOutputs::One(output) => {
-            let _ = job.check_run.mark_succeeded(output).await;
+            let res = job.check_run.mark_succeeded(output).await;
+            if res.is_err() {
+                let _ = job
+                    .check_run
+                    .mark_failed(&format!("Failed to upload job output: {:?}", res))
+                    .await;
+            }
         }
         CheckOutputs::Many(first, rest) => {
             let count = rest.len() + 1;
 
             let _ = job
                 .check_run
-                .rename(&format!("MapDiffBot2 (1/{})", count))
+                .rename(&format!("{} (1/{})", name.as_ref(), count))
                 .await;
-            let _ = job.check_run.mark_succeeded(first).await;
+            let res = job.check_run.mark_succeeded(first).await;
+            if res.is_err() {
+                let _ = job
+                    .check_run
+                    .mark_failed(&format!("Failed to upload job output: {:?}", res))
+                    .await;
+                return;
+            }
 
             for (i, overflow) in rest.into_iter().enumerate() {
                 if let Ok(check) = job
                     .check_run
-                    .duplicate(&format!("MapDiffBot2 ({}/{})", i + 2, count))
+                    .duplicate(&format!("{} ({}/{})", name.as_ref(), i + 2, count))
                     .await
                 {
-                    let _ = check.mark_succeeded(overflow).await;
+                    let res = check.mark_succeeded(overflow).await;
+                    if res.is_err() {
+                        let _ = job
+                            .check_run
+                            .mark_failed(&format!("Failed to upload job output: {:?}", res))
+                            .await;
+                        return;
+                    }
                 }
             }
         }
     }
 }
 
-async fn recover_from_journal<F>(journal: &Arc<Mutex<JobJournal>>, runner: F)
-where
+async fn recover_from_journal<S: AsRef<str>, F>(
+    name: S,
+    journal: &Arc<Mutex<JobJournal>>,
+    runner: F,
+) where
     F: JobRunner,
 {
     let num_jobs = journal.lock().await.get_job_count();
@@ -100,7 +123,7 @@ where
         // Done this way to avoid a deadlock
         let job = journal.lock().await.get_job();
         if let Some(job) = job {
-            handle_job(job, runner.clone()).await;
+            handle_job(&name, job, runner.clone()).await;
             journal.lock().await.complete_job().await;
         } else {
             break;
@@ -108,15 +131,19 @@ where
     }
 }
 
-pub async fn handle_jobs<F>(job_receiver: Receiver<Job>, journal: Arc<Mutex<JobJournal>>, runner: F)
-where
+pub async fn handle_jobs<S: AsRef<str>, F>(
+    name: S,
+    job_receiver: Receiver<Job>,
+    journal: Arc<Mutex<JobJournal>>,
+    runner: F,
+) where
     F: JobRunner,
 {
-    recover_from_journal(&journal, runner.clone()).await;
+    recover_from_journal(&name, &journal, runner.clone()).await;
     loop {
         let job = job_receiver.recv_async().await;
         if let Ok(job) = job {
-            handle_job(job, runner.clone()).await;
+            handle_job(&name, job, runner.clone()).await;
             journal.lock().await.complete_job().await;
         } else {
             break;

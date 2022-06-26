@@ -1,7 +1,12 @@
 use crate::github::github_types::*;
-use anyhow::{Context, Result};
+use anyhow::{format_err, Context, Result};
+use octocrab::models::pulls::FileDiff;
+use octocrab::models::repos::Content;
 use octocrab::models::InstallationId;
 use serde::{Deserialize, Serialize};
+use std::path::PathBuf;
+use tokio::fs::File;
+use tokio::io::AsyncWriteExt;
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct CheckRun {
@@ -146,18 +151,80 @@ impl CheckRun {
 pub async fn get_pull_files(
     installation: &Installation,
     pull: &PullRequest,
-) -> Result<Vec<ModifiedFile>> {
-    let res = octocrab::instance()
-        .installation(installation.id.into())
-        .get(
-            &format!(
-                "/repos/{repo}/pulls/{pull_number}/files",
-                repo = pull.base.repo.full_name(),
-                pull_number = pull.number
-            ),
-            None::<&()>,
-        )
-        .await?;
+) -> Result<Vec<FileDiff>> {
+    let crab = octocrab::instance().installation(installation.id.into());
+    let (user, repo) = pull.base.repo.name_tuple();
+    let files = crab.pulls(user, repo).list_files(pull.number).await?;
+    crab.all_pages(files)
+        .await
+        .context("Failed to get all pages for pull request diff")
+}
 
-    Ok(res)
+static DOWNLOAD_DIR: &str = "download";
+
+async fn find_content<S: AsRef<str>>(
+    installation: &InstallationId,
+    repo: &Repository,
+    filename: S,
+    commit: S,
+) -> Result<Content> {
+    let (owner, repo) = repo.name_tuple();
+    let items = octocrab::instance()
+        .installation(*installation)
+        .repos(owner, repo)
+        .get_content()
+        .path(filename.as_ref())
+        .r#ref(commit.as_ref())
+        .send()
+        .await?
+        .take_items();
+
+    if items.len() > 1 {
+        return Err(format_err!("Directory given to find_content"));
+    }
+
+    items
+        .into_iter()
+        .next()
+        .ok_or_else(|| format_err!("No content was found"))
+}
+
+pub async fn download_url<S: AsRef<str>>(
+    installation: &InstallationId,
+    repo: &Repository,
+    filename: S,
+    commit: S,
+) -> Result<Vec<u8>> {
+    let target = find_content(installation, repo, filename, commit).await?;
+
+    let download_url = target
+        .download_url
+        .as_ref()
+        .ok_or_else(|| format_err!("No download URL given by GitHub"))?;
+
+    let response = reqwest::get(download_url).await?;
+
+    Ok(response.bytes().await?.to_vec())
+}
+
+pub async fn download_file<S: AsRef<str>>(
+    installation: &InstallationId,
+    repo: &Repository,
+    filename: S,
+    commit: S,
+) -> Result<PathBuf> {
+    let target = find_content(installation, repo, &filename, &commit).await?;
+
+    let mut path = PathBuf::new();
+    path.push(".");
+    path.push(DOWNLOAD_DIR);
+    path.push(&target.sha);
+    path.set_extension("dmi");
+
+    tokio::fs::create_dir_all(path.parent().unwrap()).await?;
+    let mut file = File::create(&path).await?;
+
+    let data = download_url(installation, repo, &filename, &commit).await?;
+    file.write_all(&data).await?;
+    Ok(path)
 }

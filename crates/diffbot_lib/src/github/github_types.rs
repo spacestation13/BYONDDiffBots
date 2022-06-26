@@ -24,6 +24,11 @@ impl Repository {
         self.url.split('/').skip(4).collect::<Vec<&str>>().join("/")
     }
 
+    pub fn name_tuple(&self) -> (String, String) {
+        let mut iter = self.url.split('/').skip(4).take(2).map(|a| a.to_string());
+        (iter.next().unwrap(), iter.next().unwrap())
+    }
+
     // pub fn owner(&self) -> String {
     //     self.url
     //         .split('/')
@@ -48,12 +53,6 @@ pub struct PullRequest {
     pub head: Branch,
     pub base: Branch,
     pub title: Option<String>,
-}
-#[derive(Serialize, Deserialize, Debug, Clone)]
-pub struct ModifiedFile {
-    pub filename: String,
-    pub status: String,
-    pub sha: String,
 }
 
 #[derive(Deserialize, Debug)]
@@ -102,7 +101,7 @@ pub struct PullRequestEventPayload {
     pub installation: Installation,
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, Debug)]
 pub struct Output {
     pub title: String,
     pub summary: String,
@@ -137,11 +136,13 @@ pub struct UpdateCheckRun {
 #[derive(Serialize, Deserialize, Clone, Copy)]
 pub struct Empty {}
 
+#[derive(Debug)]
 pub enum CheckOutputs {
     One(Output),
     Many(Output, Vec<Output>),
 }
 
+#[derive(Debug)]
 pub struct CheckOutputBuilder {
     title: String,
     summary: String,

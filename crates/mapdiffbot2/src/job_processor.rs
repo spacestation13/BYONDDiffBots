@@ -1,4 +1,6 @@
 use anyhow::{Context, Result};
+use octocrab::models::pulls::FileDiff;
+use octocrab::models::pulls::FileDiffStatus;
 use path_absolutize::*;
 use rayon::prelude::*;
 use rocket::tokio::runtime::Handle;
@@ -11,9 +13,9 @@ extern crate dreammaker as dm;
 
 use crate::rendering::*;
 use crate::CONFIG;
-use diffbot_lib::job::types::Job;
 use diffbot_lib::git::git_operations::*;
 use diffbot_lib::github::github_types::*;
+use diffbot_lib::job::types::Job;
 
 struct RenderedMaps {
     added_maps: Vec<MapWithRegions>,
@@ -24,9 +26,9 @@ struct RenderedMaps {
 fn render(
     base: &Branch,
     head: &Branch,
-    added_files: &[&ModifiedFile],
-    modified_files: &[&ModifiedFile],
-    removed_files: &[&ModifiedFile],
+    added_files: &[&FileDiff],
+    modified_files: &[&FileDiff],
+    removed_files: &[&FileDiff],
     output_dir: &Path,
     pull_request_number: u64,
     // feel like this is a bit of a hack but it works for now
@@ -206,7 +208,7 @@ fn render(
 
     //let now = Instant::now();
     (0..modified_files.len()).into_par_iter().for_each(|i| {
-        let _ = render_diffs_for_directory(modified_directory.join(i.to_string()));
+        render_diffs_for_directory(modified_directory.join(i.to_string()));
     });
     /*eprintln!(
         "Generating {} diff(s) took {}ms",
@@ -252,11 +254,10 @@ fn clone_repo(url: &str, dir: &Path) -> Result<()> {
     Ok(())
 }
 
-
 fn generate_finished_output<P: AsRef<Path>>(
-    added_files: &[&ModifiedFile],
-    modified_files: &[&ModifiedFile],
-    removed_files: &[&ModifiedFile],
+    added_files: &[&FileDiff],
+    modified_files: &[&FileDiff],
+    removed_files: &[&FileDiff],
     file_directory: &P,
     maps: RenderedMaps,
 ) -> Result<CheckOutputs> {
@@ -369,16 +370,16 @@ pub fn do_job(job: &Job) -> Result<CheckOutputs> {
     )
     .context("Checking out to default branch")?; // If this fails, good luck
 
-    let filter_on_status = |status: &str| {
+    let filter_on_status = |status: FileDiffStatus| {
         job.files
             .iter()
             .filter(|f| f.status == status)
-            .collect::<Vec<&ModifiedFile>>()
+            .collect::<Vec<&FileDiff>>()
     };
 
-    let added_files = filter_on_status("added");
-    let modified_files = filter_on_status("modified");
-    let removed_files = filter_on_status("removed");
+    let added_files = filter_on_status(FileDiffStatus::Added);
+    let modified_files = filter_on_status(FileDiffStatus::Modified);
+    let removed_files = filter_on_status(FileDiffStatus::Removed);
 
     let maps = render(
         base,
@@ -401,4 +402,3 @@ pub fn do_job(job: &Job) -> Result<CheckOutputs> {
 
     Ok(outputs)
 }
-
