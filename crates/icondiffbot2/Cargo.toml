@@ -23,6 +23,8 @@ flume = "0.10.12"
 ndarray = "0.15.3"
 sanitize-filename = "0.4.0"
 tracing-flame = "0.2.0"
+rayon = "1.5.3"
+hashbrown = { version = "0.12.1", features = ["rayon"] }
 
 [dependencies.tracing-subscriber]
 version = "0.3.11"

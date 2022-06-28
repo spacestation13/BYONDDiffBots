@@ -3,13 +3,17 @@ use crate::{
     table_builder::OutputTableBuilder,
     CONFIG,
 };
-use anyhow::{format_err, Context, Result};
+use anyhow::{Context, Result};
 use diffbot_lib::{github::github_types::CheckOutputs, job::types::Job};
 use dmm_tools::dmi::render::IconRenderer;
 use dmm_tools::dmi::State;
+use hashbrown::HashSet;
+use rayon::prelude::*;
 use std::{
-    collections::{hash_map::DefaultHasher, HashSet},
+    collections::hash_map::DefaultHasher,
+    fs::File,
     hash::{Hash, Hasher},
+    io::{BufWriter, Write},
     path::Path,
 };
 use tokio::runtime::Handle;
@@ -29,11 +33,11 @@ pub async fn handle_changed_files(job: &Job) -> Result<CheckOutputs> {
     let mut map = OutputTableBuilder::new();
 
     for dmi in &job.files {
-        let states = render(
-            job,
-            sha_to_iconfile(job, &dmi.filename, status_to_sha(job, &dmi.status)).await?,
-        )
-        .await?;
+        let file = sha_to_iconfile(job, &dmi.filename, status_to_sha(job, &dmi.status)).await?;
+
+        let j = job.clone();
+        let states = tokio::task::spawn_blocking(move || render(&j, file)).await??;
+
         map.insert(dmi.filename.as_str(), states);
     }
 
@@ -41,69 +45,63 @@ pub async fn handle_changed_files(job: &Job) -> Result<CheckOutputs> {
 }
 
 #[tracing::instrument]
-async fn render(
+fn render(
     job: &Job,
     diff: (Option<IconFileWithName>, Option<IconFileWithName>),
 ) -> Result<(String, Vec<String>)> {
     // TODO: Alphabetize
     // TODO: Test more edge cases
-    // TODO: Parallelize?
     match diff {
         (None, None) => unreachable!("Diffing (None, None) makes no sense"),
         (None, Some(after)) => {
-            let urls = full_render(job, &after)
-                .await
-                .context("Failed to render new icon file")?;
-            let mut builder = Vec::new();
-            for url in urls {
-                let mut state_name = url.0;
-                // Mark default states
-                if state_name.is_empty() {
-                    state_name = "{{DEFAULT}}".to_string();
-                }
+            let urls = full_render(job, &after).context("Failed to render new icon file")?;
 
-                builder.push(format!(
-                    include_str!(concat!(
-                        env!("CARGO_MANIFEST_DIR"),
-                        "/templates/diff_line.txt"
-                    )),
-                    state_name = state_name,
-                    old = "",
-                    new = url.1,
-                    change_text = "Created",
-                ));
-            }
-
-            Ok(("ADDED".to_owned(), builder))
+            Ok((
+                "ADDED".to_owned(),
+                urls.par_iter()
+                    .map(|(state_name, url)| {
+                        format!(
+                            include_str!(concat!(
+                                env!("CARGO_MANIFEST_DIR"),
+                                "/templates/diff_line.txt"
+                            )),
+                            state_name = if state_name.is_empty() {
+                                "{{DEFAULT}}".to_string()
+                            } else {
+                                state_name.clone()
+                            },
+                            old = "",
+                            new = url,
+                            change_text = "Created",
+                        )
+                    })
+                    .collect(),
+            ))
         }
         (Some(before), None) => {
-            // dbg!(&before.icon.metadata);
-            let urls = full_render(job, &before)
-                .await
-                .context("Failed to render deleted icon file")?;
-            // dbg!(&urls);
-            let mut builder = Vec::new();
-            for url in urls {
-                let mut state_name = url.0;
-                // Mark default states
-                if state_name.is_empty() {
-                    state_name = "{{DEFAULT}}".to_string();
-                }
+            let urls = full_render(job, &before).context("Failed to render deleted icon file")?;
 
-                // Build the output line
-                builder.push(format!(
-                    include_str!(concat!(
-                        env!("CARGO_MANIFEST_DIR"),
-                        "/templates/diff_line.txt"
-                    )),
-                    state_name = state_name,
-                    old = url.1,
-                    new = "",
-                    change_text = "Deleted",
-                ));
-            }
-
-            Ok(("DELETED".to_owned(), builder))
+            Ok((
+                "DELETED".to_owned(),
+                urls.par_iter()
+                    .map(|(state_name, url)| {
+                        format!(
+                            include_str!(concat!(
+                                env!("CARGO_MANIFEST_DIR"),
+                                "/templates/diff_line.txt"
+                            )),
+                            state_name = if state_name.is_empty() {
+                                "{{DEFAULT}}".to_string()
+                            } else {
+                                state_name.clone()
+                            },
+                            old = url,
+                            new = "",
+                            change_text = "Deleted",
+                        )
+                    })
+                    .collect(),
+            ))
         }
         (Some(before), Some(after)) => {
             let before_states: HashSet<&String> = before.icon.metadata.state_names.keys().collect();
@@ -111,112 +109,127 @@ async fn render(
 
             let prefix = format!("{}/{}", job.installation, job.pull_request);
 
-            let mut builder = Vec::new();
-            let mut before_renderer = IconRenderer::new(&before.icon);
-            let mut after_renderer = IconRenderer::new(&after.icon);
+            let before_renderer = IconRenderer::new(&before.icon);
+            let after_renderer = IconRenderer::new(&after.icon);
 
-            for state in before_states.symmetric_difference(&after_states) {
-                if before_states.contains(state) {
-                    let (name, url) = render_state(
-                        &prefix,
-                        &before,
-                        before.icon.metadata.get_icon_state(state).unwrap(),
-                        &mut before_renderer,
-                    )
-                    .await
-                    .with_context(|| format!("Failed to render before-state {state}"))?;
-                    builder.push(format!(
-                        include_str!(concat!(
-                            env!("CARGO_MANIFEST_DIR"),
-                            "/templates/diff_line.txt"
-                        )),
-                        state_name = name,
-                        old = url,
-                        new = "",
-                        change_text = "Deleted",
-                    ));
-                } else {
-                    let (name, url) = render_state(
-                        &prefix,
-                        &after,
-                        after.icon.metadata.get_icon_state(state).unwrap(),
-                        &mut after_renderer,
-                    )
-                    .await
-                    .with_context(|| format!("Failed to render after-state {state}"))?;
-                    builder.push(format!(
-                        include_str!(concat!(
-                            env!("CARGO_MANIFEST_DIR"),
-                            "/templates/diff_line.txt"
-                        )),
-                        state_name = name,
-                        old = "",
-                        new = url,
-                        change_text = "Created",
-                    ));
-                }
-            }
-
-            for state in before_states.intersection(&after_states) {
-                let before_state = before.icon.metadata.get_icon_state(state).unwrap();
-                let after_state = after.icon.metadata.get_icon_state(state).unwrap();
-
-                let difference = {
-                    // #[cfg(debug_assertions)]
-                    // dbg!(before_state, after_state);
-                    if before_state != after_state {
-                        true
+            let mut table: Vec<String> = before_states
+                .par_symmetric_difference(&after_states)
+                .map(|state| {
+                    if before_states.contains(state) {
+                        let (name, url) = render_state(
+                            &prefix,
+                            &before,
+                            before.icon.metadata.get_icon_state(state).unwrap(),
+                            &before_renderer,
+                        )
+                        .with_context(|| format!("Failed to render before-state {state}"))?;
+                        Ok(format!(
+                            include_str!(concat!(
+                                env!("CARGO_MANIFEST_DIR"),
+                                "/templates/diff_line.txt"
+                            )),
+                            state_name = name,
+                            old = url,
+                            new = "",
+                            change_text = "Deleted",
+                        ))
                     } else {
-                        let before_state_render = before_renderer.render_to_images(state)?;
-                        let after_state_render = after_renderer.render_to_images(state)?;
-                        before_state_render != after_state_render
+                        let (name, url) = render_state(
+                            &prefix,
+                            &after,
+                            after.icon.metadata.get_icon_state(state).unwrap(),
+                            &after_renderer,
+                        )
+                        .with_context(|| format!("Failed to render after-state {state}"))?;
+                        Ok(format!(
+                            include_str!(concat!(
+                                env!("CARGO_MANIFEST_DIR"),
+                                "/templates/diff_line.txt"
+                            )),
+                            state_name = name,
+                            old = "",
+                            new = url,
+                            change_text = "Created",
+                        ))
                     }
-                };
+                })
+                .filter_map(|r: Result<String, anyhow::Error>| {
+                    r.map_err(|e| {
+                        println!("Error encountered during parse: {}", e);
+                    })
+                    .ok()
+                })
+                .collect();
 
-                if difference {
-                    let before_state = before.icon.metadata.get_icon_state(state).unwrap();
-                    let after_state = after.icon.metadata.get_icon_state(state).unwrap();
+            table.par_extend(
+                before_states
+                    .par_intersection(&after_states)
+                    .map(|state| {
+                        let before_state = before.icon.metadata.get_icon_state(state).unwrap();
+                        let after_state = after.icon.metadata.get_icon_state(state).unwrap();
 
-                    let (_, before_url) =
-                        render_state(&prefix, &before, before_state, &mut before_renderer)
-                            .await
-                            .with_context(|| {
-                                format!("Failed to render modified before-state {state}")
-                            })?;
-                    let (_, after_url) =
-                        render_state(&prefix, &after, after_state, &mut after_renderer)
-                            .await
-                            .with_context(|| {
-                                format!("Failed to render modified before-state {state}")
-                            })?;
+                        let difference = {
+                            // #[cfg(debug_assertions)]
+                            // dbg!(before_state, after_state);
+                            if before_state != after_state {
+                                true
+                            } else {
+                                let before_state_render =
+                                    before_renderer.render_to_images(state)?;
+                                let after_state_render = after_renderer.render_to_images(state)?;
+                                before_state_render != after_state_render
+                            }
+                        };
 
-                    builder.push(format!(
-                        include_str!(concat!(
-                            env!("CARGO_MANIFEST_DIR"),
-                            "/templates/diff_line.txt"
-                        )),
-                        state_name = state,
-                        old = before_url,
-                        new = after_url,
-                        change_text = "Modified",
-                    ));
-                }
-                /* else {
-                    println!("No difference detected for {}", state);
-                } */
-            }
+                        if difference {
+                            let before_state = before.icon.metadata.get_icon_state(state).unwrap();
+                            let after_state = after.icon.metadata.get_icon_state(state).unwrap();
 
-            Ok(("MODIFIED".to_owned(), builder))
+                            let (_, before_url) =
+                                render_state(&prefix, &before, before_state, &before_renderer)
+                                    .with_context(|| {
+                                        format!("Failed to render modified before-state {state}")
+                                    })?;
+                            let (_, after_url) =
+                                render_state(&prefix, &after, after_state, &after_renderer)
+                                    .with_context(|| {
+                                        format!("Failed to render modified before-state {state}")
+                                    })?;
+
+                            Ok(format!(
+                                include_str!(concat!(
+                                    env!("CARGO_MANIFEST_DIR"),
+                                    "/templates/diff_line.txt"
+                                )),
+                                state_name = state,
+                                old = before_url,
+                                new = after_url,
+                                change_text = "Modified",
+                            ))
+                        } else {
+                            Ok("".to_string())
+                        }
+                    })
+                    .filter_map(|r: Result<String, anyhow::Error>| {
+                        r.map_err(|e| {
+                            println!("Error encountered during parse: {}", e);
+                        })
+                        .ok()
+                    })
+                    .filter(|s| !s.is_empty()),
+            );
+
+            Ok(("MODIFIED".to_owned(), table))
         }
     }
 }
 
 #[tracing::instrument]
-async fn render_state<'a, S: AsRef<str> + std::fmt::Debug>(
+fn render_state<'a, S: AsRef<str> + std::fmt::Debug>(
     prefix: S,
     target: &IconFileWithName,
     state: &State,
-    renderer: &mut IconRenderer<'a>,
+    renderer: &IconRenderer<'a>,
 ) -> Result<(String, String)> {
     let directory = Path::new(".").join("images").join(prefix.as_ref());
     // Always remember to mkdir -p your paths
@@ -232,40 +245,49 @@ async fn render_state<'a, S: AsRef<str> + std::fmt::Debug>(
     let filename = hasher.finish().to_string();
 
     // TODO: Calculate file extension separately so that we can Error here if we overwrite a file
-    let path = directory.join(&filename);
-    // dbg!(&path, &state.frames);
-    let corrected_path = renderer
-        .render_state(state, &path)
-        .with_context(|| format!("Failed to render state {} to file {:?}", state.name, path))?;
-    let extension = corrected_path
-        .extension()
-        .ok_or_else(|| format_err!("Unable to get extension that was written to"))?;
-    // dbg!(&corrected_path, &extension);
+    let mut path = directory.join(&filename);
+    let extension = match state.is_animated() {
+        true => "png",
+        false => "gif",
+    };
+    path.set_extension(extension);
+
+    let mut buffer = BufWriter::new(File::create(&path)?);
+
+    renderer
+        .render_state(state, &mut buffer)
+        .with_context(|| format!("Failed to render state {} to file {:?}", state.name, &path))?;
 
     let url = format!(
         "{}/{}/{}.{}",
         CONFIG.get().unwrap().file_hosting_url,
         prefix.as_ref(),
         filename,
-        extension.to_string_lossy()
+        extension,
     );
+
+    buffer.flush().with_context(|| {
+        format!(
+            "Failed to flush BufWriter to disk for state {:?} at {:?}",
+            state, &path
+        )
+    })?;
 
     Ok((state.get_state_name_index(), url))
 }
 
 #[tracing::instrument]
-async fn full_render(job: &Job, target: &IconFileWithName) -> Result<Vec<(String, String)>> {
+fn full_render(job: &Job, target: &IconFileWithName) -> Result<Vec<(String, String)>> {
     let icon = &target.icon;
 
     let mut vec = Vec::new();
 
-    let mut renderer = IconRenderer::new(icon);
+    let renderer = IconRenderer::new(icon);
 
     let prefix = format!("{}/{}", job.installation, job.pull_request);
 
     for state in icon.metadata.states.iter() {
-        let (name, url) = render_state(&prefix, target, state, &mut renderer)
-            .await
+        let (name, url) = render_state(&prefix, target, state, &renderer)
             .with_context(|| format!("Failed to render state {}", state.name))?;
         vec.push((name, url));
     }

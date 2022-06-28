@@ -9,7 +9,7 @@ use diffbot_lib::job::{
 };
 use octocrab::OctocrabBuilder;
 use once_cell::sync::OnceCell;
-use rocket::{figment::Figment, fs::FileServer, get, launch, routes};
+use rocket::{fairing::AdHoc, figment::Figment, fs::FileServer, get, launch, routes};
 use serde::Deserialize;
 use std::{fs::File, io::Read, path::PathBuf, sync::Arc};
 use tokio::sync::Mutex;
@@ -113,4 +113,12 @@ async fn rocket() -> _ {
             routes![index, github_processor::process_github_payload],
         )
         .mount("/images", FileServer::from("./images"))
+        .attach(AdHoc::on_liftoff(
+            "Rocket Ready for Accepts Printer",
+            |_| {
+                Box::pin(async move {
+                    println!("Rocket has launched, ready for requests.");
+                })
+            },
+        ))
 }
