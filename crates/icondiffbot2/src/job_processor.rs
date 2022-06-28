@@ -280,19 +280,25 @@ fn render_state<'a, S: AsRef<str> + std::fmt::Debug>(
 fn full_render(job: &Job, target: &IconFileWithName) -> Result<Vec<(String, String)>> {
     let icon = &target.icon;
 
-    let mut vec = Vec::new();
-
     let renderer = IconRenderer::new(icon);
 
     let prefix = format!("{}/{}", job.installation, job.pull_request);
 
-    for state in icon.metadata.states.iter() {
-        let (name, url) = render_state(&prefix, target, state, &renderer)
-            .with_context(|| format!("Failed to render state {}", state.name))?;
-        vec.push((name, url));
-    }
-
-    // dbg!(&vec);
+    let vec: Vec<(String, String)> = icon
+        .metadata
+        .states
+        .par_iter()
+        .map(|state| {
+            render_state(&prefix, target, state, &renderer)
+                .with_context(|| format!("Failed to render state {}", state.name))
+        })
+        .filter_map(|r: Result<(String, String), anyhow::Error>| {
+            r.map_err(|e| {
+                println!("Error encountered during parse: {}", e);
+            })
+            .ok()
+        })
+        .collect();
 
     Ok(vec)
 }
