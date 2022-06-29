@@ -61,8 +61,8 @@ pub async fn get_if_exists(
             full_name: filename.to_string(),
             sha: sha.to_string(),
             hash,
-            icon: IconFile::from_raw(raw)
-                .with_context(|| format!("IconFile::from_raw failed for {:?}", filename))?,
+            icon: IconFile::from_bytes(raw)
+                .with_context(|| format!("IconFile::from_bytes failed for {:?}", filename))?,
         }))
     } else {
         Ok(None)
