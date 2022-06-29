@@ -3,7 +3,7 @@ use crate::{
     table_builder::OutputTableBuilder,
     CONFIG,
 };
-use anyhow::{format_err, Context, Result};
+use anyhow::{Context, Result};
 use diffbot_lib::{github::github_types::CheckOutputs, job::types::Job};
 use dmm_tools::dmi::render::{IconRenderer, RenderType};
 use dmm_tools::dmi::State;
@@ -246,23 +246,22 @@ fn render_state<'a, S: AsRef<str> + std::fmt::Debug>(
 
     // TODO: Calculate file extension separately so that we can Error here if we overwrite a file
     let mut path = directory.join(&filename);
-    let extension = match state.is_animated() {
-        true => "png",
-        false => "gif",
+
+    let render_guard = renderer
+        .prepare_render_state(state)
+        .with_context(|| format!("Failed to create render guard for state {}", state.name))?;
+
+    let extension = match render_guard.render_type {
+        RenderType::Png => "png",
+        RenderType::Gif => "gif",
     };
     path.set_extension(extension);
 
     let mut buffer = BufWriter::new(File::create(&path)?);
 
-    let render_type = renderer
-        .render_state(state, &mut buffer)
+    render_guard
+        .render(&mut buffer)
         .with_context(|| format!("Failed to render state {} to file {:?}", state.name, &path))?;
-
-    match (render_type, extension) {
-        (RenderType::Png, "gif") => Err(format_err!("API breakage in SpacemanDMM, is_animated() returned true when render was actually a Png")),
-        (RenderType::Gif, "png") => Err(format_err!("API breakage in SpacemanDMM, is_animated() returned false when render was actually a Gif")),
-        _ => Ok(())
-    }?;
 
     let url = format!(
         "{}/{}/{}.{}",
