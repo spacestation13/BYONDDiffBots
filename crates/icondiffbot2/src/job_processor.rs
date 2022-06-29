@@ -3,9 +3,9 @@ use crate::{
     table_builder::OutputTableBuilder,
     CONFIG,
 };
-use anyhow::{Context, Result};
+use anyhow::{format_err, Context, Result};
 use diffbot_lib::{github::github_types::CheckOutputs, job::types::Job};
-use dmm_tools::dmi::render::IconRenderer;
+use dmm_tools::dmi::render::{IconRenderer, RenderType};
 use dmm_tools::dmi::State;
 use hashbrown::HashSet;
 use rayon::prelude::*;
@@ -254,9 +254,15 @@ fn render_state<'a, S: AsRef<str> + std::fmt::Debug>(
 
     let mut buffer = BufWriter::new(File::create(&path)?);
 
-    renderer
+    let render_type = renderer
         .render_state(state, &mut buffer)
         .with_context(|| format!("Failed to render state {} to file {:?}", state.name, &path))?;
+
+    match (render_type, extension) {
+        (RenderType::Png, "gif") => Err(format_err!("API breakage in SpacemanDMM, is_animated() returned true when render was actually a Png")),
+        (RenderType::Gif, "png") => Err(format_err!("API breakage in SpacemanDMM, is_animated() returned false when render was actually a Gif")),
+        _ => Ok(())
+    }?;
 
     let url = format!(
         "{}/{}/{}.{}",
