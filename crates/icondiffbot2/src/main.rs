@@ -23,6 +23,9 @@ async fn index() -> &'static str {
     "IDB says hello!"
 }
 
+pub type DataJobSender = actix_web::web::Data<JobSender>;
+pub type DataJobJournal = actix_web::web::Data<Mutex<JobJournal>>;
+
 #[derive(Debug, Deserialize)]
 pub struct GithubConfig {
     pub app_id: u64,
@@ -127,8 +130,8 @@ async fn main() -> std::io::Result<()> {
         .await
     });
 
-    let journal: actix_web::web::Data<_> = journal.into();
-    let job_sender = actix_web::web::Data::new(JobSender(job_sender));
+    let journal: DataJobJournal = journal.into();
+    let job_sender: DataJobSender = actix_web::web::Data::new(JobSender(job_sender));
 
     actix_web::HttpServer::new(move || {
         let form_config = actix_web::web::FormConfig::default().limit(config.web.limits.forms);

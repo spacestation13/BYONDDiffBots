@@ -12,6 +12,8 @@ use diffbot_lib::{
 use octocrab::models::{pulls::FileDiff, InstallationId};
 use tokio::sync::Mutex;
 
+use crate::{DataJobJournal, DataJobSender};
+
 #[derive(Debug)]
 pub struct GithubEvent(pub String);
 
@@ -116,9 +118,10 @@ async fn handle_pull_request(
 pub async fn process_github_payload_actix(
     event: GithubEvent,
     payload: String,
-    job_sender: actix_web::web::Data<JobSender>,
-    journal: actix_web::web::Data<Mutex<JobJournal>>,
+    job_sender: DataJobSender,
+    journal: DataJobJournal,
 ) -> actix_web::Result<&'static str> {
+    // TODO: Handle reruns
     if event.0 != "pull_request" {
         return Ok("Not a pull request event");
     }
