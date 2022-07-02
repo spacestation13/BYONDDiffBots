@@ -9,38 +9,58 @@ use diffbot_lib::job::{
 };
 use octocrab::OctocrabBuilder;
 use once_cell::sync::OnceCell;
-use rocket::{fairing::AdHoc, figment::Figment, fs::FileServer, get, launch, routes};
 use serde::Deserialize;
-use std::{fs::File, io::Read, path::PathBuf, sync::Arc};
+use std::{
+    fs::File,
+    io::Read,
+    path::{Path, PathBuf},
+    sync::Arc,
+};
 use tokio::sync::Mutex;
 
-#[get("/")]
+#[actix_web::get("/")]
 async fn index() -> &'static str {
     "IDB says hello!"
 }
 
 #[derive(Debug, Deserialize)]
-pub struct Config {
-    pub private_key_path: String,
-    // TODO: use regular url and append /images in code
-    pub file_hosting_url: String,
+pub struct GithubConfig {
     pub app_id: u64,
-    // TODO: Blacklist support
-    // pub blacklist: Vec<u64>,
-    // pub blacklist_contact: String,
+    pub private_key_path: String,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct WebLimitsConfig {
+    pub forms: usize,
+    pub string: usize,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct WebConfig {
+    pub address: String,
+    pub port: u16,
+    pub file_hosting_url: String,
+    pub limits: WebLimitsConfig,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct Config {
+    pub github: GithubConfig,
+    pub web: WebConfig,
 }
 
 static CONFIG: OnceCell<Config> = OnceCell::new();
 // static FLAME_LAYER_GUARD: OnceCell<tracing_flame::FlushGuard<std::io::BufWriter<File>>> =
 // OnceCell::new();
 
-fn init_config(figment: &Figment) -> &Config {
-    let config: Config = figment
-        .extract()
-        .expect("Missing config values in Rocket.toml");
+fn init_config(path: &Path) -> anyhow::Result<&'static Config> {
+    let mut config_str = String::new();
+    File::open(path)?.read_to_string(&mut config_str)?;
+
+    let config = toml::from_str(&config_str)?;
 
     CONFIG.set(config).expect("Failed to set config");
-    CONFIG.get().unwrap()
+    Ok(CONFIG.get().unwrap())
 }
 
 // fn init_global_subscriber() {
@@ -48,19 +68,19 @@ fn init_config(figment: &Figment) -> &Config {
 
 //     let fmt_layer = tracing_subscriber::fmt::Layer::default();
 
-//     let (flame_layer, guard) = tracing_flame::FlameLayer::with_file("./tracing.folded").unwrap();
+//     // let (flame_layer, guard) = tracing_flame::FlameLayer::with_file("./tracing.folded").unwrap();
 
 //     tracing_subscriber::registry()
 //         .with(fmt_layer)
-//         .with(flame_layer)
+//         // .with(flame_layer)
 //         .init();
 
-//     FLAME_LAYER_GUARD
-//         .set(guard)
-//         .expect("Failed to store flame layer guard");
+//     // FLAME_LAYER_GUARD
+//     //     .set(guard)
+//     //     .expect("Failed to store flame layer guard");
 // }
 
-fn read_key(path: PathBuf) -> Vec<u8> {
+fn read_key(path: &Path) -> Vec<u8> {
     let mut key_file =
         File::open(&path).unwrap_or_else(|_| panic!("Unable to find file {}", path.display()));
 
@@ -72,16 +92,18 @@ fn read_key(path: PathBuf) -> Vec<u8> {
     key
 }
 
-#[launch]
-async fn rocket() -> _ {
+#[tokio::main]
+async fn main() -> std::io::Result<()> {
     // init_global_subscriber();
-    let rocket = rocket::build();
-    let config = init_config(rocket.figment());
 
-    let key = read_key(PathBuf::from(&config.private_key_path));
+    let config_path = Path::new(".").join("config.toml");
+    let config =
+        init_config(&config_path).unwrap_or_else(|_| panic!("Failed to read {:?}", config_path));
+
+    let key = read_key(&PathBuf::from(&config.github.private_key_path));
 
     octocrab::initialise(OctocrabBuilder::new().app(
-        config.app_id.into(),
+        config.github.app_id.into(),
         jsonwebtoken::EncodingKey::from_rsa_pem(&key).unwrap(),
     ))
     .expect("Octocrab failed to initialise");
@@ -93,9 +115,9 @@ async fn rocket() -> _ {
     tokio::fs::create_dir_all("./images").await.unwrap();
 
     let (job_sender, job_receiver) = flume::unbounded();
-    let journal_clone = journal.clone();
 
-    rocket::tokio::spawn(async move {
+    let journal_clone = journal.clone();
+    tokio::spawn(async move {
         handle_jobs(
             "IconDiffBot2",
             job_receiver,
@@ -105,20 +127,23 @@ async fn rocket() -> _ {
         .await
     });
 
-    rocket
-        .manage(JobSender(job_sender))
-        .manage(journal)
-        .mount(
-            "/",
-            routes![index, github_processor::process_github_payload],
-        )
-        .mount("/images", FileServer::from("./images"))
-        .attach(AdHoc::on_liftoff(
-            "Rocket Ready for Accepts Printer",
-            |_| {
-                Box::pin(async move {
-                    println!("Rocket has launched, ready for requests.");
-                })
-            },
-        ))
+    let journal: actix_web::web::Data<_> = journal.into();
+    let job_sender = actix_web::web::Data::new(JobSender(job_sender));
+
+    actix_web::HttpServer::new(move || {
+        let form_config = actix_web::web::FormConfig::default().limit(config.web.limits.forms);
+        let string_config =
+            actix_web::web::PayloadConfig::default().limit(config.web.limits.string);
+        actix_web::App::new()
+            .app_data(form_config)
+            .app_data(string_config)
+            .app_data(journal.clone())
+            .app_data(job_sender.clone())
+            .service(index)
+            .service(github_processor::process_github_payload_actix)
+            .service(actix_files::Files::new("/images", "./images"))
+    })
+    .bind((config.web.address.as_ref(), config.web.port))?
+    .run()
+    .await
 }

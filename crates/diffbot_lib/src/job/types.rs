@@ -19,9 +19,11 @@ pub struct Job {
     pub installation: InstallationId,
 }
 
+#[derive(Debug, Clone)]
 pub struct JobSender(pub Sender<Job>);
 
 //TODO: Integrate journaling and channel into some sort of queue?
+#[derive(Debug)]
 pub struct JobJournal {
     file: String,
     jobs: VecDeque<Job>,

@@ -1,0 +1,12 @@
+[github]
+app_id = 123456
+private_key_path = "diffbot.pem"
+
+[web]
+address = "0.0.0.0"
+port = 1234
+file_hosting_url = "http://example.com:1234/images"
+
+[web.limits]
+forms = 131072
+string = 131072

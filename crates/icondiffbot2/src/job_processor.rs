@@ -265,7 +265,7 @@ fn render_state<'a, S: AsRef<str> + std::fmt::Debug>(
 
     let url = format!(
         "{}/{}/{}.{}",
-        CONFIG.get().unwrap().file_hosting_url,
+        CONFIG.get().unwrap().web.file_hosting_url,
         prefix.as_ref(),
         filename,
         extension,

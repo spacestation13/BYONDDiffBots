@@ -1,5 +1,6 @@
-use std::sync::Arc;
+use std::{future::Future, pin::Pin};
 
+use anyhow::Result;
 use diffbot_lib::{
     github::github_api::get_pull_files,
     github::{
@@ -9,35 +10,34 @@ use diffbot_lib::{
     job::types::{Job, JobJournal, JobSender},
 };
 use octocrab::models::{pulls::FileDiff, InstallationId};
-// use dmm_tools::dmi::IconFile;
-use anyhow::Result;
-use rocket::{
-    http::Status,
-    post,
-    request::{FromRequest, Outcome},
-    Request, State,
-};
 use tokio::sync::Mutex;
 
 #[derive(Debug)]
 pub struct GithubEvent(pub String);
 
-#[rocket::async_trait]
-impl<'r> FromRequest<'r> for GithubEvent {
-    type Error = &'static str;
+impl actix_web::FromRequest for GithubEvent {
+    type Error = std::io::Error;
 
-    async fn from_request(req: &'r Request<'_>) -> Outcome<Self, Self::Error> {
-        match req.headers().get_one("X-Github-Event") {
-            Some(event) => Outcome::Success(GithubEvent(event.to_owned())),
-            None => Outcome::Failure((Status::BadRequest, "Missing X-Github-Event header")),
-        }
+    type Future = Pin<Box<dyn Future<Output = Result<Self, Self::Error>>>>;
+
+    fn from_request(req: &actix_web::HttpRequest, _: &mut actix_web::dev::Payload) -> Self::Future {
+        let req = req.clone();
+        Box::pin(async move {
+            match req.headers().get("X-Github-Event") {
+                Some(event) => Ok(GithubEvent(event.to_str().unwrap().to_owned())),
+                None => Err(std::io::Error::new(
+                    std::io::ErrorKind::InvalidData,
+                    "Missing X-Github-Event header",
+                )),
+            }
+        })
     }
 }
 
 async fn handle_pull_request(
     payload: PullRequestEventPayload,
-    job_sender: &State<JobSender>,
-    journal: &State<Arc<Mutex<JobJournal>>>,
+    job_sender: actix_web::web::Data<JobSender>,
+    journal: actix_web::web::Data<Mutex<JobJournal>>,
 ) -> Result<()> {
     match payload.action.as_str() {
         "opened" => {}
@@ -112,27 +112,22 @@ async fn handle_pull_request(
     Ok(())
 }
 
-#[post("/payload", format = "json", data = "<payload>")]
-pub async fn process_github_payload(
+#[actix_web::post("/payload")]
+pub async fn process_github_payload_actix(
     event: GithubEvent,
     payload: String,
-    job_sender: &State<JobSender>,
-    journal: &State<Arc<Mutex<JobJournal>>>,
-) -> Result<&'static str, String> {
-    // TODO: Check reruns
+    job_sender: actix_web::web::Data<JobSender>,
+    journal: actix_web::web::Data<Mutex<JobJournal>>,
+) -> actix_web::Result<&'static str> {
     if event.0 != "pull_request" {
         return Ok("Not a pull request event");
     }
 
-    let payload: PullRequestEventPayload =
-        serde_json::from_str(&payload).map_err(|e| format!("{e}"))?;
+    let payload: PullRequestEventPayload = serde_json::from_str(&payload)?;
 
     handle_pull_request(payload, job_sender, journal)
         .await
-        .map_err(|e| {
-            eprintln!("Error handling event {e:?}");
-            "An error occured while handling the event"
-        })?;
+        .map_err(actix_web::error::ErrorBadRequest)?;
 
     Ok("")
 }
