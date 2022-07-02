@@ -7,10 +7,9 @@ use diffbot_lib::{
         github_api::CheckRun,
         github_types::{Output, PullRequestEventPayload},
     },
-    job::types::{Job, JobJournal, JobSender},
+    job::types::Job,
 };
 use octocrab::models::{pulls::FileDiff, InstallationId};
-use tokio::sync::Mutex;
 
 use crate::{DataJobJournal, DataJobSender};
 
@@ -38,8 +37,8 @@ impl actix_web::FromRequest for GithubEvent {
 
 async fn handle_pull_request(
     payload: PullRequestEventPayload,
-    job_sender: actix_web::web::Data<JobSender>,
-    journal: actix_web::web::Data<Mutex<JobJournal>>,
+    job_sender: DataJobSender,
+    journal: DataJobJournal,
 ) -> Result<()> {
     match payload.action.as_str() {
         "opened" => {}
