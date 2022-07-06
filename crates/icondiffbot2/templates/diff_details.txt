@@ -3,7 +3,7 @@
 	{typ} - {filename}
 	</summary>
 
-|State Name|Old Icon|New Icon|Status|
+|State Name (duplicate)|Old Icon|New Icon|Status|
 |----------|--------|--------|------|
 {table}
 

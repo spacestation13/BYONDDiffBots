@@ -7,6 +7,7 @@ use anyhow::{Context, Result};
 use diffbot_lib::{github::github_types::CheckOutputs, job::types::Job};
 use dmm_tools::dmi::render::{IconRenderer, RenderType};
 use dmm_tools::dmi::State;
+use dreammaker::dmi::StateIndex;
 use hashbrown::HashSet;
 use rayon::prelude::*;
 use std::{
@@ -65,11 +66,7 @@ fn render(
                                 env!("CARGO_MANIFEST_DIR"),
                                 "/templates/diff_line.txt"
                             )),
-                            state_name = if state_name.is_empty() {
-                                "{{DEFAULT}}".to_string()
-                            } else {
-                                state_name.clone()
-                            },
+                            state_name = state_name,
                             old = "",
                             new = url,
                             change_text = "Created",
@@ -90,11 +87,7 @@ fn render(
                                 env!("CARGO_MANIFEST_DIR"),
                                 "/templates/diff_line.txt"
                             )),
-                            state_name = if state_name.is_empty() {
-                                "{{DEFAULT}}".to_string()
-                            } else {
-                                state_name.clone()
-                            },
+                            state_name = state_name,
                             old = url,
                             new = "",
                             change_text = "Deleted",
@@ -104,8 +97,10 @@ fn render(
             ))
         }
         (Some(before), Some(after)) => {
-            let before_states: HashSet<&String> = before.icon.metadata.state_names.keys().collect();
-            let after_states: HashSet<&String> = after.icon.metadata.state_names.keys().collect();
+            let before_states: HashSet<&StateIndex> =
+                before.icon.metadata.state_names.keys().collect();
+            let after_states: HashSet<&StateIndex> =
+                after.icon.metadata.state_names.keys().collect();
 
             let prefix = format!("{}/{}", job.installation, job.pull_request);
 
@@ -230,7 +225,7 @@ fn render_state<'a, S: AsRef<str> + std::fmt::Debug>(
     target: &IconFileWithName,
     state: &State,
     renderer: &IconRenderer<'a>,
-) -> Result<(String, String)> {
+) -> Result<(StateIndex, String)> {
     let directory = Path::new(".").join("images").join(prefix.as_ref());
     // Always remember to mkdir -p your paths
     std::fs::create_dir_all(&directory)
@@ -240,7 +235,7 @@ fn render_state<'a, S: AsRef<str> + std::fmt::Debug>(
     target.sha.hash(&mut hasher);
     target.full_name.hash(&mut hasher);
     target.hash.hash(&mut hasher);
-    state.duplicate.unwrap_or(0).hash(&mut hasher);
+    state.duplicate_index.hash(&mut hasher);
     state.name.hash(&mut hasher);
     let filename = hasher.finish().to_string();
 
@@ -282,14 +277,14 @@ fn render_state<'a, S: AsRef<str> + std::fmt::Debug>(
 }
 
 #[tracing::instrument]
-fn full_render(job: &Job, target: &IconFileWithName) -> Result<Vec<(String, String)>> {
+fn full_render(job: &Job, target: &IconFileWithName) -> Result<Vec<(StateIndex, String)>> {
     let icon = &target.icon;
 
     let renderer = IconRenderer::new(icon);
 
     let prefix = format!("{}/{}", job.installation, job.pull_request);
 
-    let vec: Vec<(String, String)> = icon
+    let vec: Vec<(StateIndex, String)> = icon
         .metadata
         .states
         .par_iter()
@@ -297,7 +292,7 @@ fn full_render(job: &Job, target: &IconFileWithName) -> Result<Vec<(String, Stri
             render_state(&prefix, target, state, &renderer)
                 .with_context(|| format!("Failed to render state {}", state.name))
         })
-        .filter_map(|r: Result<(String, String), anyhow::Error>| {
+        .filter_map(|r: Result<(StateIndex, String), anyhow::Error>| {
             r.map_err(|e| {
                 println!("Error encountered during parse: {}", e);
             })
