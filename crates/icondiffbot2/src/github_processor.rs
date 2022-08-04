@@ -65,7 +65,7 @@ async fn handle_pull_request(
         .contains("[idb ignore]")
     {
         let output = Output {
-            title: "PR Ignored".to_owned(),
+            title: "PR Ignored",
             summary: "This PR has `[IDB IGNORE]` in the title. Aborting.".to_owned(),
             text: "".to_owned(),
         };
@@ -83,7 +83,7 @@ async fn handle_pull_request(
 
     if changed_dmis.is_empty() {
         let output = Output {
-            title: "No icon chages".to_owned(),
+            title: "No icon chages",
             summary: "There are no changed icon files to render.".to_owned(),
             text: "".to_owned(),
         };

@@ -87,7 +87,7 @@ impl CheckRun {
                 .conclusion("failure")
                 .completed_at(chrono::Utc::now().to_rfc3339())
                 .output(Output {
-                    title: "Error handling job".to_owned(),
+                    title: "Error handling job",
                     summary,
                     text: "".to_owned(),
                 }),

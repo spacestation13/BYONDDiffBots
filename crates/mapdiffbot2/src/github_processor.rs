@@ -31,7 +31,7 @@ async fn process_pull(
         .contains("[mdb ignore]")
     {
         let output = Output {
-            title: "PR Ignored".to_owned(),
+            title: "PR Ignored",
             summary: "This PR has `[MDB IGNORE]` in the title. Aborting.".to_owned(),
             text: "".to_owned(),
         };
@@ -48,7 +48,7 @@ async fn process_pull(
 
     if blacklist.contains(&pull.base.repo.id) {
         let output = Output {
-            title: "Repo blacklisted".to_owned(),
+            title: "Repo blacklisted",
             summary: format!(
                 "Repository {} is blacklisted. {}",
                 pull.base.repo.full_name(),
@@ -71,7 +71,7 @@ async fn process_pull(
 
     if files.is_empty() {
         let output = Output {
-            title: "No map changes".to_owned(),
+            title: "No map changes",
             summary: "There are no changed map files to render.".to_owned(),
             text: "".to_owned(),
         };

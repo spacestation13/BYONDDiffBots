@@ -49,7 +49,7 @@ pub async fn handle_changed_files(job: &Job) -> Result<CheckOutputs> {
 fn render(
     job: &Job,
     diff: (Option<IconFileWithName>, Option<IconFileWithName>),
-) -> Result<(String, Vec<String>)> {
+) -> Result<(&'static str, Vec<String>)> {
     // TODO: Alphabetize
     // TODO: Test more edge cases
     match diff {
@@ -58,7 +58,7 @@ fn render(
             let urls = full_render(job, &after).context("Failed to render new icon file")?;
 
             Ok((
-                "ADDED".to_owned(),
+                "ADDED",
                 urls.par_iter()
                     .map(|(state_name, url)| {
                         format!(
@@ -79,7 +79,7 @@ fn render(
             let urls = full_render(job, &before).context("Failed to render deleted icon file")?;
 
             Ok((
-                "DELETED".to_owned(),
+                "DELETED",
                 urls.par_iter()
                     .map(|(state_name, url)| {
                         format!(
@@ -214,7 +214,7 @@ fn render(
                     .filter(|s| !s.is_empty()),
             );
 
-            Ok(("MODIFIED".to_owned(), table))
+            Ok(("MODIFIED", table))
         }
     }
 }

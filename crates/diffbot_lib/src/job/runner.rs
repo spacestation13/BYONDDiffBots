@@ -68,14 +68,14 @@ where
                     .await;
             }
         }
-        CheckOutputs::Many(first, rest) => {
-            let count = rest.len() + 1;
+        CheckOutputs::Many(mut outputs) => {
+            let count = outputs.len();
 
             let _ = job
                 .check_run
                 .rename(&format!("{} (1/{})", name.as_ref(), count))
                 .await;
-            let res = job.check_run.mark_succeeded(first).await;
+            let res = job.check_run.mark_succeeded(outputs.remove(0)).await;
             if res.is_err() {
                 let _ = job
                     .check_run
@@ -84,7 +84,7 @@ where
                 return;
             }
 
-            for (i, overflow) in rest.into_iter().enumerate() {
+            for (i, overflow) in outputs.into_iter().enumerate() {
                 if let Ok(check) = job
                     .check_run
                     .duplicate(&format!("{} ({}/{})", name.as_ref(), i + 2, count))
@@ -100,6 +100,12 @@ where
                     }
                 }
             }
+        }
+        CheckOutputs::None => {
+            let _ = job
+                .check_run
+                .mark_failed("Rendering returned nothing!")
+                .await;
         }
     }
 }

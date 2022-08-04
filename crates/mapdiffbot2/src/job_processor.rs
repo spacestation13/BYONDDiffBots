@@ -127,72 +127,58 @@ fn render(
     // You might think to yourself, wtf is going on here?
     // And you'd be right.
     let removed_maps = with_repo_dir(&base.repo, || {
-        let results = rayon::join(
-            || {
-                render_map_regions(
-                    &base_context,
-                    &modified_maps.befores,
-                    &head_render_passes,
-                    modified_directory,
-                    "before.png",
-                    &modified_before_errors,
-                )
-                .context("Rendering modified before maps")
-            },
-            || {
-                let maps = load_maps_with_whole_map_regions(removed_files)
-                    .context("Loading removed maps")?;
+        render_map_regions(
+            &base_context,
+            &modified_maps.befores,
+            &head_render_passes,
+            modified_directory,
+            "before.png",
+            &modified_before_errors,
+        )
+        .context("Rendering modified before maps")?;
 
-                render_map_regions(
-                    &base_context,
-                    &maps,
-                    &base_render_passes,
-                    removed_directory,
-                    "removed.png",
-                    &removed_errors,
-                )
-                .context("Rendering removed maps")?;
+        let maps =
+            load_maps_with_whole_map_regions(removed_files).context("Loading removed maps")?;
 
-                Ok(maps)
-            },
-        );
-        results.0?;
-        results.1
+        render_map_regions(
+            &base_context,
+            &maps,
+            &base_render_passes,
+            removed_directory,
+            "removed.png",
+            &removed_errors,
+        )
+        .context("Rendering removed maps")?;
+
+        Ok(maps)
         //eprintln!("Base maps took {}ms", now.elapsed().as_millis());
     })?;
 
     //let now = Instant::now();
     let added_maps = with_checkout(&base.repo, &pull_branch, || {
-        let results = rayon::join(
-            || {
-                render_map_regions(
-                    &head_context,
-                    &modified_maps.afters,
-                    &head_render_passes,
-                    modified_directory,
-                    "after.png",
-                    &modified_after_errors,
-                )
-            },
-            || {
-                let maps =
-                    load_maps_with_whole_map_regions(added_files).context("Loading added maps")?;
+        render_map_regions(
+            &head_context,
+            &modified_maps.afters,
+            &head_render_passes,
+            modified_directory,
+            "after.png",
+            &modified_after_errors,
+        )
+        .context("Rendering modified after maps")?;
 
-                render_map_regions(
-                    &head_context,
-                    &maps,
-                    &head_render_passes,
-                    added_directory,
-                    "added.png",
-                    &added_errors,
-                )
-                .context("Rendering added maps")?;
+        let maps = load_maps_with_whole_map_regions(added_files).context("Loading added maps")?;
 
-                Ok(maps)
-            },
-        );
-        results.0?; // Is there a better way?
-        results.1
+        render_map_regions(
+            &head_context,
+            &maps,
+            &head_render_passes,
+            added_directory,
+            "added.png",
+            &added_errors,
+        )
+        .context("Rendering added maps")?;
+
+        Ok(maps)
     })
     .context("Rendering modified after and added maps")?;
     //eprintln!("Head maps took {}ms", now.elapsed().as_millis());
@@ -341,7 +327,7 @@ pub fn do_job(job: &Job) -> Result<CheckOutputs> {
         if let Ok(handle) = Handle::try_current() {
             handle.block_on(async {
 				let output = Output {
-					title: "Cloning repo...".to_owned(),
+					title: "Cloning repo...",
 					summary: "The repository is being cloned, this will take a few minutes. Future runs will not require cloning.".to_owned(),
 					text: "".to_owned(),
 				};
