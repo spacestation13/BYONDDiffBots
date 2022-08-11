@@ -1,4 +1,5 @@
 use anyhow::{Context, Result};
+use git2::Diff;
 use octocrab::models::pulls::FileDiff;
 use octocrab::models::pulls::FileDiffStatus;
 use path_absolutize::*;
@@ -6,7 +7,6 @@ use rayon::prelude::*;
 use rocket::tokio::runtime::Handle;
 use std::path::Path;
 use std::path::PathBuf;
-use std::process::Command;
 //use std::time::Instant;
 
 extern crate dreammaker as dm;
@@ -25,70 +25,25 @@ struct RenderedMaps {
 
 fn render(
     base: &Branch,
-    head: &Branch,
+    diffs: Diff,
     added_files: &[&FileDiff],
     modified_files: &[&FileDiff],
     removed_files: &[&FileDiff],
     output_dir: &Path,
-    pull_request_number: u64,
     // feel like this is a bit of a hack but it works for now
 ) -> Result<RenderedMaps> {
-    with_repo_dir(&base.repo, || {
-        Command::new("git")
-            .args(["checkout", &base.name])
-            .output()
-            .context("Running base checkout command")?;
-
-        Command::new("git")
-            .args(["pull", "origin", &base.name])
-            .output()
-            .context("Running base pull command")?;
-
-        let output = Command::new("git")
-            .args(["branch"])
-            .output()
-            .context("Running branch command")?;
-
-        String::from_utf8(output.stdout)?
-            .lines()
-            .map(|l| l.trim())
-            .filter(|l| l.starts_with("mdb-"))
-            .for_each(|l| {
-                let _ = Command::new("git").args(["branch", "-D", l]).status();
-            });
-
-        Ok(())
-    })
-    .context("Updating to latest master on base")?;
-
-    //let now = Instant::now();
     let path = format!("./repos/{}", &base.repo.name);
+    let repository = git2::Repository::open(path.as_str())?;
+
+    fast_forward_to_head(&base.sha, &repository)?;
+
     let path = Path::new(&path)
         .absolutize()
         .context("Making repo path absolute")?;
     let base_context = RenderingContext::new(&path).context("Parsing base")?;
-    //eprintln!("Parsing base took {}ms", now.elapsed().as_millis());
 
-    let pull_branch = format!("mdb-{}-{}", base.sha, head.sha);
-    let fetch_branch = format!("pull/{}/head:{}", pull_request_number, pull_branch);
-
-    //let now = Instant::now();
-    with_repo_dir(&base.repo, || {
-        Command::new("git")
-            .args(["fetch", "origin", &fetch_branch])
-            .output()
-            .context("Running fetch command")?;
-        Ok(())
-    })
-    .context("Fetching the pull")?;
-
-    let head_context = with_checkout(&base.repo, &pull_branch, || RenderingContext::new(&path))
+    let head_context = with_deltas(&diffs, &repository, || RenderingContext::new(&path))
         .context("Parsing head")?;
-
-    // eprintln!(
-    //     "Fetching and parsing head took {}ms",
-    //     now.elapsed().as_millis()
-    // );
 
     let base_render_passes = dmm_tools::render_passes::configure(
         base_context.map_config(),
@@ -118,15 +73,15 @@ fn render(
     let removed_errors = Default::default();
 
     let base_maps =
-        with_repo_dir(&base.repo, || load_maps(modified_files)).context("Loading base maps")?;
-    let head_maps = with_checkout(&base.repo, &pull_branch, || load_maps(modified_files))
+        with_repo_dir(&path, || load_maps(modified_files)).context("Loading base maps")?;
+    let head_maps = with_deltas(&diffs, &repository, || load_maps(modified_files))
         .context("Loading head maps")?;
     let modified_maps = get_map_diff_bounding_boxes(base_maps, head_maps);
 
     //let now = Instant::now();
     // You might think to yourself, wtf is going on here?
     // And you'd be right.
-    let removed_maps = with_repo_dir(&base.repo, || {
+    let removed_maps = with_repo_dir(&path, || {
         render_map_regions(
             &base_context,
             &modified_maps.befores,
@@ -155,69 +110,38 @@ fn render(
     })?;
 
     //let now = Instant::now();
-    let added_maps = with_checkout(&base.repo, &pull_branch, || {
-        render_map_regions(
-            &head_context,
-            &modified_maps.afters,
-            &head_render_passes,
-            modified_directory,
-            "after.png",
-            &modified_after_errors,
-        )
-        .context("Rendering modified after maps")?;
+    let added_maps = with_deltas(&diffs, &repository, || {
+        with_repo_dir(&path, || {
+            render_map_regions(
+                &head_context,
+                &modified_maps.afters,
+                &head_render_passes,
+                modified_directory,
+                "after.png",
+                &modified_after_errors,
+            )
+            .context("Rendering modified after maps")?;
 
-        let maps = load_maps_with_whole_map_regions(added_files).context("Loading added maps")?;
+            let maps =
+                load_maps_with_whole_map_regions(added_files).context("Loading added maps")?;
 
-        render_map_regions(
-            &head_context,
-            &maps,
-            &head_render_passes,
-            added_directory,
-            "added.png",
-            &added_errors,
-        )
-        .context("Rendering added maps")?;
+            render_map_regions(
+                &head_context,
+                &maps,
+                &head_render_passes,
+                added_directory,
+                "added.png",
+                &added_errors,
+            )
+            .context("Rendering added maps")?;
 
-        Ok(maps)
+            Ok(maps)
+        })
     })
     .context("Rendering modified after and added maps")?;
-    //eprintln!("Head maps took {}ms", now.elapsed().as_millis());
-
-    with_repo_dir(&base.repo, || {
-        Command::new("git")
-            .args(["branch", "-D", &pull_branch])
-            .output()?;
-
-        Ok(())
-    })
-    .context("Deleting pull branch")?;
-
-    //let now = Instant::now();
     (0..modified_files.len()).into_par_iter().for_each(|i| {
         render_diffs_for_directory(modified_directory.join(i.to_string()));
     });
-    /*eprintln!(
-        "Generating {} diff(s) took {}ms",
-        modified_files.len(),
-        now.elapsed().as_millis()
-    );*/
-
-    /*
-    let print_errors = |e: &RenderingErrors| {
-        for error in e.read().unwrap().iter() {
-            eprintln!("{}", error);
-        }
-    };
-
-    eprintln!("Added map errors: ");
-    print_errors(&added_errors);
-    eprintln!("Modified before map errors: ");
-    print_errors(&modified_before_errors);
-    eprintln!("Modified after map errors: ");
-    print_errors(&modified_after_errors);
-    eprintln!("Removed map errors: ");
-    print_errors(&removed_errors);
-    */
 
     Ok(RenderedMaps {
         added_maps,
@@ -227,16 +151,7 @@ fn render(
 }
 
 fn clone_repo(url: &str, dir: &Path) -> Result<()> {
-    Command::new("git")
-        .args([
-            "clone",
-            url,
-            dir.to_str()
-                .ok_or_else(|| anyhow::anyhow!("Target directory is somehow unstringable"))?,
-        ])
-        .output()
-        .context("Cloning repo")?;
-
+    git2::Repository::clone(url, dir.as_os_str()).context("Cloning repo")?;
     Ok(())
 }
 
@@ -319,23 +234,23 @@ fn generate_finished_output<P: AsRef<Path>>(
 
 pub fn do_job(job: &Job) -> Result<CheckOutputs> {
     let base = &job.base;
-    let head = &job.head;
     let repo = format!("https://github.com/{}", base.repo.full_name());
     let target_dir: PathBuf = ["./repos/", &base.repo.name].iter().collect();
+    let handle = Handle::try_current().unwrap();
 
     if !target_dir.exists() {
-        if let Ok(handle) = Handle::try_current() {
-            handle.block_on(async {
+        handle.block_on(async {
 				let output = Output {
 					title: "Cloning repo...",
 					summary: "The repository is being cloned, this will take a few minutes. Future runs will not require cloning.".to_owned(),
 					text: "".to_owned(),
 				};
 				let _ = job.check_run.set_output(output).await; // we don't really care if updating the job fails, just continue
-			});
-        }
-
-        clone_repo(&repo, &target_dir).context("Cloning repo")?;
+                || -> Result<()> {
+                clone_repo(&repo, &target_dir).context("Cloning repo")?;
+                Ok(())
+                }()
+			})?;
     }
 
     let non_abs_directory = format!("images/{}/{}", job.base.repo.id, job.check_run.id());
@@ -347,15 +262,6 @@ pub fn do_job(job: &Job) -> Result<CheckOutputs> {
         .to_str()
         .ok_or_else(|| anyhow::anyhow!("Failed to create absolute path to image directory",))?;
 
-    git_checkout(
-        &job.base
-            .repo
-            .default_branch
-            .clone()
-            .unwrap_or_else(|| "master".to_owned()),
-    )
-    .context("Checking out to default branch")?; // If this fails, good luck
-
     let filter_on_status = |status: FileDiffStatus| {
         job.files
             .iter()
@@ -363,18 +269,24 @@ pub fn do_job(job: &Job) -> Result<CheckOutputs> {
             .collect::<Vec<&FileDiff>>()
     };
 
+    let diffs = handle.block_on(async {
+        || -> Result<Diff> {
+            git2::Diff::from_buffer(job.patch.as_ref().unwrap().as_bytes())
+                .map_err(|_| anyhow::anyhow!("Failed to parse patch, probably corrupted"))
+        }()
+    })?;
+
     let added_files = filter_on_status(FileDiffStatus::Added);
     let modified_files = filter_on_status(FileDiffStatus::Modified);
     let removed_files = filter_on_status(FileDiffStatus::Removed);
 
     let maps = render(
         base,
-        head,
+        diffs,
         &added_files,
         &modified_files,
         &removed_files,
         Path::new(directory),
-        job.pull_request,
     )
     .context("Doing the renderance")?;
 

@@ -103,6 +103,7 @@ async fn handle_pull_request(
         head: pull.head,
         pull_request: pull.number,
         files: changed_dmis,
+        patch: None,
         check_run,
         installation: InstallationId(installation.id),
     };

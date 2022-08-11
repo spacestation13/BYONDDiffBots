@@ -1,32 +1,45 @@
 use anyhow::Result;
-use std::{path::Path, process::Command};
+use std::path::Path;
 
-use crate::github::github_types::Repository;
+use git2::{Diff, Repository};
 
-pub fn with_repo_dir<T>(repo: &Repository, f: impl FnOnce() -> Result<T>) -> Result<T> {
+pub fn with_repo_dir<T>(repo: &Path, f: impl FnOnce() -> Result<T>) -> Result<T> {
     let current_dir = std::env::current_dir()?;
-    std::env::set_current_dir(Path::new(&format!("./repos/{}", repo.name)))?;
+    std::env::set_current_dir(repo)?;
     let result = f();
     std::env::set_current_dir(current_dir)?;
     result
 }
 
-pub fn git_checkout(branch: &str) -> Result<(), std::io::Error> {
-    Command::new("git")
-        .args(["checkout", branch])
-        .output()
-        .map(|_| ())
+pub fn fast_forward_to_head(head_sha: &str, repo: &Repository) -> Result<()> {
+    let id = git2::Oid::from_str(head_sha)?;
+    let mut remote = repo.find_remote("origin")?;
+    let default_branch = remote.default_branch()?;
+    remote.fetch(
+        &[default_branch.as_str().ok_or(anyhow::anyhow!(
+            "Default branch is not a valid string, what the fuck"
+        ))?],
+        None,
+        None,
+    )?;
+    let fetch_head = repo.find_reference("FETCH_HEAD")?;
+    let actual_tree = fetch_head.peel_to_tree()?;
+    let entry = actual_tree
+        .get_id(id)
+        .ok_or(anyhow::anyhow!("Cannot find commit from fetched head"))?;
+    repo.reset(&entry.to_object(&repo)?, git2::ResetType::Hard, None)?;
+
+    Ok(())
 }
 
-pub fn with_checkout<T>(
-    repo: &Repository,
-    branch: &str,
-    f: impl FnOnce() -> Result<T>,
-) -> Result<T> {
-    with_repo_dir(repo, || {
-        git_checkout(branch)?;
-        let result = f();
-        git_checkout(repo.default_branch.as_ref().unwrap_or(&"master".to_owned()))?;
-        result
-    })
+pub fn with_deltas<T>(diff: &Diff, repo: &Repository, f: impl FnOnce() -> Result<T>) -> Result<T> {
+    repo.apply(diff, git2::ApplyLocation::WorkDir, None)?;
+    let result = f();
+    let head = repo.head()?;
+    repo.reset(
+        head.peel_to_tree()?.as_object(),
+        git2::ResetType::Hard,
+        None,
+    )?;
+    result
 }

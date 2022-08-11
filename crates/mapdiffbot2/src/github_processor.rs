@@ -1,7 +1,6 @@
 use std::sync::Arc;
 
 use anyhow::{Context, Result};
-use octocrab::models::pulls::FileDiff;
 use octocrab::models::InstallationId;
 use rocket::http::Status;
 use rocket::outcome::Outcome;
@@ -62,12 +61,16 @@ async fn process_pull(
         return Ok(());
     }
 
-    let files: Vec<FileDiff> = get_pull_files(installation, &pull)
-        .await
-        .context("Getting files modified by PR")?
-        .into_iter()
-        .filter(|f| f.filename.ends_with(".dmm"))
-        .collect();
+    let (files, patch) = {
+        let (files, patch) = get_pull_info(installation, &pull)
+            .await
+            .context("Getting files modified by PR")?;
+        let files = files
+            .into_iter()
+            .filter(|f| f.filename.ends_with(".dmm"))
+            .collect::<Vec<_>>();
+        (files, patch)
+    };
 
     if files.is_empty() {
         let output = Output {
@@ -88,6 +91,7 @@ async fn process_pull(
         head: pull.head,
         pull_request: pull.number,
         files,
+        patch: Some(patch),
         check_run,
         installation: InstallationId(installation.id),
     };
