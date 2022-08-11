@@ -233,12 +233,14 @@ fn generate_finished_output<P: AsRef<Path>>(
 }
 
 pub fn do_job(job: &Job) -> Result<CheckOutputs> {
+    std::env::set_current_dir(std::env::current_exe()?)?;
+
     let base = &job.base;
     let repo = format!("https://github.com/{}", base.repo.full_name());
     let target_dir: PathBuf = ["./repos/", &base.repo.name].iter().collect();
-    let handle = Handle::try_current().unwrap();
 
     if !target_dir.exists() {
+        let handle = Handle::try_current().unwrap();
         handle.block_on(async {
 				let output = Output {
 					title: "Cloning repo...",
