@@ -246,11 +246,8 @@ pub fn do_job(job: &Job) -> Result<CheckOutputs> {
 					text: "".to_owned(),
 				};
 				let _ = job.check_run.set_output(output).await; // we don't really care if updating the job fails, just continue
-                || -> Result<()> {
-                clone_repo(&repo, &target_dir).context("Cloning repo")?;
-                Ok(())
-                }()
-			})?;
+			});
+        clone_repo(&repo, &target_dir).context("Cloning repo")?;
     }
 
     let non_abs_directory = format!("images/{}/{}", job.base.repo.id, job.check_run.id());
@@ -269,12 +266,8 @@ pub fn do_job(job: &Job) -> Result<CheckOutputs> {
             .collect::<Vec<&FileDiff>>()
     };
 
-    let diffs = handle.block_on(async {
-        || -> Result<Diff> {
-            git2::Diff::from_buffer(job.patch.as_ref().unwrap().as_bytes())
-                .map_err(|_| anyhow::anyhow!("Failed to parse patch, probably corrupted"))
-        }()
-    })?;
+    let diffs = git2::Diff::from_buffer(job.patch.as_ref().unwrap().as_bytes())
+        .map_err(|_| anyhow::anyhow!("Failed to parse patch, probably corrupted"))?;
 
     let added_files = filter_on_status(FileDiffStatus::Added);
     let modified_files = filter_on_status(FileDiffStatus::Modified);
