@@ -4,10 +4,9 @@ use std::path::Path;
 use git2::{build::CheckoutBuilder, Diff, Repository};
 
 pub fn with_repo_dir<T>(repo: &Path, f: impl FnOnce() -> Result<T>) -> Result<T> {
-    let current_dir = std::env::current_dir()?;
     std::env::set_current_dir(repo)?;
     let result = f();
-    std::env::set_current_dir(current_dir)?;
+    std::env::set_current_dir(std::env::current_exe()?)?;
     result
 }
 
@@ -30,9 +29,16 @@ pub fn fast_forward_to_head(head_sha: &str, repo: &Repository) -> Result<()> {
     Ok(())
 }
 
-pub fn with_deltas<T>(diff: &Diff, repo: &Repository, f: impl FnOnce() -> Result<T>) -> Result<T> {
-    repo.apply(diff, git2::ApplyLocation::WorkDir, None)?;
-    let result = f();
-    repo.checkout_head(Some(CheckoutBuilder::new().force()))?;
-    result
+pub fn with_deltas_and_dir<T>(
+    diff: &Diff,
+    repo: &Repository,
+    repodir: &Path,
+    f: impl FnOnce() -> Result<T>,
+) -> Result<T> {
+    with_repo_dir(repodir, || {
+        repo.apply(diff, git2::ApplyLocation::WorkDir, None)?;
+        let result = f();
+        repo.checkout_head(Some(CheckoutBuilder::new().force()))?;
+        result
+    })
 }

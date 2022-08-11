@@ -42,8 +42,9 @@ fn render(
         .context("Making repo path absolute")?;
     let base_context = RenderingContext::new(&path).context("Parsing base")?;
 
-    let head_context = with_deltas(&diffs, &repository, || RenderingContext::new(&path))
-        .context("Parsing head")?;
+    let head_context =
+        with_deltas_and_dir(&diffs, &repository, &path, || RenderingContext::new(&path))
+            .context("Parsing head")?;
 
     let base_render_passes = dmm_tools::render_passes::configure(
         base_context.map_config(),
@@ -74,11 +75,10 @@ fn render(
 
     let base_maps =
         with_repo_dir(&path, || load_maps(modified_files)).context("Loading base maps")?;
-    let head_maps = with_deltas(&diffs, &repository, || load_maps(modified_files))
+    let head_maps = with_deltas_and_dir(&diffs, &repository, &path, || load_maps(modified_files))
         .context("Loading head maps")?;
     let modified_maps = get_map_diff_bounding_boxes(base_maps, head_maps);
 
-    //let now = Instant::now();
     // You might think to yourself, wtf is going on here?
     // And you'd be right.
     let removed_maps = with_repo_dir(&path, || {
@@ -106,37 +106,32 @@ fn render(
         .context("Rendering removed maps")?;
 
         Ok(maps)
-        //eprintln!("Base maps took {}ms", now.elapsed().as_millis());
     })?;
 
-    //let now = Instant::now();
-    let added_maps = with_deltas(&diffs, &repository, || {
-        with_repo_dir(&path, || {
-            render_map_regions(
-                &head_context,
-                &modified_maps.afters,
-                &head_render_passes,
-                modified_directory,
-                "after.png",
-                &modified_after_errors,
-            )
-            .context("Rendering modified after maps")?;
+    let added_maps = with_deltas_and_dir(&diffs, &repository, &path, || {
+        render_map_regions(
+            &head_context,
+            &modified_maps.afters,
+            &head_render_passes,
+            modified_directory,
+            "after.png",
+            &modified_after_errors,
+        )
+        .context("Rendering modified after maps")?;
 
-            let maps =
-                load_maps_with_whole_map_regions(added_files).context("Loading added maps")?;
+        let maps = load_maps_with_whole_map_regions(added_files).context("Loading added maps")?;
 
-            render_map_regions(
-                &head_context,
-                &maps,
-                &head_render_passes,
-                added_directory,
-                "added.png",
-                &added_errors,
-            )
-            .context("Rendering added maps")?;
+        render_map_regions(
+            &head_context,
+            &maps,
+            &head_render_passes,
+            added_directory,
+            "added.png",
+            &added_errors,
+        )
+        .context("Rendering added maps")?;
 
-            Ok(maps)
-        })
+        Ok(maps)
     })
     .context("Rendering modified after and added maps")?;
     (0..modified_files.len()).into_par_iter().for_each(|i| {
