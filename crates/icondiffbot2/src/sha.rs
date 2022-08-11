@@ -23,11 +23,7 @@ pub fn status_to_sha<'a>(
         FileDiffStatus::Added => (None, Some(&job.head.sha)),
         FileDiffStatus::Removed => (Some(&job.base.sha), None),
         FileDiffStatus::Modified => (Some(&job.base.sha), Some(&job.head.sha)),
-        FileDiffStatus::Renamed => (None, None),
-        FileDiffStatus::Copied => (None, None),
-        FileDiffStatus::Changed => (None, None), // TODO: look up what this is
-        FileDiffStatus::Unchanged => (None, None),
-        _ => unreachable!(),
+        _ => (None, None),
     }
 }
 
