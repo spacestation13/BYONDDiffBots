@@ -20,29 +20,12 @@ pub fn fast_forward_to_head(head_sha: &str, repo: &Repository) -> Result<()> {
     ))?;
     remote.fetch(&[default_branch], None, None)?;
 
-    let fetch_head = repo.find_reference("FETCH_HEAD")?;
-    let annotated = repo.reference_to_annotated_commit(&fetch_head)?;
-
-    let refname = format!("refs/heads/{}", default_branch);
-
-    let mut head_reference = repo.find_reference(&refname)?;
-
-    let name = match head_reference.name() {
-        Some(s) => s.to_string(),
-        None => String::from_utf8_lossy(head_reference.name_bytes()).to_string(),
-    };
-
-    head_reference.set_target(annotated.id(), "Fast forwarding")?;
-    repo.set_head(&name)?;
-    repo.checkout_head(Some(git2::build::CheckoutBuilder::default().force()))?;
-
-    if let Ok(actual_commit) = repo.find_commit(id) {
-        repo.reset(
-            actual_commit.as_object(),
-            git2::ResetType::Hard,
-            Some(git2::build::CheckoutBuilder::default().force()),
-        )?;
-    }
+    let actual_commit = repo.find_commit(id)?;
+    repo.reset(
+        actual_commit.as_object(),
+        git2::ResetType::Hard,
+        Some(git2::build::CheckoutBuilder::default().force()),
+    )?;
 
     Ok(())
 }
