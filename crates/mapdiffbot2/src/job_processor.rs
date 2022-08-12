@@ -33,7 +33,7 @@ fn render(
     // feel like this is a bit of a hack but it works for now
 ) -> Result<RenderedMaps> {
     let path = format!("./repos/{}", &base.repo.name);
-    let repository = git2::Repository::discover(path.as_str()).context("Opening repository")?;
+    let repository = git2::Repository::open(path.as_str()).context("Opening repository")?;
 
     fast_forward_to_head(&base.sha, &repository).context("Fast forwarding")?;
 
