@@ -228,7 +228,7 @@ fn generate_finished_output<P: AsRef<Path>>(
 }
 
 pub fn do_job(job: &Job) -> Result<CheckOutputs> {
-    std::env::set_current_dir(std::env::current_exe()?)?;
+    std::env::set_current_dir(std::env::current_exe()?.parent().unwrap())?;
 
     let base = &job.base;
     let repo = format!("https://github.com/{}", base.repo.full_name());
