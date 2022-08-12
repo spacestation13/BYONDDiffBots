@@ -65,14 +65,16 @@ pub fn get_diff_bounding_box(
             left_dims, right_dims
         );
     }
+    let max_y = min(left_dims.1, right_dims.1);
+    let max_x = min(left_dims.0, right_dims.0);
 
     let mut rightmost = 0usize;
     let mut leftmost = left_dims.0;
     let mut topmost = 0usize;
     let mut bottommost = left_dims.1;
 
-    for y in 0..min(left_dims.1, right_dims.1) {
-        for x in 0..min(left_dims.0, right_dims.0) {
+    for y in 0..max_y {
+        for x in 0..max_x {
             let left_tile = &base_map.dictionary[&base_map.grid[(z_level, left_dims.1 - y - 1, x)]];
             let right_tile =
                 &head_map.dictionary[&head_map.grid[(z_level, right_dims.1 - y - 1, x)]];
@@ -95,6 +97,24 @@ pub fn get_diff_bounding_box(
 
     if leftmost > rightmost {
         return None;
+    }
+
+    //this is a god awful way to expand bounds without it going out of bounds
+
+    if let Some(newv) = rightmost.checked_sub(5) {
+        rightmost = newv;
+    };
+
+    if let Some(newv) = topmost.checked_sub(5) {
+        rightmost = newv;
+    };
+
+    if leftmost + 5 < max_x {
+        leftmost += 5
+    }
+
+    if bottommost + 5 < max_x {
+        bottommost += 5
     }
 
     Some(BoundingBox::new(leftmost, bottommost, rightmost, topmost))

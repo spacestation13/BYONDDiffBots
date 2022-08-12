@@ -263,8 +263,8 @@ pub fn do_job(job: &Job) -> Result<CheckOutputs> {
             .collect::<Vec<&FileDiff>>()
     };
 
-    let diffs = git2::Diff::from_buffer(job.patch.as_ref().unwrap().as_bytes())
-        .map_err(|_| anyhow::anyhow!("Failed to parse patch, probably corrupted"))?;
+    let diffs =
+        git2::Diff::from_buffer(job.patch.as_ref().unwrap().as_bytes()).context("Parsing patch")?;
 
     let added_files = filter_on_status(FileDiffStatus::Added);
     let modified_files = filter_on_status(FileDiffStatus::Modified);
