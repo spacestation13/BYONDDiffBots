@@ -1,4 +1,4 @@
-use anyhow::Result;
+use anyhow::{Context, Result};
 use std::path::Path;
 
 use git2::{build::CheckoutBuilder, Diff, Repository};
@@ -17,14 +17,17 @@ pub fn fast_forward_to_head(head_sha: &str, repo: &Repository) -> Result<()> {
     let default_branch = default_branch.as_str().ok_or(anyhow::anyhow!(
         "Default branch is not a valid string, what the fuck"
     ))?;
-    remote.fetch(&[default_branch], None, None)?;
+    remote
+        .fetch(&[default_branch], None, None)
+        .context("Fetching")?;
 
     let actual_commit = repo.find_commit(id)?;
     repo.reset(
         actual_commit.as_object(),
         git2::ResetType::Hard,
         Some(git2::build::CheckoutBuilder::default().force()),
-    )?;
+    )
+    .context("Resetting")?;
 
     Ok(())
 }
@@ -36,9 +39,11 @@ pub fn with_deltas_and_dir<T>(
     f: impl FnOnce() -> Result<T>,
 ) -> Result<T> {
     with_repo_dir(repodir, || {
-        repo.apply(diff, git2::ApplyLocation::WorkDir, None)?;
+        repo.apply(diff, git2::ApplyLocation::WorkDir, None)
+            .context("Applying changes")?;
         let result = f();
-        repo.checkout_head(Some(CheckoutBuilder::new().force()))?;
+        repo.checkout_head(Some(CheckoutBuilder::new().force()))
+            .context("Resetting")?;
         result
     })
 }
