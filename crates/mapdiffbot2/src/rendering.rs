@@ -101,20 +101,20 @@ pub fn get_diff_bounding_box(
 
     //this is a god awful way to expand bounds without it going out of bounds
 
-    if let Some(newv) = rightmost.checked_sub(5) {
+    if let Some(newv) = rightmost.checked_sub(2) {
         rightmost = newv;
     };
 
-    if let Some(newv) = topmost.checked_sub(5) {
+    if let Some(newv) = topmost.checked_sub(2) {
         rightmost = newv;
     };
 
-    if leftmost + 5 < max_x {
-        leftmost += 5
+    if leftmost + 2 < max_x {
+        leftmost += 2
     }
 
-    if bottommost + 5 < max_x {
-        bottommost += 5
+    if bottommost + 2 < max_x {
+        bottommost += 2
     }
 
     Some(BoundingBox::new(leftmost, bottommost, rightmost, topmost))
