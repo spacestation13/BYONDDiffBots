@@ -62,6 +62,9 @@ pub fn fetch_diffs_and_update<'a>(
         )
         .context("Grabbing diffs")?;
 
+    let mut branch = repo.find_branch(extra_branch, git2::BranchType::Local)?;
+    branch.delete().context("Cleaning up")?;
+
     remote.disconnect().context("Disconnecting from remote")?;
 
     Ok(diffs)
