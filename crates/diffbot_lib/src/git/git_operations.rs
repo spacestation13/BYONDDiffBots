@@ -27,7 +27,7 @@ pub fn fast_forward_to_head(head_sha: &str, repo: &Repository) -> Result<()> {
         git2::ResetType::Hard,
         Some(git2::build::CheckoutBuilder::default().force()),
     )
-    .context("Resetting")?;
+    .context("Resetting to commit")?;
 
     Ok(())
 }
@@ -43,7 +43,7 @@ pub fn with_deltas_and_dir<T>(
             .context("Applying changes")?;
         let result = f();
         repo.checkout_head(Some(CheckoutBuilder::new().force()))
-            .context("Resetting")?;
+            .context("Resetting to HEAD")?;
         result
     })
 }
