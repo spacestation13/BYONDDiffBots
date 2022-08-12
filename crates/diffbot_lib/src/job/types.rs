@@ -15,7 +15,6 @@ pub struct Job {
     pub head: Branch,
     pub pull_request: u64,
     pub files: Vec<FileDiff>,
-    pub patch: Option<String>,
     pub check_run: CheckRun,
     pub installation: InstallationId,
 }

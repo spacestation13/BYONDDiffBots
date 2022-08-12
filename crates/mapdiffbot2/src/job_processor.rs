@@ -1,5 +1,4 @@
 use anyhow::{Context, Result};
-use git2::Diff;
 use octocrab::models::pulls::FileDiff;
 use octocrab::models::pulls::FileDiffStatus;
 use path_absolutize::*;
@@ -25,17 +24,22 @@ struct RenderedMaps {
 
 fn render(
     base: &Branch,
-    diffs: Diff,
+    head: &Branch,
     added_files: &[&FileDiff],
     modified_files: &[&FileDiff],
     removed_files: &[&FileDiff],
     output_dir: &Path,
+    pull_request_number: u64,
     // feel like this is a bit of a hack but it works for now
 ) -> Result<RenderedMaps> {
     let path = format!("./repos/{}", &base.repo.name);
+    let pull_branch = format!("mdb-{}-{}", base.sha, head.sha);
+    let fetch_branch = format!("pull/{}/head:{}", pull_request_number, pull_branch);
+
     let repository = git2::Repository::open(path.as_str()).context("Opening repository")?;
 
-    fast_forward_to_head(&base.sha, &repository).context("Fast forwarding")?;
+    let diffs = fetch_diffs_and_update(&base.sha, &head.sha, &repository, &fetch_branch)
+        .context("Fetching and constructing diffs")?;
 
     let path = Path::new(&path)
         .absolutize()
@@ -43,7 +47,7 @@ fn render(
     let base_context = RenderingContext::new(&path).context("Parsing base")?;
 
     let head_context =
-        with_deltas_and_dir(&diffs, &repository, &path, || RenderingContext::new(&path))
+        with_changes_and_dir(&diffs, &repository, &path, || RenderingContext::new(&path))
             .context("Parsing head")?;
 
     let base_render_passes = dmm_tools::render_passes::configure(
@@ -75,7 +79,7 @@ fn render(
 
     let base_maps =
         with_repo_dir(&path, || load_maps(modified_files)).context("Loading base maps")?;
-    let head_maps = with_deltas_and_dir(&diffs, &repository, &path, || load_maps(modified_files))
+    let head_maps = with_changes_and_dir(&diffs, &repository, &path, || load_maps(modified_files))
         .context("Loading head maps")?;
     let modified_maps = get_map_diff_bounding_boxes(base_maps, head_maps);
 
@@ -108,7 +112,7 @@ fn render(
         Ok(maps)
     })?;
 
-    let added_maps = with_deltas_and_dir(&diffs, &repository, &path, || {
+    let added_maps = with_changes_and_dir(&diffs, &repository, &path, || {
         render_map_regions(
             &head_context,
             &modified_maps.afters,
@@ -231,6 +235,7 @@ pub fn do_job(job: &Job) -> Result<CheckOutputs> {
     std::env::set_current_dir(std::env::current_exe()?.parent().unwrap())?;
 
     let base = &job.base;
+    let head = &job.head;
     let repo = format!("https://github.com/{}", base.repo.full_name());
     let target_dir: PathBuf = ["./repos/", &base.repo.name].iter().collect();
 
@@ -263,20 +268,18 @@ pub fn do_job(job: &Job) -> Result<CheckOutputs> {
             .collect::<Vec<&FileDiff>>()
     };
 
-    let diffs =
-        git2::Diff::from_buffer(job.patch.as_ref().unwrap().as_bytes()).context("Parsing patch")?;
-
     let added_files = filter_on_status(FileDiffStatus::Added);
     let modified_files = filter_on_status(FileDiffStatus::Modified);
     let removed_files = filter_on_status(FileDiffStatus::Removed);
 
     let maps = render(
         base,
-        diffs,
+        head,
         &added_files,
         &modified_files,
         &removed_files,
         Path::new(directory),
+        job.pull_request,
     )
     .context("Doing the renderance")?;
 

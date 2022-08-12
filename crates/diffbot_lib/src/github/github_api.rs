@@ -163,18 +163,15 @@ pub async fn get_pull_files(
 pub async fn get_pull_info(
     installation: &Installation,
     pull: &PullRequest,
-) -> Result<(Vec<FileDiff>, String)> {
+) -> Result<Vec<FileDiff>> {
     let crab = octocrab::instance().installation(installation.id.into());
     let (user, repo) = pull.base.repo.name_tuple();
     let pulls = crab.pulls(user, repo);
     let files = pulls.list_files(pull.number).await?;
-    let patch = pulls.get_patch(pull.number).await?;
-    Ok((
-        crab.all_pages(files)
-            .await
-            .context("Failed to get all pages for pull request diff")?,
-        patch,
-    ))
+    Ok(crab
+        .all_pages(files)
+        .await
+        .context("Failed to get all pages for pull request diff")?)
 }
 
 static DOWNLOAD_DIR: &str = "download";

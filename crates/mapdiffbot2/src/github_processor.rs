@@ -61,15 +61,14 @@ async fn process_pull(
         return Ok(());
     }
 
-    let (files, patch) = {
-        let (files, patch) = get_pull_info(installation, &pull)
+    let files = {
+        let files = get_pull_info(installation, &pull)
             .await
             .context("Getting files modified by PR")?;
-        let files = files
+        files
             .into_iter()
             .filter(|f| f.filename.ends_with(".dmm"))
-            .collect::<Vec<_>>();
-        (files, patch)
+            .collect::<Vec<_>>()
     };
 
     if files.is_empty() {
@@ -91,7 +90,6 @@ async fn process_pull(
         head: pull.head,
         pull_request: pull.number,
         files,
-        patch: Some(patch),
         check_run,
         installation: InstallationId(installation.id),
     };
