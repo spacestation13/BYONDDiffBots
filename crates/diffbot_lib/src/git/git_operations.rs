@@ -13,6 +13,11 @@ pub fn with_repo_dir<T>(repo: &Path, f: impl FnOnce() -> Result<T>) -> Result<T>
 pub fn fast_forward_to_head(head_sha: &str, repo: &Repository) -> Result<()> {
     let id = git2::Oid::from_str(head_sha)?;
     let mut remote = repo.find_remote("origin")?;
+
+    remote
+        .connect(git2::Direction::Fetch)
+        .context("Connecting to remote")?;
+
     let default_branch = remote.default_branch()?;
     let default_branch = default_branch.as_str().ok_or(anyhow::anyhow!(
         "Default branch is not a valid string, what the fuck"
@@ -28,6 +33,8 @@ pub fn fast_forward_to_head(head_sha: &str, repo: &Repository) -> Result<()> {
         Some(git2::build::CheckoutBuilder::default().force()),
     )
     .context("Resetting to commit")?;
+
+    remote.disconnect().context("Disconnecting from remote")?;
 
     Ok(())
 }
