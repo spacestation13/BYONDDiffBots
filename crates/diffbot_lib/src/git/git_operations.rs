@@ -29,7 +29,6 @@ pub fn fetch_diffs_and_update<'a>(
     let default_branch = default_branch.as_str().ok_or(anyhow::anyhow!(
         "Default branch is not a valid string, what the fuck"
     ))?;
-    let default_base = format!("refs/heads/{}", default_branch);
     let branch_name = format!("mdb-{}-{}", base_sha, head_sha);
     let base_commit = {
         remote
@@ -41,7 +40,9 @@ pub fn fetch_diffs_and_update<'a>(
             .reference_to_annotated_commit(&fetch_head)
             .context("Getting commit from FETCH_HEAD")?;
 
-        let mut origin_ref = repo.find_reference(&default_base).unwrap();
+        let mut origin_ref = repo
+            .find_branch(default_branch, git2::BranchType::Local)?
+            .into_reference();
 
         origin_ref
             .set_target(base_commit.id(), "Fast forwarding origin ref")
