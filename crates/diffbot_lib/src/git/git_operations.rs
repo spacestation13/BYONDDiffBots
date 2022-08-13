@@ -29,41 +29,71 @@ pub fn fetch_diffs_and_update<'a>(
     let default_branch = default_branch.as_str().ok_or(anyhow::anyhow!(
         "Default branch is not a valid string, what the fuck"
     ))?;
-    remote
-        .fetch(&[default_branch], None, None)
-        .context("Fetching base")?;
-    remote
-        .fetch(
-            &[extra_branch],
-            Some(FetchOptions::new().prune(git2::FetchPrune::On)),
-            None,
+    let default_base = format!("refs/heads/{}", default_branch);
+    let branch_name = format!("mdb-{}-{}", base_sha, head_sha);
+    let base_commit = {
+        remote
+            .fetch(&[default_branch], None, None)
+            .context("Fetching base")?;
+        let fetch_head = repo.find_reference("FETCH_HEAD")?;
+
+        let base_commit = repo.reference_to_annotated_commit(&fetch_head)?;
+
+        let mut origin_ref = repo.find_reference(&default_base).unwrap();
+
+        origin_ref.set_target(base_commit.id(), "Fast forwarding origin ref")?;
+
+        repo.set_head(origin_ref.name().unwrap())?;
+
+        let base_commit = repo.find_commit(base_id)?;
+
+        repo.reset(
+            &base_commit.as_object(),
+            git2::ResetType::Hard,
+            Some(git2::build::CheckoutBuilder::default().force()),
         )
-        .context("Fetching head")?;
+        .context("Resetting to base commit")?;
+        base_commit
+    };
+    let diffs = {
+        remote
+            .fetch(
+                &[extra_branch],
+                Some(FetchOptions::new().prune(git2::FetchPrune::On)),
+                None,
+            )
+            .context("Fetching head")?;
 
-    let actual_commit = repo
-        .find_commit(base_id)
-        .context("Looking for base commit")?;
-    let remote_commit = repo
-        .find_commit(head_id)
-        .context("Looking for head commit")?;
+        let fetch_head = repo.find_reference("FETCH_HEAD")?;
 
-    repo.reset(
-        actual_commit.as_object(),
-        git2::ResetType::Hard,
-        Some(git2::build::CheckoutBuilder::default().force()),
-    )
-    .context("Resetting to commit")?;
+        let head_commit = repo.reference_to_annotated_commit(&fetch_head)?;
 
-    let diffs = repo
-        .diff_tree_to_tree(
-            Some(&actual_commit.tree()?),
-            Some(&remote_commit.tree()?),
-            None,
-        )
-        .context("Grabbing diffs")?;
+        let mut head_branch = repo
+            .branch_from_annotated_commit(&branch_name, &head_commit, false)?
+            .into_reference();
 
-    let mut branch = repo.find_branch(extra_branch, git2::BranchType::Local)?;
-    branch.delete().context("Cleaning up")?;
+        let head_tree = head_branch.peel_to_tree()?;
+
+        let commit = head_tree
+            .get_id(head_id)
+            .ok_or(anyhow::anyhow!("Cannot find head commit!"))?;
+        let commit = commit.to_object(repo)?;
+
+        let diffs = repo
+            .diff_tree_to_tree(
+                Some(&base_commit.tree()?),
+                Some(
+                    commit
+                        .as_tree()
+                        .ok_or(anyhow::anyhow!("Head commit is not a tree????"))?,
+                ),
+                None,
+            )
+            .context("Grabbing diffs")?;
+
+        head_branch.delete()?;
+        diffs
+    };
 
     remote.disconnect().context("Disconnecting from remote")?;
 
