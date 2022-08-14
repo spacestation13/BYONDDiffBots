@@ -231,12 +231,12 @@ pub fn do_job(job: &Job) -> Result<CheckOutputs> {
     let base = &job.base;
     let head = &job.head;
     let repo = format!("https://github.com/{}", base.repo.full_name());
-    let target_dir: PathBuf = ["./repos/", &base.repo.owner(), &base.repo.name]
+    let repo_dir: PathBuf = ["./repos/", &base.repo.owner(), &base.repo.name]
         .iter()
         .collect();
 
-    if !target_dir.exists() {
-        std::fs::create_dir_all(&target_dir)?;
+    if !repo_dir.exists() {
+        std::fs::create_dir_all(&repo_dir)?;
         let handle = Handle::try_current().unwrap();
         handle.block_on(async {
 				let output = Output {
@@ -246,14 +246,14 @@ pub fn do_job(job: &Job) -> Result<CheckOutputs> {
 				};
 				let _ = job.check_run.set_output(output).await; // we don't really care if updating the job fails, just continue
 			});
-        clone_repo(&repo, &target_dir).context("Cloning repo")?;
+        clone_repo(&repo, &repo_dir).context("Cloning repo")?;
     }
 
     let non_abs_directory = format!("images/{}/{}", job.base.repo.id, job.check_run.id());
-    let directory = Path::new(&non_abs_directory)
+    let output_directory = Path::new(&non_abs_directory)
         .absolutize()
         .context("Absolutizing images path")?;
-    let directory = directory
+    let output_directory = output_directory
         .as_ref()
         .to_str()
         .ok_or_else(|| anyhow::anyhow!("Failed to create absolute path to image directory",))?;
@@ -275,7 +275,7 @@ pub fn do_job(job: &Job) -> Result<CheckOutputs> {
         &added_files,
         &modified_files,
         &removed_files,
-        (&target_dir, Path::new(directory)),
+        (&repo_dir, Path::new(output_directory)),
         job.pull_request,
     )
     .context("Doing the renderance")?;
