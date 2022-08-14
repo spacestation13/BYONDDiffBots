@@ -1,7 +1,7 @@
 use anyhow::{Context, Result};
 use std::path::Path;
 
-use git2::{build::CheckoutBuilder, Diff, FetchOptions, Repository};
+use git2::{build::CheckoutBuilder, Diff, DiffOptions, FetchOptions, Repository};
 
 pub fn with_repo_dir<T>(repo: &Path, f: impl FnOnce() -> Result<T>) -> Result<T> {
     std::env::set_current_dir(repo)?;
@@ -77,7 +77,11 @@ pub fn fetch_diffs_and_update<'a>(
         let head_commit = repo.find_commit(head_id).context("Finding head commit")?;
 
         let diffs = repo
-            .diff_tree_to_tree(Some(&base_commit.tree()?), Some(&head_commit.tree()?), None)
+            .diff_tree_to_tree(
+                Some(&base_commit.tree()?),
+                Some(&head_commit.tree()?),
+                Some(DiffOptions::new().show_binary(true)),
+            )
             .context("Grabbing diffs")?;
 
         head_branch.delete().context("Cleaning up branch")?;
