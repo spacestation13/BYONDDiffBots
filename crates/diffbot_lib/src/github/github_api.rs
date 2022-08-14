@@ -168,10 +168,9 @@ pub async fn get_pull_info(
     let (user, repo) = pull.base.repo.name_tuple();
     let pulls = crab.pulls(user, repo);
     let files = pulls.list_files(pull.number).await?;
-    Ok(crab
-        .all_pages(files)
+    crab.all_pages(files)
         .await
-        .context("Failed to get all pages for pull request diff")?)
+        .context("Failed to get all pages for pull request diff")
 }
 
 static DOWNLOAD_DIR: &str = "download";

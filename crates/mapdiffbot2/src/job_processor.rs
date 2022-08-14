@@ -28,20 +28,19 @@ fn render(
     added_files: &[&FileDiff],
     modified_files: &[&FileDiff],
     removed_files: &[&FileDiff],
-    repo_dir: &Path,
-    output_dir: &Path,
+    dirs: (&Path, &Path),
     pull_request_number: u64,
     // feel like this is a bit of a hack but it works for now
 ) -> Result<RenderedMaps> {
     let pull_branch = format!("mdb-{}-{}", base.sha, head.sha);
     let fetch_branch = format!("pull/{}/head:{}", pull_request_number, pull_branch);
 
-    let repository = git2::Repository::open(repo_dir.as_os_str()).context("Opening repository")?;
+    let repository = git2::Repository::open(dirs.0.as_os_str()).context("Opening repository")?;
 
     let diffs = fetch_diffs_and_update(&base.sha, &head.sha, &repository, &fetch_branch)
         .context("Fetching and constructing diffs")?;
 
-    let path = Path::new(&repo_dir)
+    let path = Path::new(&dirs.0)
         .absolutize()
         .context("Making repo path absolute")?;
     let base_context = RenderingContext::new(&path).context("Parsing base")?;
@@ -63,17 +62,17 @@ fn render(
     );
 
     // ADDED MAPS
-    let added_directory = format!("{}/a", output_dir.display());
+    let added_directory = format!("{}/a", dirs.1.display());
     let added_directory = Path::new(&added_directory);
     let added_errors = Default::default();
 
     // MODIFIED MAPS
-    let modified_directory = format!("{}/m", output_dir.display());
+    let modified_directory = format!("{}/m", dirs.1.display());
     let modified_directory = Path::new(&modified_directory);
     let modified_before_errors = Default::default();
     let modified_after_errors = Default::default();
 
-    let removed_directory = format!("{}/r", output_dir.display());
+    let removed_directory = format!("{}/r", dirs.1.display());
     let removed_directory = Path::new(&removed_directory);
     let removed_errors = Default::default();
 
@@ -276,8 +275,7 @@ pub fn do_job(job: &Job) -> Result<CheckOutputs> {
         &added_files,
         &modified_files,
         &removed_files,
-        &target_dir,
-        Path::new(directory),
+        (&target_dir, Path::new(directory)),
         job.pull_request,
     )
     .context("Doing the renderance")?;

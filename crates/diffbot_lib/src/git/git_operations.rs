@@ -26,9 +26,9 @@ pub fn fetch_diffs_and_update<'a>(
         .context("Connecting to remote")?;
 
     let default_branch = remote.default_branch()?;
-    let default_branch = default_branch.as_str().ok_or(anyhow::anyhow!(
-        "Default branch is not a valid string, what the fuck"
-    ))?;
+    let default_branch = default_branch
+        .as_str()
+        .ok_or_else(|| anyhow::anyhow!("Default branch is not a valid string, what the fuck"))?;
     let branch_name = format!("mdb-{}-{}", base_sha, head_sha);
     let base_commit = {
         remote
@@ -53,8 +53,7 @@ pub fn fetch_diffs_and_update<'a>(
         repo.set_head(origin_ref.name().unwrap())
             .context("Setting HEAD to base")?;
 
-        let base_commit = repo.find_commit(base_id).context("Finding base commit")?;
-        base_commit
+        repo.find_commit(base_id).context("Finding base commit")?
     };
     let diffs = {
         remote
@@ -94,7 +93,7 @@ pub fn fetch_diffs_and_update<'a>(
     };
 
     repo.reset(
-        &base_commit.as_object(),
+        base_commit.as_object(),
         git2::ResetType::Hard,
         Some(
             git2::build::CheckoutBuilder::default()
