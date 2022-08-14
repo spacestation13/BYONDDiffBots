@@ -50,18 +50,6 @@ pub fn fetch_diffs_and_update<'a>(
             .context("Setting HEAD")?;
 
         let base_commit = repo.find_commit(base_id).context("Finding base commit")?;
-
-        repo.reset(
-            &base_commit.as_object(),
-            git2::ResetType::Hard,
-            Some(
-                git2::build::CheckoutBuilder::default()
-                    .force()
-                    .remove_untracked(true)
-                    .remove_ignored(true),
-            ),
-        )
-        .context("Resetting to base commit")?;
         base_commit
     };
     let diffs = {
@@ -84,30 +72,29 @@ pub fn fetch_diffs_and_update<'a>(
             .context("Creating branch from FETCH_HEAD's commit")?
             .into_reference();
 
-        let head_tree = head_branch
-            .peel_to_tree()
-            .context("Getting the branch's tree")?;
+        repo.set_head(head_branch.name().unwrap())?;
 
-        let commit = head_tree
-            .get_id(head_id)
-            .ok_or(anyhow::anyhow!("Cannot find head commit!"))?;
-        let commit = commit.to_object(repo)?;
+        let head_commit = repo.find_commit(head_id).context("Finding head commit")?;
 
         let diffs = repo
-            .diff_tree_to_tree(
-                Some(&base_commit.tree()?),
-                Some(
-                    commit
-                        .as_tree()
-                        .ok_or(anyhow::anyhow!("Head commit is not a tree????"))?,
-                ),
-                None,
-            )
+            .diff_tree_to_tree(Some(&base_commit.tree()?), Some(&head_commit.tree()?), None)
             .context("Grabbing diffs")?;
 
         head_branch.delete().context("Cleaning up branch")?;
         diffs
     };
+
+    repo.reset(
+        &base_commit.as_object(),
+        git2::ResetType::Hard,
+        Some(
+            git2::build::CheckoutBuilder::default()
+                .force()
+                .remove_untracked(true)
+                .remove_ignored(true),
+        ),
+    )
+    .context("Resetting to base commit")?;
 
     remote.disconnect().context("Disconnecting from remote")?;
 
