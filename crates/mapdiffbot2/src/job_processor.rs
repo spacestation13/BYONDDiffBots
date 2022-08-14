@@ -28,20 +28,20 @@ fn render(
     added_files: &[&FileDiff],
     modified_files: &[&FileDiff],
     removed_files: &[&FileDiff],
+    repo_dir: &Path,
     output_dir: &Path,
     pull_request_number: u64,
     // feel like this is a bit of a hack but it works for now
 ) -> Result<RenderedMaps> {
-    let path = format!("./repos/{}", &base.repo.name);
     let pull_branch = format!("mdb-{}-{}", base.sha, head.sha);
     let fetch_branch = format!("pull/{}/head:{}", pull_request_number, pull_branch);
 
-    let repository = git2::Repository::open(path.as_str()).context("Opening repository")?;
+    let repository = git2::Repository::open(repo_dir.as_os_str()).context("Opening repository")?;
 
     let diffs = fetch_diffs_and_update(&base.sha, &head.sha, &repository, &fetch_branch)
         .context("Fetching and constructing diffs")?;
 
-    let path = Path::new(&path)
+    let path = Path::new(&repo_dir)
         .absolutize()
         .context("Making repo path absolute")?;
     let base_context = RenderingContext::new(&path).context("Parsing base")?;
@@ -149,11 +149,6 @@ fn render(
     })
 }
 
-fn clone_repo(url: &str, dir: &Path) -> Result<()> {
-    git2::Repository::clone(url, dir.as_os_str()).context("Cloning repo")?;
-    Ok(())
-}
-
 fn generate_finished_output<P: AsRef<Path>>(
     added_files: &[&FileDiff],
     modified_files: &[&FileDiff],
@@ -237,9 +232,12 @@ pub fn do_job(job: &Job) -> Result<CheckOutputs> {
     let base = &job.base;
     let head = &job.head;
     let repo = format!("https://github.com/{}", base.repo.full_name());
-    let target_dir: PathBuf = ["./repos/", &base.repo.name].iter().collect();
+    let target_dir: PathBuf = ["./repos/", &base.repo.owner(), &base.repo.name]
+        .iter()
+        .collect();
 
     if !target_dir.exists() {
+        std::fs::create_dir_all(&target_dir)?;
         let handle = Handle::try_current().unwrap();
         handle.block_on(async {
 				let output = Output {
@@ -278,6 +276,7 @@ pub fn do_job(job: &Job) -> Result<CheckOutputs> {
         &added_files,
         &modified_files,
         &removed_files,
+        &target_dir,
         Path::new(directory),
         job.pull_request,
     )

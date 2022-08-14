@@ -40,9 +40,7 @@ pub fn fetch_diffs_and_update<'a>(
             .reference_to_annotated_commit(&fetch_head)
             .context("Getting commit from FETCH_HEAD")?;
 
-        let mut origin_ref = repo
-            .find_branch(default_branch, git2::BranchType::Local)?
-            .into_reference();
+        let mut origin_ref = repo.resolve_reference_from_short_name(default_branch)?;
 
         origin_ref
             .set_target(base_commit.id(), "Fast forwarding origin ref")
@@ -130,4 +128,9 @@ pub fn with_changes_and_dir<T>(
             .context("Resetting to HEAD")?;
         result
     })
+}
+
+pub fn clone_repo(url: &str, dir: &Path) -> Result<()> {
+    git2::Repository::clone(url, dir.as_os_str()).context("Cloning repo")?;
+    Ok(())
 }
