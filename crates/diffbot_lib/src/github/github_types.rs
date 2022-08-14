@@ -21,12 +21,7 @@ pub struct Repository {
 
 impl Repository {
     pub fn full_name(&self) -> String {
-        self.url
-            .split('/')
-            .skip(3)
-            .take(2)
-            .collect::<Vec<&str>>()
-            .join("/")
+        self.url.split('/').skip(4).collect::<Vec<&str>>().join("/")
     }
 
     pub fn name_tuple(&self) -> (String, String) {
@@ -37,7 +32,7 @@ impl Repository {
     pub fn owner(&self) -> String {
         self.url
             .split('/')
-            .skip(3)
+            .skip(4)
             .take(1)
             .collect::<Vec<&str>>()
             .join("")
