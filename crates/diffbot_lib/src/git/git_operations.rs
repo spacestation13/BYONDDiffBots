@@ -32,7 +32,11 @@ pub fn fetch_diffs_and_update<'a>(
     let branch_name = format!("mdb-{}-{}", base_sha, head_sha);
     let base_commit = {
         remote
-            .fetch(&[default_branch], None, None)
+            .fetch(
+                &[default_branch],
+                Some(FetchOptions::new().prune(git2::FetchPrune::On)),
+                None,
+            )
             .context("Fetching base")?;
         let fetch_head = repo.find_reference("FETCH_HEAD")?;
 
@@ -47,7 +51,7 @@ pub fn fetch_diffs_and_update<'a>(
             .context("Setting default branch to FETCH_HEAD's commit")?;
 
         repo.set_head(origin_ref.name().unwrap())
-            .context("Setting HEAD")?;
+            .context("Setting HEAD to base")?;
 
         let base_commit = repo.find_commit(base_id).context("Finding base commit")?;
         base_commit
@@ -68,11 +72,12 @@ pub fn fetch_diffs_and_update<'a>(
             .context("Getting commit from FETCH_HEAD")?;
 
         let mut head_branch = repo
-            .branch_from_annotated_commit(&branch_name, &head_commit, false)
+            .branch_from_annotated_commit(&branch_name, &head_commit, true)
             .context("Creating branch from FETCH_HEAD's commit")?
             .into_reference();
 
-        repo.set_head(head_branch.name().unwrap())?;
+        repo.set_head(head_branch.name().unwrap())
+            .context("Setting HEAD to head")?;
 
         let head_commit = repo.find_commit(head_id).context("Finding head commit")?;
 
