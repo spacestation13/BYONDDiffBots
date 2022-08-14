@@ -106,7 +106,7 @@ pub fn get_diff_bounding_box(
     };
 
     if let Some(newv) = topmost.checked_sub(2) {
-        rightmost = newv;
+        topmost = newv;
     };
 
     if leftmost + 2 < max_x {
