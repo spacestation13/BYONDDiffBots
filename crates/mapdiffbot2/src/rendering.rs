@@ -101,21 +101,10 @@ pub fn get_diff_bounding_box(
 
     //this is a god awful way to expand bounds without it going out of bounds
 
-    if (0..max_x).contains(&(rightmost - 2)) {
-        rightmost -= 2
-    }
-
-    if (0..max_y).contains(&(topmost - 2)) {
-        topmost -= 2
-    }
-
-    if (0..max_x).contains(&(leftmost + 2)) {
-        leftmost += 2
-    }
-
-    if (0..max_y).contains(&(bottommost + 2)) {
-        bottommost += 2
-    }
+    rightmost = (rightmost - 2).clamp(0, max_x);
+    topmost = (topmost - 2).clamp(0, max_y);
+    leftmost = (leftmost + 2).clamp(0, max_x);
+    bottommost = (bottommost + 2).clamp(0, max_y);
 
     Some(BoundingBox::new(leftmost, bottommost, rightmost, topmost))
 }
