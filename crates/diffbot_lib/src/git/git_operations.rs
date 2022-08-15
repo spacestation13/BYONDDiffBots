@@ -14,7 +14,7 @@ pub fn fetch_diffs_and_update<'a>(
     base_sha: &str,
     head_sha: &str,
     repo: &'a Repository,
-    extra_branch: &str,
+    fetching_branch: &str,
 ) -> Result<Diff<'a>> {
     let base_id = git2::Oid::from_str(base_sha).context("Parsing base sha")?;
     let head_id = git2::Oid::from_str(head_sha).context("Parsing head sha")?;
@@ -65,7 +65,7 @@ pub fn fetch_diffs_and_update<'a>(
     let diffs = {
         remote
             .fetch(
-                &[extra_branch],
+                &[fetching_branch],
                 Some(FetchOptions::new().prune(git2::FetchPrune::On)),
                 None,
             )
@@ -96,6 +96,11 @@ pub fn fetch_diffs_and_update<'a>(
             .context("Grabbing diffs")?;
 
         head_branch.delete().context("Cleaning up branch")?;
+
+        let mut branch = repo.find_branch(fetching_branch, git2::BranchType::Remote)?;
+
+        branch.delete().context("Cleaning up fetched branch")?;
+
         diffs
     };
 
@@ -107,8 +112,7 @@ pub fn fetch_diffs_and_update<'a>(
         CheckoutBuilder::default()
             .force()
             .remove_ignored(true)
-            .remove_untracked(true)
-            .overwrite_ignored(true),
+            .remove_untracked(true),
     ))
     .context("Resetting to base commit")?;
 
