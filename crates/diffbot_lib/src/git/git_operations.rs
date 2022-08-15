@@ -71,18 +71,13 @@ pub fn fetch_diffs_and_update<'a>(
             )
             .context("Fetching head")?;
 
-        let fetch_head = repo.find_reference("FETCH_HEAD")?;
+        let mut fetch_head = repo.find_reference(fetching_branch)?;
 
-        let head_commit = repo
+        let head_branch = repo
             .reference_to_annotated_commit(&fetch_head)
-            .context("Getting commit from FETCH_HEAD")?;
+            .context("Getting commit fetched")?;
 
-        let mut head_branch = repo
-            .branch_from_annotated_commit(&branch_name, &head_commit, true)
-            .context("Creating branch from FETCH_HEAD's commit")?
-            .into_reference();
-
-        repo.set_head(head_branch.name().unwrap())
+        repo.set_head(head_branch.refname().unwrap())
             .context("Setting HEAD to head")?;
 
         let head_commit = repo.find_commit(head_id).context("Finding head commit")?;
@@ -95,11 +90,7 @@ pub fn fetch_diffs_and_update<'a>(
             )
             .context("Grabbing diffs")?;
 
-        head_branch.delete().context("Cleaning up branch")?;
-
-        let mut branch = repo.find_branch(fetching_branch, git2::BranchType::Remote)?;
-
-        branch.delete().context("Cleaning up fetched branch")?;
+        fetch_head.delete().context("Cleaning up branch")?;
 
         diffs
     };
