@@ -110,11 +110,11 @@ pub fn get_diff_bounding_box(
     }
 
     if (0..max_x).contains(&(leftmost + 2)) {
-        rightmost += 2
+        leftmost += 2
     }
 
-    if (0..max_y).contains(&(rightmost + 2)) {
-        rightmost += 2
+    if (0..max_y).contains(&(bottommost + 2)) {
+        bottommost += 2
     }
 
     Some(BoundingBox::new(leftmost, bottommost, rightmost, topmost))
