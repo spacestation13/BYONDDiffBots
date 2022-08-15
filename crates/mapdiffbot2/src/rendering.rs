@@ -69,9 +69,9 @@ pub fn get_diff_bounding_box(
     let max_x = min(left_dims.0, right_dims.0);
 
     let mut rightmost = 0usize;
-    let mut leftmost = left_dims.0;
+    let mut leftmost = max_x;
     let mut topmost = 0usize;
-    let mut bottommost = left_dims.1;
+    let mut bottommost = max_y;
 
     for y in 0..max_y {
         for x in 0..max_x {
@@ -101,20 +101,20 @@ pub fn get_diff_bounding_box(
 
     //this is a god awful way to expand bounds without it going out of bounds
 
-    if let Some(newv) = rightmost.checked_sub(2) {
-        rightmost = newv;
-    };
-
-    if let Some(newv) = topmost.checked_sub(2) {
-        topmost = newv;
-    };
-
-    if leftmost + 2 < max_x {
-        leftmost += 2
+    if (0..max_x).contains(&(rightmost - 2)) {
+        rightmost -= 2
     }
 
-    if bottommost + 2 < max_x {
-        bottommost += 2
+    if (0..max_y).contains(&(topmost - 2)) {
+        topmost -= 2
+    }
+
+    if (0..max_x).contains(&(leftmost + 2)) {
+        rightmost += 2
+    }
+
+    if (0..max_y).contains(&(rightmost + 2)) {
+        rightmost += 2
     }
 
     Some(BoundingBox::new(leftmost, bottommost, rightmost, topmost))

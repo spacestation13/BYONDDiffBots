@@ -35,14 +35,12 @@ fn render(
     let pull_branch = format!("mdb-{}-{}", base.sha, head.sha);
     let fetch_branch = format!("pull/{}/head:{}", pull_request_number, pull_branch);
 
-    let repository = git2::Repository::open(dirs.0.as_os_str()).context("Opening repository")?;
+    let repository = git2::Repository::open(dirs.0).context("Opening repository")?;
 
     let diffs = fetch_diffs_and_update(&base.sha, &head.sha, &repository, &fetch_branch)
         .context("Fetching and constructing diffs")?;
 
-    let path = Path::new(&dirs.0)
-        .absolutize()
-        .context("Making repo path absolute")?;
+    let path = dirs.0.absolutize().context("Making repo path absolute")?;
     let base_context = RenderingContext::new(&path).context("Parsing base")?;
 
     let head_context =
