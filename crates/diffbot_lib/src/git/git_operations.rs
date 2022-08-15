@@ -30,7 +30,7 @@ pub fn fetch_diffs_and_update<'a>(
         .as_str()
         .ok_or_else(|| anyhow::anyhow!("Default branch is not a valid string, what the fuck"))?;
     let branch_name = format!("mdb-{}-{}", base_sha, head_sha);
-    let base_commit = {
+    let (base_branch, base_commit) = {
         remote
             .fetch(
                 &[default_branch],
@@ -53,7 +53,14 @@ pub fn fetch_diffs_and_update<'a>(
         repo.set_head(origin_ref.name().unwrap())
             .context("Setting HEAD to base")?;
 
-        repo.find_commit(base_id).context("Finding base commit")?
+        let commit = repo.find_commit(base_id)?;
+
+        origin_ref.set_target(commit.id(), "Setting default branch to the correct commit")?;
+
+        (
+            origin_ref,
+            repo.find_commit(base_id).context("Finding base commit")?,
+        )
     };
     let diffs = {
         remote
@@ -92,19 +99,18 @@ pub fn fetch_diffs_and_update<'a>(
         diffs
     };
 
-    repo.reset(
-        base_commit.as_object(),
-        git2::ResetType::Hard,
-        Some(
-            git2::build::CheckoutBuilder::default()
-                .force()
-                .remove_untracked(true)
-                .remove_ignored(true),
-        ),
-    )
-    .context("Resetting to base commit")?;
-
     remote.disconnect().context("Disconnecting from remote")?;
+
+    repo.set_head(base_branch.name().unwrap())?;
+
+    repo.checkout_head(Some(
+        CheckoutBuilder::default()
+            .force()
+            .remove_ignored(true)
+            .remove_untracked(true)
+            .overwrite_ignored(true),
+    ))
+    .context("Resetting to base commit")?;
 
     Ok(diffs)
 }
@@ -120,7 +126,7 @@ pub fn with_changes_and_dir<T>(
             .context("Applying changes")?;
         let result = f();
         repo.checkout_head(Some(CheckoutBuilder::new().force()))
-            .context("Resetting to HEAD")?;
+            .context("Resetting to HEAD after changes")?;
         result
     })
 }
