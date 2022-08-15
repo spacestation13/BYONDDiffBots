@@ -29,7 +29,6 @@ pub fn fetch_diffs_and_update<'a>(
     let default_branch = default_branch
         .as_str()
         .ok_or_else(|| anyhow::anyhow!("Default branch is not a valid string, what the fuck"))?;
-    let branch_name = format!("mdb-{}-{}", base_sha, head_sha);
     let (base_branch, base_commit) = {
         remote
             .fetch(
