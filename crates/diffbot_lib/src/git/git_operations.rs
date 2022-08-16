@@ -1,7 +1,7 @@
 use anyhow::{Context, Result};
 use std::path::Path;
 
-use git2::{build::CheckoutBuilder, BranchType, Diff, DiffOptions, FetchOptions, Repository};
+use git2::{build::CheckoutBuilder, Diff, DiffOptions, FetchOptions, Repository};
 
 pub fn with_repo_dir<T>(repo: &Path, f: impl FnOnce() -> Result<T>) -> Result<T> {
     std::env::set_current_dir(repo)?;
