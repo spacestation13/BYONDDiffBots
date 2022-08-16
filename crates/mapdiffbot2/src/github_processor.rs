@@ -152,7 +152,7 @@ pub async fn process_github_payload(
     job_sender: &State<JobSender>,
     journal: &State<Arc<Mutex<JobJournal>>>,
 ) -> Result<&'static str, &'static str> {
-    if event.0 != "pull_request" {
+    if event.0 != "pull_request" && event.0 != "action" {
         return Ok("Not a pull request event");
     }
 
