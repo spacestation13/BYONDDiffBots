@@ -34,10 +34,6 @@ fn render(
 ) -> Result<RenderedMaps> {
     let pull_branch = format!("mdb-{}-{}", base.sha, head.sha);
     let fetching_branch = format!("pull/{}/head:{}", pull_request_number, pull_branch);
-    let fetched_branch = format!(
-        "pull/{}/headrefs/heads/{}",
-        pull_request_number, pull_branch
-    );
 
     let repository = git2::Repository::open(dirs.0).context("Opening repository")?;
 
@@ -46,7 +42,7 @@ fn render(
         &head.sha,
         &repository,
         &fetching_branch,
-        &fetched_branch,
+        &pull_branch,
     )
     .context("Fetching and constructing diffs")?;
 

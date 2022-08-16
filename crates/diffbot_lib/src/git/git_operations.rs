@@ -15,7 +15,7 @@ pub fn fetch_diffs_and_update<'a>(
     head_sha: &str,
     repo: &'a Repository,
     fetching_branch: &str,
-    fetched_branch: &str,
+    branch: &str,
 ) -> Result<Diff<'a>> {
     let base_id = git2::Oid::from_str(base_sha).context("Parsing base sha")?;
     let head_id = git2::Oid::from_str(head_sha).context("Parsing head sha")?;
@@ -71,7 +71,7 @@ pub fn fetch_diffs_and_update<'a>(
             )
             .context("Fetching head")?;
 
-        let mut fetch_head = repo.find_reference(fetched_branch)?;
+        let mut fetch_head = repo.find_reference(branch)?;
 
         let head_branch = repo
             .reference_to_annotated_commit(&fetch_head)
