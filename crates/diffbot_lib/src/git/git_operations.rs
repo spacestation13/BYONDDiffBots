@@ -114,18 +114,18 @@ pub fn fetch_diffs_and_update<'a>(
     ))
     .context("Resetting to base commit")?;
 
-    for mut branch in repo
-        .branches(Some(BranchType::Local))
-        .context("Getting all branches")?
-        .filter_map(move |ref_res| ref_res.ok())
-        .filter_map(move |(reference, _)| {
-            (!reference.name().ok()??.contains(default_branch)).then(move || reference)
+    for mut reference in repo
+        .references()
+        .context("Getting all references")?
+        .filter_map(move |reference| {
+            (reference.as_ref().ok()?.name()?.contains("pull"))
+                .then(move || reference.ok())
+                .flatten()
         })
     {
-        branch.delete().context(format!(
-            "Deleting branch: {}",
-            branch.name().unwrap().unwrap()
-        ))?;
+        reference
+            .delete()
+            .context(format!("Deleting reference: {}", reference.name().unwrap()))?;
     }
 
     Ok(diffs)
