@@ -1,7 +1,7 @@
 use anyhow::{Context, Result};
 use std::path::Path;
 
-use git2::{build::CheckoutBuilder, Diff, DiffOptions, FetchOptions, Repository};
+use git2::{build::CheckoutBuilder, BranchType, Diff, DiffOptions, FetchOptions, Repository};
 
 pub fn with_repo_dir<T>(repo: &Path, f: impl FnOnce() -> Result<T>) -> Result<T> {
     std::env::set_current_dir(repo)?;
@@ -29,7 +29,7 @@ pub fn fetch_diffs_and_update<'a>(
     let default_branch = default_branch
         .as_str()
         .ok_or_else(|| anyhow::anyhow!("Default branch is not a valid string, what the fuck"))?;
-    let (base_branch, base_commit) = {
+    let (base_branch, base_commit) = || -> Result<(git2::Reference, git2::Commit)> {
         remote
             .fetch(
                 &[default_branch],
@@ -37,13 +37,17 @@ pub fn fetch_diffs_and_update<'a>(
                 None,
             )
             .context("Fetching base")?;
-        let fetch_head = repo.find_reference("FETCH_HEAD")?;
+        let fetch_head = repo
+            .find_reference("FETCH_HEAD")
+            .context("Getting FETCH_HEAD")?;
 
         let base_commit = repo
             .reference_to_annotated_commit(&fetch_head)
             .context("Getting commit from FETCH_HEAD")?;
 
-        let mut origin_ref = repo.resolve_reference_from_short_name(default_branch)?;
+        let mut origin_ref = repo
+            .resolve_reference_from_short_name(default_branch)
+            .context("Getting default branch")?;
 
         origin_ref
             .set_target(base_commit.id(), "Fast forwarding origin ref")
@@ -52,16 +56,19 @@ pub fn fetch_diffs_and_update<'a>(
         repo.set_head(origin_ref.name().unwrap())
             .context("Setting HEAD to base")?;
 
-        let commit = repo.find_commit(base_id)?;
+        let commit = repo
+            .find_commit(base_id)
+            .context("Finding commit from base SHA")?;
 
         origin_ref.set_target(commit.id(), "Setting default branch to the correct commit")?;
 
-        (
+        Ok((
             origin_ref,
             repo.find_commit(base_id).context("Finding base commit")?,
-        )
-    };
-    let diffs = {
+        ))
+    }()
+    .context("Doing base commits")?;
+    let diffs = || -> Result<Diff> {
         remote
             .fetch(
                 &[fetching_branch],
@@ -70,7 +77,9 @@ pub fn fetch_diffs_and_update<'a>(
             )
             .context("Fetching head")?;
 
-        let mut fetch_head = repo.find_reference("FETCH_HEAD")?;
+        let fetch_head = repo
+            .find_reference("FETCH_HEAD")
+            .context("Getting FETCH_HEAD")?;
 
         let head_branch = repo
             .reference_to_annotated_commit(&fetch_head)
@@ -89,10 +98,9 @@ pub fn fetch_diffs_and_update<'a>(
             )
             .context("Grabbing diffs")?;
 
-        fetch_head.delete().context("Cleaning up branch")?;
-
-        diffs
-    };
+        Ok(diffs)
+    }()
+    .context("Doing head commits")?;
 
     remote.disconnect().context("Disconnecting from remote")?;
 
@@ -105,6 +113,20 @@ pub fn fetch_diffs_and_update<'a>(
             .remove_untracked(true),
     ))
     .context("Resetting to base commit")?;
+
+    for mut branch in repo
+        .branches(Some(BranchType::Local))
+        .context("Getting all branches")?
+        .filter_map(move |ref_res| ref_res.ok())
+        .filter_map(move |(reference, _)| {
+            (!reference.name().ok()??.contains(default_branch)).then(move || reference)
+        })
+    {
+        branch.delete().context(format!(
+            "Deleting branch: {}",
+            branch.name().unwrap().unwrap()
+        ))?;
+    }
 
     Ok(diffs)
 }
