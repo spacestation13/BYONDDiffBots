@@ -104,7 +104,8 @@ pub fn fetch_diffs_and_update<'a>(
 
     remote.disconnect().context("Disconnecting from remote")?;
 
-    repo.set_head(base_branch.name().unwrap())?;
+    repo.set_head(base_branch.name().unwrap())
+        .context("Setting head to default branch")?;
 
     repo.checkout_head(Some(
         CheckoutBuilder::default()
