@@ -29,6 +29,7 @@ pub fn fetch_diffs_and_update<'a>(
     let default_branch = default_branch
         .as_str()
         .ok_or_else(|| anyhow::anyhow!("Default branch is not a valid string, what the fuck"))?;
+    //tfw no try blocks
     let base_commit = || -> Result<git2::Commit> {
         remote
             .fetch(
