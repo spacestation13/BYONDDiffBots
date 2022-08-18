@@ -29,7 +29,7 @@ pub fn fetch_diffs_and_update<'a>(
     let default_branch = default_branch
         .as_str()
         .ok_or_else(|| anyhow::anyhow!("Default branch is not a valid string, what the fuck"))?;
-    let (base_branch, base_commit) = || -> Result<(git2::Reference, git2::Commit)> {
+    let base_commit = || -> Result<git2::Commit> {
         remote
             .fetch(
                 &[default_branch],
@@ -45,27 +45,25 @@ pub fn fetch_diffs_and_update<'a>(
             .reference_to_annotated_commit(&fetch_head)
             .context("Getting commit from FETCH_HEAD")?;
 
-        let mut origin_ref = repo
-            .resolve_reference_from_short_name(default_branch)
-            .context("Getting default branch")?;
-
-        origin_ref
+        repo.resolve_reference_from_short_name(default_branch)?
             .set_target(base_commit.id(), "Fast forwarding origin ref")
             .context("Setting default branch to FETCH_HEAD's commit")?;
 
-        repo.set_head(origin_ref.name().unwrap())
-            .context("Setting HEAD to base")?;
+        repo.set_head(
+            repo.resolve_reference_from_short_name(default_branch)?
+                .name()
+                .unwrap(),
+        )
+        .context("Setting HEAD to base")?;
 
         let commit = repo
             .find_commit(base_id)
             .context("Finding commit from base SHA")?;
 
-        origin_ref.set_target(commit.id(), "Setting default branch to the correct commit")?;
+        repo.resolve_reference_from_short_name(default_branch)?
+            .set_target(commit.id(), "Setting default branch to the correct commit")?;
 
-        Ok((
-            origin_ref,
-            repo.find_commit(base_id).context("Finding base commit")?,
-        ))
+        repo.find_commit(base_id).context("Finding base commit")
     }()
     .context("Doing base commits")?;
     let diffs = || -> Result<Diff> {
@@ -104,8 +102,12 @@ pub fn fetch_diffs_and_update<'a>(
 
     remote.disconnect().context("Disconnecting from remote")?;
 
-    repo.set_head(base_branch.name().unwrap())
-        .context("Setting head to default branch")?;
+    repo.set_head(
+        repo.resolve_reference_from_short_name(default_branch)?
+            .name()
+            .unwrap(),
+    )
+    .context("Setting head to default branch")?;
 
     repo.checkout_head(Some(
         CheckoutBuilder::default()
@@ -139,8 +141,6 @@ pub fn with_changes_and_dir<T>(
     f: impl FnOnce() -> Result<T>,
 ) -> Result<T> {
     with_repo_dir(repodir, || {
-        repo.checkout_head(Some(CheckoutBuilder::new().force()))
-            .context("Resetting to HEAD to apply changes")?;
         repo.apply(diff, git2::ApplyLocation::WorkDir, None)
             .context("Applying changes")?;
         let result = f();
