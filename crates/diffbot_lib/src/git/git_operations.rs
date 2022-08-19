@@ -142,6 +142,8 @@ pub fn with_changes_and_dir<T>(
     f: impl FnOnce() -> Result<T>,
 ) -> Result<T> {
     with_repo_dir(repodir, || {
+        repo.checkout_head(Some(CheckoutBuilder::new().force()))
+            .context("Resetting to HEAD after changes")?;
         repo.apply(diff, git2::ApplyLocation::WorkDir, None)
             .context("Applying changes")?;
         let result = f();
