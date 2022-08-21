@@ -285,7 +285,7 @@ pub fn do_job(job: &Job) -> Result<CheckOutputs> {
         .as_str()
         .ok_or_else(|| anyhow::anyhow!("Default branch is not a valid string, what the fuck"))?;
 
-    remote.disconnect()?;
+    remote.disconnect().context("Disconnecting from remote")?;
 
     let res = match render(
         base,
