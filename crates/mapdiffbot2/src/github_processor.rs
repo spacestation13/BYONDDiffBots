@@ -1,7 +1,6 @@
 use std::sync::Arc;
 
 use anyhow::{Context, Result};
-use octocrab::models::pulls::FileDiffStatus;
 use octocrab::models::InstallationId;
 use rocket::http::Status;
 use rocket::outcome::Outcome;
@@ -67,10 +66,6 @@ async fn process_pull(
         .context("Getting files modified by PR")?
         .into_iter()
         .filter(|f| f.filename.ends_with(".dmm"))
-        .filter(|f| match f.status {
-            FileDiffStatus::Added | FileDiffStatus::Modified | FileDiffStatus::Removed => true,
-            _ => false,
-        })
         .collect::<Vec<_>>();
 
     if files.is_empty() {
