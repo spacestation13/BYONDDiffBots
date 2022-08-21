@@ -1,6 +1,7 @@
 use std::sync::Arc;
 
 use anyhow::{Context, Result};
+use octocrab::models::pulls::FileDiffStatus;
 use octocrab::models::InstallationId;
 use rocket::http::Status;
 use rocket::outcome::Outcome;
@@ -61,15 +62,16 @@ async fn process_pull(
         return Ok(());
     }
 
-    let files = {
-        let files = get_pull_info(installation, &pull)
-            .await
-            .context("Getting files modified by PR")?;
-        files
-            .into_iter()
-            .filter(|f| f.filename.ends_with(".dmm"))
-            .collect::<Vec<_>>()
-    };
+    let files = get_pull_info(installation, &pull)
+        .await
+        .context("Getting files modified by PR")?
+        .into_iter()
+        .filter(|f| f.filename.ends_with(".dmm"))
+        .filter(|f| match f.status {
+            FileDiffStatus::Added | FileDiffStatus::Modified | FileDiffStatus::Removed => true,
+            _ => false,
+        })
+        .collect::<Vec<_>>();
 
     if files.is_empty() {
         let output = Output {
@@ -152,7 +154,7 @@ pub async fn process_github_payload(
     job_sender: &State<JobSender>,
     journal: &State<Arc<Mutex<JobJournal>>>,
 ) -> Result<&'static str, &'static str> {
-    if event.0 != "pull_request" && event.0 != "action" {
+    if event.0 != "pull_request" {
         return Ok("Not a pull request event");
     }
 

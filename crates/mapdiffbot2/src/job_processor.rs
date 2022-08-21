@@ -25,26 +25,31 @@ struct RenderedMaps {
 fn render(
     base: &Branch,
     head: &Branch,
-    added_files: &[&FileDiff],
-    modified_files: &[&FileDiff],
-    removed_files: &[&FileDiff],
-    dirs: (&Path, &Path),
+    (added_files, modified_files, removed_files): (&[&FileDiff], &[&FileDiff], &[&FileDiff]),
+    (repo, default_branch): (&git2::Repository, &str),
+    (repo_dir, out_dir): (&Path, &Path),
     pull_request_number: u64,
     // feel like this is a bit of a hack but it works for now
 ) -> Result<RenderedMaps> {
     let pull_branch = format!("mdb-{}-{}", base.sha, head.sha);
     let fetching_branch = format!("pull/{}/head:{}", pull_request_number, pull_branch);
 
-    let repository = git2::Repository::open(dirs.0).context("Opening repository")?;
+    let (base_branch, head_branch) = fetch_and_get_branches(
+        &base.sha,
+        &head.sha,
+        repo,
+        &fetching_branch,
+        &default_branch,
+    )
+    .context("Fetching and constructing diffs")?;
 
-    let diffs = fetch_diffs_and_update(&base.sha, &head.sha, &repository, &fetching_branch)
-        .context("Fetching and constructing diffs")?;
-
-    let path = dirs.0.absolutize().context("Making repo path absolute")?;
-    let base_context = RenderingContext::new(&path).context("Parsing base")?;
+    let path = repo_dir.absolutize().context("Making repo path absolute")?;
+    let base_context =
+        with_checkout_and_dir(&base_branch, &repo, &path, || RenderingContext::new(&path))
+            .context("Parsing base")?;
 
     let head_context =
-        with_changes_and_dir(&diffs, &repository, &path, || RenderingContext::new(&path))
+        with_checkout_and_dir(&head_branch, &repo, &path, || RenderingContext::new(&path))
             .context("Parsing head")?;
 
     let base_render_passes = dmm_tools::render_passes::configure(
@@ -60,29 +65,29 @@ fn render(
     );
 
     // ADDED MAPS
-    let added_directory = format!("{}/a", dirs.1.display());
+    let added_directory = format!("{}/a", out_dir.display());
     let added_directory = Path::new(&added_directory);
     let added_errors = Default::default();
 
     // MODIFIED MAPS
-    let modified_directory = format!("{}/m", dirs.1.display());
+    let modified_directory = format!("{}/m", out_dir.display());
     let modified_directory = Path::new(&modified_directory);
     let modified_before_errors = Default::default();
     let modified_after_errors = Default::default();
 
-    let removed_directory = format!("{}/r", dirs.1.display());
+    let removed_directory = format!("{}/r", out_dir.display());
     let removed_directory = Path::new(&removed_directory);
     let removed_errors = Default::default();
 
-    let base_maps =
-        with_repo_dir(&path, || load_maps(modified_files)).context("Loading base maps")?;
-    let head_maps = with_changes_and_dir(&diffs, &repository, &path, || load_maps(modified_files))
+    let base_maps = with_checkout_and_dir(&base_branch, &repo, &path, || load_maps(modified_files))
+        .context("Loading base maps")?;
+    let head_maps = with_checkout_and_dir(&head_branch, &repo, &path, || load_maps(modified_files))
         .context("Loading head maps")?;
     let modified_maps = get_map_diff_bounding_boxes(base_maps, head_maps);
 
     // You might think to yourself, wtf is going on here?
     // And you'd be right.
-    let removed_maps = with_repo_dir(&path, || {
+    let removed_maps = with_checkout_and_dir(&base_branch, &repo, &path, || {
         render_map_regions(
             &base_context,
             &modified_maps.befores,
@@ -109,7 +114,7 @@ fn render(
         Ok(maps)
     })?;
 
-    let added_maps = with_changes_and_dir(&diffs, &repository, &path, || {
+    let added_maps = with_checkout_and_dir(&head_branch, &repo, &path, || {
         render_map_regions(
             &head_context,
             &modified_maps.afters,
@@ -267,24 +272,41 @@ pub fn do_job(job: &Job) -> Result<CheckOutputs> {
     let modified_files = filter_on_status(FileDiffStatus::Modified);
     let removed_files = filter_on_status(FileDiffStatus::Removed);
 
-    let maps = render(
+    let repository = git2::Repository::open(&repo_dir).context("Opening repository")?;
+
+    let mut remote = repository.find_remote("origin")?;
+
+    remote
+        .connect(git2::Direction::Fetch)
+        .context("Connecting to remote")?;
+
+    let default_branch = remote.default_branch()?;
+    let default_branch = default_branch
+        .as_str()
+        .ok_or_else(|| anyhow::anyhow!("Default branch is not a valid string, what the fuck"))?;
+
+    remote.disconnect()?;
+
+    let res = match render(
         base,
         head,
-        &added_files,
-        &modified_files,
-        &removed_files,
+        (&added_files, &modified_files, &removed_files),
+        (&repository, &default_branch),
         (&repo_dir, Path::new(output_directory)),
         job.pull_request,
-    )
-    .context("Doing the renderance")?;
+    ) {
+        Ok(maps) => generate_finished_output(
+            &added_files,
+            &modified_files,
+            &removed_files,
+            &non_abs_directory,
+            maps,
+        ),
 
-    let outputs = generate_finished_output(
-        &added_files,
-        &modified_files,
-        &removed_files,
-        &non_abs_directory,
-        maps,
-    )?;
+        Err(err) => Err(err),
+    };
 
-    Ok(outputs)
+    clean_up_references(&repository, &default_branch).context("Cleaning up references")?;
+
+    res
 }

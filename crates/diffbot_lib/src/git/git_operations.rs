@@ -1,7 +1,7 @@
 use anyhow::{Context, Result};
 use std::path::Path;
 
-use git2::{build::CheckoutBuilder, Diff, DiffOptions, FetchOptions, Repository};
+use git2::{build::CheckoutBuilder, FetchOptions, Repository};
 
 pub fn with_repo_dir<T>(repo: &Path, f: impl FnOnce() -> Result<T>) -> Result<T> {
     std::env::set_current_dir(repo)?;
@@ -10,12 +10,13 @@ pub fn with_repo_dir<T>(repo: &Path, f: impl FnOnce() -> Result<T>) -> Result<T>
     result
 }
 
-pub fn fetch_diffs_and_update<'a>(
+pub fn fetch_and_get_branches<'a>(
     base_sha: &str,
     head_sha: &str,
-    repo: &'a Repository,
+    repo: &'a git2::Repository,
     fetching_branch: &str,
-) -> Result<Diff<'a>> {
+    default_branch: &str,
+) -> Result<(git2::Reference<'a>, git2::Reference<'a>)> {
     let base_id = git2::Oid::from_str(base_sha).context("Parsing base sha")?;
     let head_id = git2::Oid::from_str(head_sha).context("Parsing head sha")?;
 
@@ -25,12 +26,8 @@ pub fn fetch_diffs_and_update<'a>(
         .connect(git2::Direction::Fetch)
         .context("Connecting to remote")?;
 
-    let default_branch = remote.default_branch()?;
-    let default_branch = default_branch
-        .as_str()
-        .ok_or_else(|| anyhow::anyhow!("Default branch is not a valid string, what the fuck"))?;
     //tfw no try blocks
-    let base_commit = || -> Result<git2::Commit> {
+    let base_branch = || -> Result<git2::Reference> {
         remote
             .fetch(
                 &[default_branch],
@@ -64,10 +61,12 @@ pub fn fetch_diffs_and_update<'a>(
         repo.resolve_reference_from_short_name(default_branch)?
             .set_target(commit.id(), "Setting default branch to the correct commit")?;
 
-        repo.find_commit(base_id).context("Finding base commit")
+        repo.resolve_reference_from_short_name(default_branch)
+            .map_err(|err| err.into())
     }()
     .context("Doing base commits")?;
-    let diffs = || -> Result<Diff> {
+
+    let head_branch = || -> Result<git2::Reference> {
         remote
             .fetch(
                 &[fetching_branch],
@@ -80,24 +79,29 @@ pub fn fetch_diffs_and_update<'a>(
             .find_reference("FETCH_HEAD")
             .context("Getting FETCH_HEAD")?;
 
-        let head_branch = repo
-            .reference_to_annotated_commit(&fetch_head)
-            .context("Getting commit fetched")?;
+        let head_name = format!("mdb-pull-{}-{}", base_sha, head_sha);
 
-        repo.set_head(head_branch.refname().unwrap())
+        let mut head_branch = repo
+            .branch_from_annotated_commit(
+                &head_name,
+                &repo.reference_to_annotated_commit(&fetch_head)?,
+                true,
+            )
+            .context("Creating branch")?
+            .into_reference();
+
+        repo.set_head(head_branch.name().unwrap())
             .context("Setting HEAD to head")?;
 
         let head_commit = repo.find_commit(head_id).context("Finding head commit")?;
 
-        let diffs = repo
-            .diff_tree_to_tree(
-                Some(&base_commit.tree()?),
-                Some(&head_commit.tree()?),
-                Some(DiffOptions::new().show_binary(true)),
-            )
-            .context("Grabbing diffs")?;
+        head_branch.set_target(
+            head_commit.id(),
+            "Setting head branch to the correct commit",
+        )?;
 
-        Ok(diffs)
+        repo.resolve_reference_from_short_name(&head_name)
+            .map_err(|err| err.into())
     }()
     .context("Doing head commits")?;
 
@@ -118,6 +122,18 @@ pub fn fetch_diffs_and_update<'a>(
     ))
     .context("Resetting to base commit")?;
 
+    Ok((base_branch, head_branch))
+}
+
+pub fn clean_up_references(repo: &Repository, default: &str) -> Result<()> {
+    repo.set_head(default).context("Setting head")?;
+    repo.checkout_head(Some(
+        CheckoutBuilder::new()
+            .force()
+            .remove_ignored(true)
+            .remove_untracked(true),
+    ))
+    .context("Checkout to head")?;
     for mut reference in repo
         .references()
         .context("Getting all references")?
@@ -131,25 +147,24 @@ pub fn fetch_diffs_and_update<'a>(
             .delete()
             .context(format!("Deleting reference: {}", reference.name().unwrap()))?;
     }
-
-    Ok(diffs)
+    Ok(())
 }
 
-pub fn with_changes_and_dir<T>(
-    diff: &Diff,
+pub fn with_checkout_and_dir<T>(
+    checkout_ref: &git2::Reference,
     repo: &Repository,
     repodir: &Path,
     f: impl FnOnce() -> Result<T>,
 ) -> Result<T> {
     with_repo_dir(repodir, || {
-        repo.checkout_head(Some(CheckoutBuilder::new().force()))
-            .context("Resetting to HEAD after changes")?;
-        repo.apply(diff, git2::ApplyLocation::WorkDir, None)
-            .context("Applying changes")?;
-        let result = f();
-        repo.checkout_head(Some(CheckoutBuilder::new().force()))
-            .context("Resetting to HEAD after changes")?;
-        result
+        repo.set_head(checkout_ref.name().unwrap())?;
+        repo.checkout_head(Some(
+            CheckoutBuilder::new()
+                .force()
+                .remove_ignored(true)
+                .remove_untracked(true),
+        ))?;
+        f()
     })
 }
 
