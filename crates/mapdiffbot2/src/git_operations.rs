@@ -3,7 +3,7 @@ use std::path::Path;
 
 use git2::{build::CheckoutBuilder, FetchOptions, Repository};
 
-pub fn with_repo_dir<T>(repo: &Path, f: impl FnOnce() -> Result<T>) -> Result<T> {
+fn with_repo_dir<T>(repo: &Path, f: impl FnOnce() -> Result<T>) -> Result<T> {
     std::env::set_current_dir(repo)?;
     let result = f();
     std::env::set_current_dir(std::env::current_exe()?.parent().unwrap())?;
@@ -138,7 +138,8 @@ pub fn clean_up_references(repo: &Repository, default: &str) -> Result<()> {
         .references()
         .context("Getting all references")?
         .filter_map(move |reference| {
-            (reference.as_ref().ok()?.name()?.contains("pull"))
+            (reference.as_ref().ok()?.name()?.contains("pull")
+                && reference.as_ref().ok()?.name()? != default)
                 .then(move || reference.ok())
                 .flatten()
         })

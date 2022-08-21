@@ -1,6 +1,7 @@
 use std::sync::Arc;
 
 use anyhow::{Context, Result};
+use octocrab::models::pulls::FileDiffStatus;
 use octocrab::models::InstallationId;
 use rocket::http::Status;
 use rocket::outcome::Outcome;
@@ -66,12 +67,16 @@ async fn process_pull(
         .context("Getting files modified by PR")?
         .into_iter()
         .filter(|f| f.filename.ends_with(".dmm"))
+        .filter(|f| match f.status {
+            FileDiffStatus::Added | FileDiffStatus::Removed | FileDiffStatus::Modified => true,
+            _ => false,
+        })
         .collect::<Vec<_>>();
 
     if files.is_empty() {
         let output = Output {
             title: "No map changes",
-            summary: "There are no changed map files to render.".to_owned(),
+            summary: "There are no relevant changed map files to render.".to_owned(),
             text: "".to_owned(),
         };
 

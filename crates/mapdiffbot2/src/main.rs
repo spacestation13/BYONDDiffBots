@@ -1,3 +1,4 @@
+mod git_operations;
 pub(crate) mod github_processor;
 pub(crate) mod job_processor;
 pub(crate) mod rendering;

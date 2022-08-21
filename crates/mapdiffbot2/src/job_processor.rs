@@ -10,9 +10,9 @@ use std::path::PathBuf;
 
 extern crate dreammaker as dm;
 
+use super::git_operations::*;
 use crate::rendering::*;
 use crate::CONFIG;
-use diffbot_lib::git::git_operations::*;
 use diffbot_lib::github::github_types::*;
 use diffbot_lib::job::types::Job;
 
@@ -238,9 +238,10 @@ pub fn do_job(job: &Job) -> Result<CheckOutputs> {
         .iter()
         .collect();
 
+    let handle = Handle::try_current().unwrap();
+
     if !repo_dir.exists() {
         std::fs::create_dir_all(&repo_dir)?;
-        let handle = Handle::try_current().unwrap();
         handle.block_on(async {
 				let output = Output {
 					title: "Cloning repo...",

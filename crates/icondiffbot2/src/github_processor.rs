@@ -9,7 +9,10 @@ use diffbot_lib::{
     },
     job::types::Job,
 };
-use octocrab::models::{pulls::FileDiff, InstallationId};
+use octocrab::models::{
+    pulls::{FileDiff, FileDiffStatus},
+    InstallationId,
+};
 
 use crate::{DataJobJournal, DataJobSender};
 
@@ -79,12 +82,16 @@ async fn handle_pull_request(
     let changed_dmis: Vec<FileDiff> = files
         .into_iter()
         .filter(|e| e.filename.ends_with(".dmi"))
+        .filter(|e| match e.status {
+            FileDiffStatus::Added | FileDiffStatus::Removed | FileDiffStatus::Modified => true,
+            _ => false,
+        })
         .collect();
 
     if changed_dmis.is_empty() {
         let output = Output {
             title: "No icon chages",
-            summary: "There are no changed icon files to render.".to_owned(),
+            summary: "There are no relevant changed icon files to render.".to_owned(),
             text: "".to_owned(),
         };
 
