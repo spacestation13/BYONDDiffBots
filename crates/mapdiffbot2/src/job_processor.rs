@@ -1,5 +1,5 @@
 use anyhow::{Context, Result};
-use octocrab::models::pulls::FileDiff;
+use diffbot_lib::github::github_types::FileDiff;
 use octocrab::models::pulls::FileDiffStatus;
 use path_absolutize::*;
 use rayon::prelude::*;
@@ -234,9 +234,7 @@ pub fn do_job(job: &Job) -> Result<CheckOutputs> {
     let base = &job.base;
     let head = &job.head;
     let repo = format!("https://github.com/{}", base.repo.full_name());
-    let repo_dir: PathBuf = ["./repos/", &base.repo.owner(), &base.repo.name]
-        .iter()
-        .collect();
+    let repo_dir: PathBuf = ["./repos/", &base.repo.full_name()].iter().collect();
 
     let handle = Handle::try_current().unwrap();
 

@@ -62,7 +62,7 @@ async fn process_pull(
         return Ok(());
     }
 
-    let files = get_pull_info(installation, &pull)
+    let files = get_pull_files(installation, &pull)
         .await
         .context("Getting files modified by PR")?
         .into_iter()

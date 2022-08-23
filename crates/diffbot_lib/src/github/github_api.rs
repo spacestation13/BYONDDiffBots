@@ -1,6 +1,5 @@
 use crate::github::github_types::*;
 use anyhow::{format_err, Context, Result};
-use octocrab::models::pulls::FileDiff;
 use octocrab::models::repos::Content;
 use octocrab::models::InstallationId;
 use serde::{Deserialize, Serialize};
@@ -158,19 +157,17 @@ pub async fn get_pull_files(
     crab.all_pages(files)
         .await
         .context("Failed to get all pages for pull request diff")
-}
-
-pub async fn get_pull_info(
-    installation: &Installation,
-    pull: &PullRequest,
-) -> Result<Vec<FileDiff>> {
-    let crab = octocrab::instance().installation(installation.id.into());
-    let (user, repo) = pull.base.repo.name_tuple();
-    let pulls = crab.pulls(user, repo);
-    let files = pulls.list_files(pull.number).await?;
-    crab.all_pages(files)
-        .await
-        .context("Failed to get all pages for pull request diff")
+        .map(|files| {
+            files
+                .into_iter()
+                .map(|file| FileDiff {
+                    sha: file.sha,
+                    status: file.status,
+                    filename: file.filename,
+                    previous_filename: file.previous_filename,
+                })
+                .collect::<Vec<_>>()
+        })
 }
 
 static DOWNLOAD_DIR: &str = "download";

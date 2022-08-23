@@ -3,7 +3,7 @@ use std::collections::VecDeque;
 use crate::github::{github_api::*, github_types::*};
 use anyhow::{Context, Result};
 use flume::Sender;
-use octocrab::models::{pulls::FileDiff, InstallationId};
+use octocrab::models::InstallationId;
 use serde::{Deserialize, Serialize};
 
 pub trait JobRunner: Fn(&Job) -> Result<CheckOutputs> + Send + Clone + 'static {}

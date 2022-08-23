@@ -28,15 +28,6 @@ impl Repository {
         let mut iter = self.url.split('/').skip(4).take(2).map(|a| a.to_string());
         (iter.next().unwrap(), iter.next().unwrap())
     }
-
-    pub fn owner(&self) -> String {
-        self.url
-            .split('/')
-            .skip(4)
-            .take(1)
-            .collect::<Vec<&str>>()
-            .join("")
-    }
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -118,6 +109,14 @@ pub struct PullChanges {
 pub struct CreateCheckRun {
     pub name: String,
     pub head_sha: String,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct FileDiff {
+    pub sha: String,
+    pub filename: String,
+    pub status: octocrab::models::pulls::FileDiffStatus,
+    pub previous_filename: Option<String>,
 }
 
 #[derive(Serialize, Builder, Default)]

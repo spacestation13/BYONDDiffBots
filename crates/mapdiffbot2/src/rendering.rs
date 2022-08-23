@@ -4,11 +4,11 @@ extern crate dreammaker as dm;
 
 use ahash::RandomState;
 use anyhow::{Context, Result};
+use diffbot_lib::github::github_types::FileDiff;
 use dm::objtree::ObjectTree;
 use dmm_tools::{dmi::Image, dmm, minimap, render_passes::RenderPass, IconCache};
 use image::io::Reader as ImageReader;
 use image::{GenericImageView, ImageBuffer, Pixel};
-use octocrab::models::pulls::FileDiff;
 use rayon::prelude::*;
 
 #[derive(Debug, Clone)]

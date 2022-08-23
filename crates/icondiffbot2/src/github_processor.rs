@@ -9,10 +9,9 @@ use diffbot_lib::{
     },
     job::types::Job,
 };
-use octocrab::models::{
-    pulls::{FileDiff, FileDiffStatus},
-    InstallationId,
-};
+use octocrab::models::{pulls::FileDiffStatus, InstallationId};
+
+use diffbot_lib::github::github_types::FileDiff;
 
 use crate::{DataJobJournal, DataJobSender};
 
