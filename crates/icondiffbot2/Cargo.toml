@@ -6,32 +6,32 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-serde = { version = "1.0", features = ["derive"] }
-serde_json = "1.0"
+serde = { version = "1.0.144", features = ["derive"] }
+serde_json = "1.0.85"
 octocrab = { git = "https://github.com/tigercat2000/octocrab", branch = "list_files" }
 # TODO: fix this when maniac merges my damn pr
 dmm-tools = { git = "https://github.com/tigercat2000/SpacemanDMM/", branch = "gif", features = ["png", "gif"] }
 dreammaker = { git = "https://github.com/tigercat2000/SpacemanDMM/", branch = "gif" }
-once_cell = "1.10.0"
-jsonwebtoken = "8"
+once_cell = "1.13.1"
+jsonwebtoken = "8.1.1"
 lazy_static = "1.4.0"
-reqwest = "0.11.10"
+reqwest = "0.11.11"
 diffbot_lib = { path = "../diffbot_lib" }
-anyhow = "1.0.57"
-tokio = {version = "1.18.1", features = ["full"] }
-flume = "0.10.12"
-ndarray = "0.15.3"
+anyhow = "1.0.62"
+tokio = {version = "1.20.1", features = ["full"] }
+flume = "0.10.14"
+ndarray = "0.15.6"
 sanitize-filename = "0.4.0"
 tracing-flame = "0.2.0"
 rayon = "1.5.3"
-hashbrown = { version = "0.12.1", features = ["rayon"] }
-actix-web = "4"
+hashbrown = { version = "0.12.3", features = ["rayon"] }
+actix-web = "4.1.0"
 toml = "0.5.9"
-actix-files = "0.6.1"
+actix-files = "0.6.2"
 
 [dependencies.tracing-subscriber]
-version = "0.3.11"
+version = "0.3.15"
 
 [dependencies.tracing]
-version = "0.1.35"
+version = "0.1.36"
 features = ["attributes"]
