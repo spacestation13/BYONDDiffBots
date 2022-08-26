@@ -1,6 +1,5 @@
 use anyhow::{Context, Result};
 use diffbot_lib::github::github_types::FileDiff;
-use octocrab::models::pulls::FileDiffStatus;
 use path_absolutize::*;
 use rayon::prelude::*;
 use rocket::tokio::runtime::Handle;
@@ -260,16 +259,16 @@ pub fn do_job(job: &Job) -> Result<CheckOutputs> {
         .to_str()
         .ok_or_else(|| anyhow::anyhow!("Failed to create absolute path to image directory",))?;
 
-    let filter_on_status = |status: FileDiffStatus| {
+    let filter_on_status = |status: ChangeType| {
         job.files
             .iter()
             .filter(|f| f.status == status)
             .collect::<Vec<&FileDiff>>()
     };
 
-    let added_files = filter_on_status(FileDiffStatus::Added);
-    let modified_files = filter_on_status(FileDiffStatus::Modified);
-    let removed_files = filter_on_status(FileDiffStatus::Removed);
+    let added_files = filter_on_status(ChangeType::Added);
+    let modified_files = filter_on_status(ChangeType::Modified);
+    let removed_files = filter_on_status(ChangeType::Deleted);
 
     let repository = git2::Repository::open(&repo_dir).context("Opening repository")?;
 

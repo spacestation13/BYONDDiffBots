@@ -1,7 +1,6 @@
 use std::sync::Arc;
 
 use anyhow::{Context, Result};
-use octocrab::models::pulls::FileDiffStatus;
 use octocrab::models::InstallationId;
 use rocket::http::Status;
 use rocket::outcome::Outcome;
@@ -14,6 +13,7 @@ use rocket::State;
 use crate::CONFIG;
 use diffbot_lib::github::github_api::*;
 use diffbot_lib::github::github_types::*;
+use diffbot_lib::github::graphql::get_pull_files;
 use diffbot_lib::job::types::{Job, JobJournal, JobSender};
 
 async fn process_pull(
@@ -68,7 +68,7 @@ async fn process_pull(
         .into_iter()
         .filter(|f| f.filename.ends_with(".dmm"))
         .filter(|f| match f.status {
-            FileDiffStatus::Added | FileDiffStatus::Removed | FileDiffStatus::Modified => true,
+            ChangeType::Added | ChangeType::Deleted | ChangeType::Modified => true,
             _ => false,
         })
         .collect::<Vec<_>>();

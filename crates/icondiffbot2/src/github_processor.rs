@@ -2,14 +2,14 @@ use std::{future::Future, pin::Pin};
 
 use anyhow::Result;
 use diffbot_lib::{
-    github::github_api::get_pull_files,
     github::{
         github_api::CheckRun,
-        github_types::{Output, PullRequestEventPayload},
+        github_types::{ChangeType, Output, PullRequestEventPayload},
+        graphql::get_pull_files,
     },
     job::types::Job,
 };
-use octocrab::models::{pulls::FileDiffStatus, InstallationId};
+use octocrab::models::InstallationId;
 
 use diffbot_lib::github::github_types::FileDiff;
 
@@ -82,14 +82,14 @@ async fn handle_pull_request(
         .into_iter()
         .filter(|e| e.filename.ends_with(".dmi"))
         .filter(|e| match e.status {
-            FileDiffStatus::Added | FileDiffStatus::Removed | FileDiffStatus::Modified => true,
+            ChangeType::Added | ChangeType::Deleted | ChangeType::Modified => true,
             _ => false,
         })
         .collect();
 
     if changed_dmis.is_empty() {
         let output = Output {
-            title: "No icon chages",
+            title: "No icon changes",
             summary: "There are no relevant changed icon files to render.".to_owned(),
             text: "".to_owned(),
         };

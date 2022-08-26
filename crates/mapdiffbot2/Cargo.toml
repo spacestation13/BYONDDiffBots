@@ -8,11 +8,11 @@ edition = "2021"
 [dependencies]
 serde = { version = "1.0.144", features = ["derive"] }
 serde_json = { version = "1.0.85"}
-octocrab = { git = "https://github.com/tigercat2000/octocrab", branch = "list_files" }
+octocrab = "0.17.0"
 flume = "0.10.14"
 dmm-tools = { git = "https://github.com/SpaceManiac/SpacemanDMM/", features = ["png"] }
 dreammaker = { git = "https://github.com/SpaceManiac/SpacemanDMM/" }
-ahash = "0.8.0"
+ahash = "0.7.6"
 path-absolutize = "3.0.13"
 chrono = "0.4.22"
 jsonwebtoken = "8.1.1"
@@ -27,4 +27,4 @@ diffbot_lib = { path = "../diffbot_lib" }
 git2 = "0.15.0"
 
 [dependencies.rocket]
-version = "0.4.11"
+version = "0.5.0-rc.2"

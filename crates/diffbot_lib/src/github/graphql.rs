@@ -1,0 +1,158 @@
+use super::github_types::Installation;
+use super::github_types::{ChangeType, FileDiff};
+use anyhow::Result;
+use serde::Deserialize;
+
+/*
+  Query:
+{
+  repository(owner: "tgstation", name: "tgstation") {
+    pullRequest(number: 69416) {
+      files(first: 100, after: "MjAw") {
+        edges {
+          cursor
+          node {
+            path
+            changeType
+          }
+        }
+      }
+    }
+  }
+}
+  Sample Response:
+{
+  "data": {
+    "repository": {
+      "pullRequest": {
+        "files": {
+          "edges": [
+            {
+              "cursor": "MjAx",
+              "node": {
+                "path": "code/modules/projectiles/guns/energy/kinetic_accelerator.dm",
+                "changeType": "MODIFIED"
+              }
+            },
+            {
+              "cursor": "MjAy",
+              "node": {
+                "path": "code/modules/projectiles/guns/energy/laser.dm",
+                "changeType": "MODIFIED"
+              }
+            },
+          ]
+        }
+      }
+    }
+  }
+}
+*/
+
+#[derive(Deserialize)]
+struct QueryData {
+    data: Data,
+}
+
+#[derive(Deserialize)]
+struct Data {
+    repository: Reposit,
+}
+
+#[derive(Deserialize)]
+struct Reposit {
+    #[serde(rename(deserialize = "pullRequest"))]
+    pull_request: PullRequest,
+}
+
+#[derive(Deserialize)]
+struct PullRequest {
+    files: Edges,
+}
+
+#[derive(Deserialize)]
+struct Edges {
+    edges: Vec<Edge>,
+}
+
+#[derive(Deserialize)]
+struct Edge {
+    cursor: String,
+    node: Node,
+}
+
+#[derive(Deserialize)]
+struct Node {
+    path: String,
+    #[serde(rename(deserialize = "changeType"))]
+    change_type: String,
+}
+
+pub async fn get_pull_files(
+    installation: &Installation,
+    pull: &super::github_types::PullRequest,
+) -> Result<Vec<FileDiff>> {
+    let crab = octocrab::instance().installation(installation.id.into());
+    let (user, repo) = pull.base.repo.name_tuple();
+
+    let mut cursor = "".to_string();
+
+    let mut ret = vec![];
+
+    loop {
+        let queried: QueryData = crab
+            .graphql(&format!(
+                "query {{ 
+  repository(owner:\"{}\", name:\"{}\") {{
+    pullRequest(number:{}) {{
+      files(first:100, after:\"{}\") {{
+        edges {{
+          cursor
+          node {{
+            path
+            changeType
+          }}
+        }}
+      }}
+    }}
+  }}
+}}",
+                user, repo, pull.number, cursor
+            ))
+            .await?;
+
+        if queried.data.repository.pull_request.files.edges.is_empty() {
+            break;
+        }
+
+        cursor = match queried.data.repository.pull_request.files.edges.last() {
+            Some(edge) => edge.cursor.clone(),
+            None => "".to_owned(),
+        };
+        ret.extend(
+            queried
+                .data
+                .repository
+                .pull_request
+                .files
+                .edges
+                .into_iter()
+                .map(|item| {
+                    let status = match item.node.change_type.as_str() {
+                        "ADDED" => ChangeType::Added,
+                        "CHANGED" => ChangeType::Changed,
+                        "COPIED" => ChangeType::Copied,
+                        "DELETED" => ChangeType::Deleted,
+                        "MODIFIED" => ChangeType::Modified,
+                        "RENAMED" => ChangeType::Renamed,
+                        _ => unreachable!("changeType for graphql query not covered!"),
+                    };
+                    FileDiff {
+                        status,
+                        filename: item.node.path,
+                    }
+                }),
+        );
+    }
+    Ok(ret)
+}

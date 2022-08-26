@@ -1,7 +1,9 @@
 use anyhow::{Context, Result};
-use diffbot_lib::{github::github_api::download_url, job::types::Job};
+use diffbot_lib::{
+    github::{github_api::download_url, github_types::ChangeType},
+    job::types::Job,
+};
 use dmm_tools::dmi::IconFile;
-use octocrab::models::pulls::FileDiffStatus;
 use std::{
     collections::hash_map::DefaultHasher,
     hash::{Hash, Hasher},
@@ -15,14 +17,11 @@ pub struct IconFileWithName {
     pub icon: IconFile,
 }
 
-pub fn status_to_sha<'a>(
-    job: &'a Job,
-    status: &FileDiffStatus,
-) -> (Option<&'a str>, Option<&'a str>) {
+pub fn status_to_sha<'a>(job: &'a Job, status: &ChangeType) -> (Option<&'a str>, Option<&'a str>) {
     match status {
-        FileDiffStatus::Added => (None, Some(&job.head.sha)),
-        FileDiffStatus::Removed => (Some(&job.base.sha), None),
-        FileDiffStatus::Modified => (Some(&job.base.sha), Some(&job.head.sha)),
+        ChangeType::Added => (None, Some(&job.head.sha)),
+        ChangeType::Deleted => (Some(&job.base.sha), None),
+        ChangeType::Modified => (Some(&job.base.sha), Some(&job.head.sha)),
         _ => (None, None),
     }
 }

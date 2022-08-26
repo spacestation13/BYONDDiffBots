@@ -147,29 +147,6 @@ impl CheckRun {
     }
 }
 
-pub async fn get_pull_files(
-    installation: &Installation,
-    pull: &PullRequest,
-) -> Result<Vec<FileDiff>> {
-    let crab = octocrab::instance().installation(installation.id.into());
-    let (user, repo) = pull.base.repo.name_tuple();
-    let files = crab.pulls(user, repo).list_files(pull.number).await?;
-    crab.all_pages(files)
-        .await
-        .context("Failed to get all pages for pull request diff")
-        .map(|files| {
-            files
-                .into_iter()
-                .map(|file| FileDiff {
-                    sha: file.sha,
-                    status: file.status,
-                    filename: file.filename,
-                    previous_filename: file.previous_filename,
-                })
-                .collect::<Vec<_>>()
-        })
-}
-
 static DOWNLOAD_DIR: &str = "download";
 
 async fn find_content<S: AsRef<str>>(

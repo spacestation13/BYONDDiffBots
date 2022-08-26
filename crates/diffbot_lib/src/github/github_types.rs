@@ -113,10 +113,18 @@ pub struct CreateCheckRun {
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct FileDiff {
-    pub sha: String,
     pub filename: String,
-    pub status: octocrab::models::pulls::FileDiffStatus,
-    pub previous_filename: Option<String>,
+    pub status: ChangeType,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq)]
+pub enum ChangeType {
+    Added,
+    Changed,
+    Copied,
+    Deleted,
+    Modified,
+    Renamed,
 }
 
 #[derive(Serialize, Builder, Default)]
