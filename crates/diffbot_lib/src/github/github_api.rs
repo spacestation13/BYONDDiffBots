@@ -1,4 +1,6 @@
-use crate::github::github_types::*;
+use crate::github::github_types::{
+    CreateCheckRun, Empty, Output, RawCheckRun, Repository, UpdateCheckRunBuilder,
+};
 use anyhow::{format_err, Context, Result};
 use octocrab::models::repos::Content;
 use octocrab::models::InstallationId;

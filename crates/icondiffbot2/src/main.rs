@@ -131,7 +131,7 @@ async fn main() -> std::io::Result<()> {
     });
 
     let journal: DataJobJournal = journal.into();
-    let job_sender: DataJobSender = actix_web::web::Data::new(JobSender(job_sender));
+    let job_sender: DataJobSender = actix_web::web::Data::new(job_sender);
 
     actix_web::HttpServer::new(move || {
         let form_config = actix_web::web::FormConfig::default().limit(config.web.limits.forms);

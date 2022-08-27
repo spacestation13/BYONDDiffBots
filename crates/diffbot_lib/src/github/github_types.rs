@@ -16,7 +16,6 @@ pub struct Repository {
     pub url: String,
     pub name: String,
     pub id: u64,
-    pub default_branch: Option<String>,
 }
 
 impl Repository {
@@ -34,7 +33,6 @@ impl Repository {
 pub struct Branch {
     #[serde(rename = "ref")]
     pub name: String,
-    pub repo: Repository,
     pub sha: String,
 }
 
@@ -72,7 +70,6 @@ pub struct CheckSuitePayload {
     pub action: String,
     pub repository: Repository,
     pub check_suite: CheckSuite,
-    pub installation: Installation,
 }
 
 #[derive(Deserialize, Debug)]
@@ -80,7 +77,6 @@ pub struct CheckRunPayload {
     pub action: String,
     pub repository: Repository,
     pub check_run: RawCheckRun,
-    pub installation: Installation,
 }
 
 #[derive(Deserialize, Debug)]
@@ -117,7 +113,7 @@ pub struct FileDiff {
     pub status: ChangeType,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq)]
+#[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ChangeType {
     Added,
     Changed,

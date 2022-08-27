@@ -2,21 +2,27 @@ use std::sync::Arc;
 
 use anyhow::{Context, Result};
 use octocrab::models::InstallationId;
-use rocket::http::Status;
-use rocket::outcome::Outcome;
-use rocket::request;
-use rocket::request::FromRequest;
-use rocket::tokio::sync::Mutex;
-use rocket::Request;
-use rocket::State;
+
+use rocket::{
+    http::Status, outcome::Outcome, request, request::FromRequest, tokio::sync::Mutex, Request,
+    State,
+};
 
 use crate::CONFIG;
-use diffbot_lib::github::github_api::*;
-use diffbot_lib::github::github_types::*;
-use diffbot_lib::github::graphql::get_pull_files;
-use diffbot_lib::job::types::{Job, JobJournal, JobSender};
+
+use diffbot_lib::{
+    github::{
+        github_api::CheckRun,
+        github_types::{
+            ChangeType, Installation, Output, PullRequest, PullRequestEventPayload, Repository,
+        },
+        graphql::get_pull_files,
+    },
+    job::types::{Job, JobJournal, JobSender},
+};
 
 async fn process_pull(
+    repo: Repository,
     pull: PullRequest,
     check_run: CheckRun,
     installation: &Installation,
@@ -46,12 +52,12 @@ async fn process_pull(
         (&conf.blacklist, &conf.blacklist_contact)
     };
 
-    if blacklist.contains(&pull.base.repo.id) {
+    if blacklist.contains(&repo.id) {
         let output = Output {
             title: "Repo blacklisted",
             summary: format!(
                 "Repository {} is blacklisted. {}",
-                pull.base.repo.full_name(),
+                repo.full_name(),
                 contact
             ),
             text: "".to_owned(),
@@ -62,7 +68,7 @@ async fn process_pull(
         return Ok(());
     }
 
-    let files = get_pull_files(installation, &pull)
+    let files = get_pull_files(repo.name_tuple(), installation, &pull)
         .await
         .context("Getting files modified by PR")?
         .into_iter()
@@ -88,6 +94,7 @@ async fn process_pull(
     check_run.mark_queued().await?;
 
     let job = Job {
+        repo,
         base: pull.base,
         head: pull.head,
         pull_request: pull.number,
@@ -97,7 +104,7 @@ async fn process_pull(
     };
 
     journal.lock().await.add_job(job.clone()).await;
-    job_sender.0.send_async(job).await?;
+    job_sender.send_async(job).await?;
 
     Ok(())
 }
@@ -128,7 +135,7 @@ async fn handle_pull_request(
     }
 
     let check_run = CheckRun::create(
-        &payload.pull_request.base.repo.full_name(),
+        &payload.repository.full_name(),
         &payload.pull_request.head.sha,
         payload.installation.id,
         None,
@@ -136,6 +143,7 @@ async fn handle_pull_request(
     .await?;
 
     process_pull(
+        payload.repository,
         payload.pull_request,
         check_run,
         &payload.installation,

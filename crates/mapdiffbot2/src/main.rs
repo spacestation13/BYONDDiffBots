@@ -18,7 +18,7 @@ use rocket::tokio::sync::Mutex;
 use serde::Deserialize;
 
 use diffbot_lib::job::runner::handle_jobs;
-use diffbot_lib::job::types::{JobJournal, JobSender};
+use diffbot_lib::job::types::JobJournal;
 
 #[get("/")]
 async fn index() -> &'static str {
@@ -88,7 +88,7 @@ async fn rocket() -> _ {
     });
 
     rocket
-        .manage(JobSender(job_sender))
+        .manage(job_sender)
         .manage(journal)
         .mount(
             "/",

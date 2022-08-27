@@ -89,11 +89,11 @@ struct Node {
 }
 
 pub async fn get_pull_files(
+    (user, repo): (String, String),
     installation: &Installation,
     pull: &super::github_types::PullRequest,
 ) -> Result<Vec<FileDiff>> {
     let crab = octocrab::instance().installation(installation.id.into());
-    let (user, repo) = pull.base.repo.name_tuple();
 
     let mut cursor = "".to_string();
 

@@ -15,7 +15,6 @@ use diffbot_lib::github::github_types::FileDiff;
 
 use crate::{DataJobJournal, DataJobSender};
 
-#[derive(Debug)]
 pub struct GithubEvent(pub String);
 
 impl actix_web::FromRequest for GithubEvent {
@@ -51,7 +50,7 @@ async fn handle_pull_request(
     }
 
     let check_run = CheckRun::create(
-        &payload.pull_request.base.repo.full_name(),
+        &payload.repository.full_name(),
         &payload.pull_request.head.sha,
         payload.installation.id,
         Some("IconDiffBot2"),
@@ -76,7 +75,12 @@ async fn handle_pull_request(
         return Ok(());
     }
 
-    let files = get_pull_files(&payload.installation, &payload.pull_request).await?;
+    let files = get_pull_files(
+        payload.repository.name_tuple(),
+        &payload.installation,
+        &payload.pull_request,
+    )
+    .await?;
 
     let changed_dmis: Vec<FileDiff> = files
         .into_iter()
@@ -105,6 +109,7 @@ async fn handle_pull_request(
     let installation = payload.installation;
 
     let job = Job {
+        repo: payload.repository,
         base: pull.base,
         head: pull.head,
         pull_request: pull.number,
@@ -114,7 +119,7 @@ async fn handle_pull_request(
     };
 
     journal.lock().await.add_job(job.clone()).await;
-    job_sender.0.send_async(job).await?;
+    job_sender.send_async(job).await?;
 
     Ok(())
 }

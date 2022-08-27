@@ -1,6 +1,9 @@
 use std::collections::VecDeque;
 
-use crate::github::{github_api::*, github_types::*};
+use crate::github::{
+    github_api::CheckRun,
+    github_types::{self, Branch, CheckOutputs, FileDiff},
+};
 use anyhow::{Context, Result};
 use flume::Sender;
 use octocrab::models::InstallationId;
@@ -11,6 +14,7 @@ impl<T> JobRunner for T where T: Fn(&Job) -> Result<CheckOutputs> + Send + Clone
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct Job {
+    pub repo: github_types::Repository,
     pub base: Branch,
     pub head: Branch,
     pub pull_request: u64,
@@ -19,8 +23,7 @@ pub struct Job {
     pub installation: InstallationId,
 }
 
-#[derive(Debug, Clone)]
-pub struct JobSender(pub Sender<Job>);
+pub type JobSender = Sender<Job>;
 
 //TODO: Integrate journaling and channel into some sort of queue?
 #[derive(Debug)]

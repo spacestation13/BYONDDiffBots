@@ -1,19 +1,28 @@
 use anyhow::{Context, Result};
-use diffbot_lib::github::github_types::FileDiff;
-use path_absolutize::*;
+use path_absolutize::Absolutize;
 use rayon::prelude::*;
 use rocket::tokio::runtime::Handle;
 use std::path::Path;
 use std::path::PathBuf;
-//use std::time::Instant;
 
-extern crate dreammaker as dm;
+use super::git_operations::{
+    clean_up_references, clone_repo, fetch_and_get_branches, with_checkout_and_dir,
+};
 
-use super::git_operations::*;
-use crate::rendering::*;
+use crate::rendering::{
+    get_map_diff_bounding_boxes, load_maps, load_maps_with_whole_map_regions,
+    render_diffs_for_directory, render_map_regions, MapWithRegions, MapsWithRegions,
+    RenderingContext,
+};
+
 use crate::CONFIG;
-use diffbot_lib::github::github_types::*;
-use diffbot_lib::job::types::Job;
+
+use diffbot_lib::{
+    github::github_types::{
+        Branch, ChangeType, CheckOutputBuilder, CheckOutputs, FileDiff, Output,
+    },
+    job::types::Job,
+};
 
 struct RenderedMaps {
     added_maps: Vec<MapWithRegions>,
@@ -232,8 +241,8 @@ pub fn do_job(job: &Job) -> Result<CheckOutputs> {
 
     let base = &job.base;
     let head = &job.head;
-    let repo = format!("https://github.com/{}", base.repo.full_name());
-    let repo_dir: PathBuf = ["./repos/", &base.repo.full_name()].iter().collect();
+    let repo = format!("https://github.com/{}", job.repo.full_name());
+    let repo_dir: PathBuf = ["./repos/", &job.repo.full_name()].iter().collect();
 
     let handle = Handle::try_current().unwrap();
 
@@ -250,7 +259,7 @@ pub fn do_job(job: &Job) -> Result<CheckOutputs> {
         clone_repo(&repo, &repo_dir).context("Cloning repo")?;
     }
 
-    let non_abs_directory = format!("images/{}/{}", job.base.repo.id, job.check_run.id());
+    let non_abs_directory = format!("images/{}/{}", job.repo.id, job.check_run.id());
     let output_directory = Path::new(&non_abs_directory)
         .absolutize()
         .context("Absolutizing images path")?;

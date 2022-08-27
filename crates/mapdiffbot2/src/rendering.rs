@@ -1,14 +1,12 @@
 use std::{cmp::min, collections::HashSet, path::Path, sync::RwLock};
 
-extern crate dreammaker as dm;
+extern crate dreammaker;
 
 use ahash::RandomState;
 use anyhow::{Context, Result};
 use diffbot_lib::github::github_types::FileDiff;
-use dm::objtree::ObjectTree;
 use dmm_tools::{dmi::Image, dmm, minimap, render_passes::RenderPass, IconCache};
-use image::io::Reader as ImageReader;
-use image::{GenericImageView, ImageBuffer, Pixel};
+use image::{io::Reader, GenericImageView, ImageBuffer, Pixel};
 use rayon::prelude::*;
 
 #[derive(Debug, Clone)]
@@ -179,19 +177,19 @@ pub fn get_map_diff_bounding_boxes(
 }
 
 pub struct RenderingContext {
-    map_renderer_config: dm::config::MapRenderer,
-    obj_tree: ObjectTree,
+    map_renderer_config: dreammaker::config::MapRenderer,
+    obj_tree: dreammaker::objtree::ObjectTree,
     icon_cache: IconCache,
 }
 
 impl RenderingContext {
     pub fn new(path: &Path) -> Result<Self> {
-        let dm_context = dm::Context::default();
+        let dm_context = dreammaker::Context::default();
         let mut icon_cache = IconCache::default();
 
-        let environment = match dm::detect_environment(path, dm::DEFAULT_ENV) {
+        let environment = match dreammaker::detect_environment(path, dreammaker::DEFAULT_ENV) {
             Ok(Some(found)) => found,
-            _ => dm::DEFAULT_ENV.into(),
+            _ => dreammaker::DEFAULT_ENV.into(),
         };
 
         if let Some(parent) = environment.parent() {
@@ -199,10 +197,10 @@ impl RenderingContext {
         }
 
         dm_context.autodetect_config(&environment);
-        let pp = dm::preprocessor::Preprocessor::new(&dm_context, environment)
+        let pp = dreammaker::preprocessor::Preprocessor::new(&dm_context, environment)
             .context("Creating preprocessor")?;
-        let indents = dm::indents::IndentProcessor::new(&dm_context, pp);
-        let parser = dm::parser::Parser::new(&dm_context, indents);
+        let indents = dreammaker::indents::IndentProcessor::new(&dm_context, pp);
+        let parser = dreammaker::parser::Parser::new(&dm_context, indents);
 
         let obj_tree = parser.parse_object_tree();
         let map_renderer_config = dm_context.config().map_renderer.clone();
@@ -214,13 +212,13 @@ impl RenderingContext {
         })
     }
 
-    pub fn map_config(&self) -> &dm::config::MapRenderer {
+    pub fn map_config(&self) -> &dreammaker::config::MapRenderer {
         &self.map_renderer_config
     }
 }
 
 pub fn render_map(
-    objtree: &ObjectTree,
+    objtree: &dreammaker::objtree::ObjectTree,
     icon_cache: &IconCache,
     map: &dmm::Map,
     z_level: usize,
@@ -298,8 +296,8 @@ pub fn render_diffs_for_directory<P: AsRef<Path>>(directory: P) {
         .map(|entry| {
             let fuck = entry.to_string_lossy();
             let replaced_entry = fuck.replace("-before.png", "-after.png");
-            let before = ImageReader::open(&entry)?.decode()?;
-            let after = ImageReader::open(&replaced_entry)?.decode()?;
+            let before = Reader::open(&entry)?.decode()?;
+            let after = Reader::open(&replaced_entry)?.decode()?;
 
             ImageBuffer::from_fn(after.width(), after.height(), |x, y| {
                 let before_pixel = before.get_pixel(x, y);

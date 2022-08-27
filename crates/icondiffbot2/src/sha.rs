@@ -44,7 +44,7 @@ pub async fn get_if_exists(
     sha: Option<&str>,
 ) -> Result<Option<IconFileWithName>> {
     if let Some(sha) = sha {
-        let raw = download_url(&job.installation, &job.base.repo, filename, sha)
+        let raw = download_url(&job.installation, &job.repo, filename, sha)
             .await
             .with_context(|| format!("Failed to download file {:?}", filename))?;
 

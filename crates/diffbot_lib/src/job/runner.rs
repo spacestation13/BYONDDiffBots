@@ -17,7 +17,7 @@ where
     println!(
         "[{}] [{}#{}] [{}] Starting",
         chrono::Utc::now().to_rfc3339(),
-        job.base.repo.full_name(),
+        job.repo.full_name(),
         job.pull_request,
         job.check_run.id()
     );
@@ -30,7 +30,7 @@ where
     println!(
         "[{}] [{}#{}] [{}] Finished",
         chrono::Utc::now().to_rfc3339(),
-        job.base.repo.full_name(),
+        job.repo.full_name(),
         job.pull_request,
         job.check_run.id()
     );
