@@ -52,7 +52,7 @@ dependencies = [
  "actix-rt",
  "actix-service",
  "actix-utils",
- "ahash",
+ "ahash 0.7.6",
  "base64",
  "bitflags",
  "brotli",
@@ -167,7 +167,7 @@ dependencies = [
  "actix-service",
  "actix-utils",
  "actix-web-codegen",
- "ahash",
+ "ahash 0.7.6",
  "bytes",
  "bytestring",
  "cfg-if",
@@ -266,6 +266,18 @@ version = "0.7.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "fcb51a0695d8f838b1ee009b3fbf66bda078cd64590202a864a8f3e8c4315c47"
 dependencies = [
+ "getrandom",
+ "once_cell",
+ "version_check",
+]
+
+[[package]]
+name = "ahash"
+version = "0.8.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "57e6e951cfbb2db8de1828d49073a113a29fd7117b1596caa781a258c7e38d72"
+dependencies = [
+ "cfg-if",
  "getrandom",
  "once_cell",
  "version_check",
@@ -456,16 +468,6 @@ checksum = "59ad2d4653bf5ca36ae797b1f4bb4dbddb60ce49ca4aed8a2ce4829f60425b80"
 dependencies = [
  "alloc-no-stdlib",
  "alloc-stdlib",
-]
-
-[[package]]
-name = "builtins-proc-macro"
-version = "0.0.0"
-source = "git+https://github.com/tigercat2000/SpacemanDMM/?branch=gif#d4c3d3f6e30ca5022c64aae4129510e999584215"
-dependencies = [
- "proc-macro2",
- "quote",
- "syn",
 ]
 
 [[package]]
@@ -899,32 +901,14 @@ dependencies = [
 [[package]]
 name = "dmm-tools"
 version = "0.1.0"
-source = "git+https://github.com/tigercat2000/SpacemanDMM/?branch=gif#d4c3d3f6e30ca5022c64aae4129510e999584215"
-dependencies = [
- "ahash",
- "bumpalo",
- "bytemuck",
- "dreammaker 0.1.0 (git+https://github.com/tigercat2000/SpacemanDMM/?branch=gif)",
- "either",
- "gif",
- "indexmap",
- "inflate",
- "lodepng",
- "ndarray",
- "png",
- "rand",
-]
-
-[[package]]
-name = "dmm-tools"
-version = "0.1.0"
 source = "git+https://github.com/SpaceManiac/SpacemanDMM/#8641274b25d6e978617e80b53b068905f575197e"
 dependencies = [
- "ahash",
+ "ahash 0.7.6",
  "bumpalo",
  "bytemuck",
- "dreammaker 0.1.0 (git+https://github.com/SpaceManiac/SpacemanDMM/)",
+ "dreammaker",
  "either",
+ "gif",
  "indexmap",
  "inflate",
  "lodepng",
@@ -942,38 +926,16 @@ checksum = "fea41bba32d969b513997752735605054bc0dfa92b4c56bf1189f2e174be7a10"
 [[package]]
 name = "dreammaker"
 version = "0.1.0"
-source = "git+https://github.com/tigercat2000/SpacemanDMM/?branch=gif#d4c3d3f6e30ca5022c64aae4129510e999584215"
-dependencies = [
- "ahash",
- "bitflags",
- "builtins-proc-macro 0.0.0 (git+https://github.com/tigercat2000/SpacemanDMM/?branch=gif)",
- "color_space",
- "derivative",
- "guard",
- "indexmap",
- "interval-tree 0.8.0 (git+https://github.com/tigercat2000/SpacemanDMM/?branch=gif)",
- "lodepng",
- "ordered-float",
- "phf",
- "serde",
- "serde_derive",
- "termcolor",
- "toml",
-]
-
-[[package]]
-name = "dreammaker"
-version = "0.1.0"
 source = "git+https://github.com/SpaceManiac/SpacemanDMM/#8641274b25d6e978617e80b53b068905f575197e"
 dependencies = [
- "ahash",
+ "ahash 0.7.6",
  "bitflags",
- "builtins-proc-macro 0.0.0 (git+https://github.com/SpaceManiac/SpacemanDMM/)",
+ "builtins-proc-macro",
  "color_space",
  "derivative",
  "guard",
  "indexmap",
- "interval-tree 0.8.0 (git+https://github.com/SpaceManiac/SpacemanDMM/)",
+ "interval-tree",
  "lodepng",
  "ordered-float",
  "phf",
@@ -1290,7 +1252,7 @@ version = "0.12.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8a9ee70c43aaf417c914396645a0fa852624801b24ebb7ae78fe8272889ac888"
 dependencies = [
- "ahash",
+ "ahash 0.7.6",
  "rayon",
 ]
 
@@ -1439,10 +1401,11 @@ version = "0.1.0"
 dependencies = [
  "actix-files",
  "actix-web",
+ "ahash 0.8.0",
  "anyhow",
  "diffbot_lib",
- "dmm-tools 0.1.0 (git+https://github.com/tigercat2000/SpacemanDMM/?branch=gif)",
- "dreammaker 0.1.0 (git+https://github.com/tigercat2000/SpacemanDMM/?branch=gif)",
+ "dmm-tools",
+ "dreammaker",
  "flume",
  "hashbrown",
  "jsonwebtoken",
@@ -1542,11 +1505,6 @@ checksum = "7a5bbe824c507c5da5956355e86a746d82e0e1464f65d862cc5e71da70e94b2c"
 dependencies = [
  "cfg-if",
 ]
-
-[[package]]
-name = "interval-tree"
-version = "0.8.0"
-source = "git+https://github.com/tigercat2000/SpacemanDMM/?branch=gif#d4c3d3f6e30ca5022c64aae4129510e999584215"
 
 [[package]]
 name = "interval-tree"
@@ -1690,9 +1648,9 @@ checksum = "e34f76eb3611940e0e7d53a9aaa4e6a3151f69541a282fd0dad5571420c53ff1"
 
 [[package]]
 name = "lock_api"
-version = "0.4.7"
+version = "0.4.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "327fa5b6a6940e4699ec49a9beae1ea4845c6bab9314e4f84ac68742139d8c53"
+checksum = "9f80bf5aacaf25cbfc8210d1cfb718f2bf3b11c4c54e5afe36c236853a8ec390"
 dependencies = [
  "autocfg",
  "scopeguard",
@@ -1739,13 +1697,13 @@ dependencies = [
 name = "mapdiffbot2"
 version = "0.1.0"
 dependencies = [
- "ahash",
+ "ahash 0.7.6",
  "anyhow",
  "chrono",
  "derive_builder",
  "diffbot_lib",
- "dmm-tools 0.1.0 (git+https://github.com/SpaceManiac/SpacemanDMM/)",
- "dreammaker 0.1.0 (git+https://github.com/SpaceManiac/SpacemanDMM/)",
+ "dmm-tools",
+ "dreammaker",
  "flume",
  "git2",
  "glob",
@@ -2848,9 +2806,9 @@ dependencies = [
 
 [[package]]
 name = "socket2"
-version = "0.4.4"
+version = "0.4.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "66d72b759436ae32898a2af0a14218dbf55efde3feeb170eb623637db85ee1e0"
+checksum = "10c98bba371b9b22a71a9414e420f92ddeb2369239af08200816169d5e2dd7aa"
 dependencies = [
  "libc",
  "winapi",

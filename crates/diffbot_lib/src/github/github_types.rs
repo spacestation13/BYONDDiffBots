@@ -95,12 +95,6 @@ pub struct Output {
     pub text: String,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone)]
-pub struct PullChanges {
-    pub head: String,
-    pub patch: String,
-}
-
 #[derive(Serialize)]
 pub struct CreateCheckRun {
     pub name: String,

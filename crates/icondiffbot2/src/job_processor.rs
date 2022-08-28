@@ -11,7 +11,6 @@ use dreammaker::dmi::StateIndex;
 use hashbrown::HashSet;
 use rayon::prelude::*;
 use std::{
-    collections::hash_map::DefaultHasher,
     fs::File,
     hash::{Hash, Hasher},
     io::{BufWriter, Write},
@@ -97,9 +96,9 @@ fn render(
             ))
         }
         (Some(before), Some(after)) => {
-            let before_states: HashSet<&StateIndex> =
+            let before_states: HashSet<&StateIndex, ahash::RandomState> =
                 before.icon.metadata.state_names.keys().collect();
-            let after_states: HashSet<&StateIndex> =
+            let after_states: HashSet<&StateIndex, ahash::RandomState> =
                 after.icon.metadata.state_names.keys().collect();
 
             let prefix = format!("{}/{}", job.installation, job.pull_request);
@@ -231,7 +230,7 @@ fn render_state<'a, S: AsRef<str> + std::fmt::Debug>(
     std::fs::create_dir_all(&directory)
         .with_context(|| format!("Failed to create directory {:?}", directory))?;
 
-    let mut hasher = DefaultHasher::new();
+    let mut hasher = ahash::AHasher::default();
     target.sha.hash(&mut hasher);
     target.full_name.hash(&mut hasher);
     target.hash.hash(&mut hasher);
