@@ -3,10 +3,7 @@ use std::sync::Arc;
 use flume::Receiver;
 use tokio::sync::Mutex;
 
-use crate::{
-    github::github_types::CheckOutputs,
-    job::types::{Job, JobRunner},
-};
+use crate::job::types::{Job, JobRunner};
 
 use super::types::JobJournal;
 
@@ -14,25 +11,30 @@ async fn handle_job<S: AsRef<str>, F>(name: S, job: Job, runner: F)
 where
     F: JobRunner,
 {
+    let (repo, pull_request, check_run) = (
+        job.repo.clone(),
+        job.pull_request.clone(),
+        job.check_run.clone(),
+    );
     println!(
         "[{}] [{}#{}] [{}] Starting",
         chrono::Utc::now().to_rfc3339(),
-        job.repo.full_name(),
-        job.pull_request,
-        job.check_run.id()
+        repo.full_name(),
+        pull_request,
+        check_run.id()
     );
-    let _ = job.check_run.mark_started().await; // TODO: Put the failed marks in a queue to retry later
-                                                //let now = Instant::now();
 
-    let job_clone = job.clone();
-    let output = tokio::task::spawn_blocking(move || runner(&job_clone)).await;
+    let _ = check_run.mark_started().await; // TODO: Put the failed marks in a queue to retry later
+                                            //let now = Instant::now();
+
+    let output = tokio::task::spawn_blocking(move || runner(&job)).await;
 
     println!(
         "[{}] [{}#{}] [{}] Finished",
         chrono::Utc::now().to_rfc3339(),
-        job.repo.full_name(),
-        job.pull_request,
-        job.check_run.id()
+        repo.full_name(),
+        pull_request,
+        check_run.id()
     );
 
     //eprintln!("Handling job took {}ms", now.elapsed().as_millis());
@@ -46,7 +48,7 @@ where
             Err(e) => e.to_string(),
         };
         eprintln!("Join Handle error: {}", fuckup);
-        let _ = job.check_run.mark_failed(&fuckup).await;
+        let _ = check_run.mark_failed(&fuckup).await;
         return;
     }
 
@@ -54,58 +56,55 @@ where
     if let Err(e) = output {
         let fuckup = format!("{:?}", e);
         eprintln!("Other rendering error: {}", fuckup);
-        let _ = job.check_run.mark_failed(&fuckup).await;
+        let _ = check_run.mark_failed(&fuckup).await;
         return;
     }
+    let mut output = output.unwrap();
 
-    match output.unwrap() {
-        CheckOutputs::One(output) => {
-            let res = job.check_run.mark_succeeded(output).await;
+    match output.len() {
+        0usize => {
+            let _ = check_run.mark_failed("Rendering returned nothing!").await;
+        }
+        1usize => {
+            let res = check_run.mark_succeeded(output.pop().unwrap()).await;
             if res.is_err() {
-                let _ = job
-                    .check_run
+                let _ = check_run
                     .mark_failed(&format!("Failed to upload job output: {:?}", res))
                     .await;
             }
         }
-        CheckOutputs::Many(mut outputs) => {
-            let count = outputs.len();
-
-            let _ = job
-                .check_run
-                .rename(&format!("{} (1/{})", name.as_ref(), count))
-                .await;
-            let res = job.check_run.mark_succeeded(outputs.remove(0)).await;
-            if res.is_err() {
-                let _ = job
-                    .check_run
-                    .mark_failed(&format!("Failed to upload job output: {:?}", res))
-                    .await;
-                return;
-            }
-
-            for (i, overflow) in outputs.into_iter().enumerate() {
-                if let Ok(check) = job
-                    .check_run
-                    .duplicate(&format!("{} ({}/{})", name.as_ref(), i + 2, count))
-                    .await
-                {
-                    let res = check.mark_succeeded(overflow).await;
-                    if res.is_err() {
-                        let _ = job
-                            .check_run
-                            .mark_failed(&format!("Failed to upload job output: {:?}", res))
+        _ => {
+            let len = output.len();
+            for (idx, item) in output.into_iter().enumerate() {
+                match idx {
+                    0usize => {
+                        let _ = check_run
+                            .rename(&format!("{} (1/{})", name.as_ref(), len))
                             .await;
-                        return;
+                        let res = check_run.mark_succeeded(item).await;
+                        if res.is_err() {
+                            let _ = check_run
+                                .mark_failed(&format!("Failed to upload job output: {:?}", res))
+                                .await;
+                            return;
+                        }
+                    }
+                    _ => {
+                        if let Ok(check) = check_run
+                            .duplicate(&format!("{} ({}/{})", name.as_ref(), idx + 1, len))
+                            .await
+                        {
+                            let res = check.mark_succeeded(item).await;
+                            if res.is_err() {
+                                let _ = check_run
+                                    .mark_failed(&format!("Failed to upload job output: {:?}", res))
+                                    .await;
+                                return;
+                            }
+                        }
                     }
                 }
             }
-        }
-        CheckOutputs::None => {
-            let _ = job
-                .check_run
-                .mark_failed("Rendering returned nothing!")
-                .await;
         }
     }
 }

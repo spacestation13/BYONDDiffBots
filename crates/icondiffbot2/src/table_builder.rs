@@ -89,10 +89,6 @@ impl<'a> OutputTableBuilder<'a> {
                 text: std::mem::take(&mut current_output_text)
             });
         }
-        match chunks.len() {
-            0usize => Ok(CheckOutputs::None),
-            1usize => Ok(CheckOutputs::One(chunks.remove(0))),
-            _ => Ok(CheckOutputs::Many(chunks)),
-        }
+        Ok(chunks)
     }
 }

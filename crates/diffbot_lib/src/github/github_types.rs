@@ -139,12 +139,7 @@ pub struct UpdateCheckRun {
 #[derive(Serialize, Deserialize, Clone, Copy)]
 pub struct Empty {}
 
-#[derive(Debug)]
-pub enum CheckOutputs {
-    One(Output),
-    Many(Vec<Output>),
-    None,
-}
+pub type CheckOutputs = Vec<Output>;
 
 #[derive(Debug)]
 pub struct CheckOutputBuilder {
@@ -193,10 +188,6 @@ impl CheckOutputBuilder {
             };
             outputs.push(output);
         }
-        match outputs.len() {
-            0usize => CheckOutputs::None,
-            1usize => CheckOutputs::One(outputs.remove(0)),
-            _ => CheckOutputs::Many(outputs),
-        }
+        outputs
     }
 }
