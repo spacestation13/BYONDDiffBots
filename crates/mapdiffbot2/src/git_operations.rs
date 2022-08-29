@@ -134,18 +134,20 @@ pub fn clean_up_references(repo: &Repository, default: &str) -> Result<()> {
             .remove_untracked(true),
     ))
     .context("Checkout to head")?;
-    for refname in repo
-        .references()
-        .context("Getting all references")?
+    let mut references = repo.references().context("Getting all references")?;
+    let references = references
         .names()
         .filter_map(move |reference| {
             (reference.as_ref().ok()?.contains("pull") && reference.as_ref().ok()? != &default)
                 .then(move || reference.ok())
                 .flatten()
         })
-    {
+        .map(|item| item.to_owned())
+        .collect::<Vec<_>>();
+
+    for refname in references {
         let mut reference = repo
-            .find_reference(refname)
+            .find_reference(&refname)
             .context("Looking for ref to delete")?;
         reference.delete().context("Deleting reference")?;
     }
