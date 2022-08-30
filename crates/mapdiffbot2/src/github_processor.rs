@@ -68,7 +68,7 @@ async fn process_pull(
         return Ok(());
     }
 
-    let files = get_pull_files(repo.name_tuple(), installation, &pull)
+    let files = get_pull_files(repo.name_tuple(), installation.id, &pull)
         .await
         .context("Getting files modified by PR")?
         .into_iter()

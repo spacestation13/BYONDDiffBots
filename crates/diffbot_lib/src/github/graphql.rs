@@ -1,6 +1,6 @@
-use super::github_types::Installation;
 use super::github_types::{ChangeType, FileDiff};
 use anyhow::Result;
+use octocrab::models::InstallationId;
 use serde::Deserialize;
 
 /*
@@ -88,12 +88,12 @@ struct Node {
     change_type: String,
 }
 
-pub async fn get_pull_files(
+pub async fn get_pull_files<I: Into<InstallationId>>(
     (user, repo): (String, String),
-    installation: &Installation,
+    installation: I,
     pull: &super::github_types::PullRequest,
 ) -> Result<Vec<FileDiff>> {
-    let crab = octocrab::instance().installation(installation.id.into());
+    let crab = octocrab::instance().installation(installation.into());
 
     let mut cursor = "".to_string();
 
@@ -102,7 +102,8 @@ pub async fn get_pull_files(
     loop {
         let queried: QueryData = crab
             .graphql(&format!(
-                "query {{ 
+                "
+query {{ 
   repository(owner:\"{}\", name:\"{}\") {{
     pullRequest(number:{}) {{
       files(first:100, after:\"{}\") {{
@@ -156,3 +157,34 @@ pub async fn get_pull_files(
     }
     Ok(ret)
 }
+/*
+#[derive(Deserialize)]
+pub struct CheckRun {}
+pub async fn create_check_run<I: Into<InstallationId>>(
+    installation: I,
+    repo_id: &str,
+    sha: &str,
+) -> Result<CheckRun> {
+    let crab = octocrab::instance().installation(installation.into());
+    let run: CheckRun = crab
+        .graphql(&format!(
+            "
+mutation {{
+  createCheckRun(input: {{
+    clientMutationId:\"MAPDIFF\"
+    repositoryId: \"{}\"
+    name:\"MapDiffBot2\"
+    headSha: \"{}\"
+  }}) {{
+    checkRun {{
+      id
+    }}
+  }}
+}}
+        ",
+            repo_id, sha
+        ))
+        .await?;
+    Ok(CheckRun {})
+}
+*/

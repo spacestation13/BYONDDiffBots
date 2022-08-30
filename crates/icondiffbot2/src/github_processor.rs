@@ -77,7 +77,7 @@ async fn handle_pull_request(
 
     let files = get_pull_files(
         payload.repository.name_tuple(),
-        &payload.installation,
+        payload.installation.id,
         &payload.pull_request,
     )
     .await?;
