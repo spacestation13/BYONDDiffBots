@@ -2,11 +2,6 @@ use derive_builder::Builder;
 use serde::{Deserialize, Serialize};
 
 #[derive(Deserialize, Debug, Clone)]
-pub struct User {
-    pub login: String,
-}
-
-#[derive(Deserialize, Debug, Clone)]
 pub struct Installation {
     pub id: u64,
 }
@@ -14,7 +9,6 @@ pub struct Installation {
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct Repository {
     pub url: String,
-    pub name: String,
     pub id: u64,
 }
 
@@ -31,8 +25,6 @@ impl Repository {
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct Branch {
-    #[serde(rename = "ref")]
-    pub name: String,
     pub sha: String,
 }
 
