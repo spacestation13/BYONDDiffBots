@@ -17,31 +17,24 @@ use std::{
     path::Path,
 };
 use tokio::runtime::Handle;
-use tracing::{info_span, Instrument};
 
 #[tracing::instrument]
 pub fn do_job(job: &Job) -> Result<CheckOutputs> {
-    // TODO: Maybe have jobs just be async?
     let handle = Handle::try_current()?;
-    handle.block_on(async { handle_changed_files(job).await })
-}
 
-#[tracing::instrument]
-pub async fn handle_changed_files(job: &Job) -> Result<CheckOutputs> {
-    job.check_run.mark_started().await?;
+    handle.block_on(async { job.check_run.mark_started().await })?;
 
     let mut map = OutputTableBuilder::new();
 
     for dmi in &job.files {
-        let file = sha_to_iconfile(job, &dmi.filename, status_to_sha(job, &dmi.status)).await?;
+        let file = sha_to_iconfile(job, &dmi.filename, status_to_sha(job, &dmi.status))?;
 
-        let j = job.clone();
-        let states = tokio::task::spawn_blocking(move || render(&j, file)).await??;
+        let states = render(&job, file)?;
 
         map.insert(dmi.filename.as_str(), states);
     }
 
-    map.build().instrument(info_span!("Building table")).await
+    map.build()
 }
 
 #[tracing::instrument]

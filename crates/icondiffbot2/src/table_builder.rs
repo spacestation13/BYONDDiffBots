@@ -22,7 +22,7 @@ impl<'a> OutputTableBuilder<'a> {
     }
 
     #[tracing::instrument]
-    pub async fn build(&self) -> Result<CheckOutputs> {
+    pub fn build(&self) -> Result<CheckOutputs> {
         // TODO: Make this not shit
         let mut file_names: HashMap<&str, u32> = HashMap::new();
         let mut details: Vec<(String, &str, String)> = Vec::new();

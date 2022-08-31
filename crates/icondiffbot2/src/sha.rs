@@ -8,6 +8,7 @@ use std::{
     collections::hash_map::DefaultHasher,
     hash::{Hash, Hasher},
 };
+use tokio::runtime::Handle;
 
 #[derive(Debug)]
 pub struct IconFileWithName {
@@ -26,27 +27,30 @@ pub fn status_to_sha<'a>(job: &'a Job, status: &ChangeType) -> (Option<&'a str>,
     }
 }
 
-pub async fn sha_to_iconfile(
+pub fn sha_to_iconfile(
     job: &Job,
     filename: &str,
     sha: (Option<&str>, Option<&str>),
 ) -> Result<(Option<IconFileWithName>, Option<IconFileWithName>)> {
     Ok((
-        get_if_exists(job, filename, sha.0).await?,
-        get_if_exists(job, filename, sha.1).await?,
+        get_if_exists(job, filename, sha.0)?,
+        get_if_exists(job, filename, sha.1)?,
     ))
 }
 
 #[tracing::instrument]
-pub async fn get_if_exists(
+pub fn get_if_exists(
     job: &Job,
     filename: &str,
     sha: Option<&str>,
 ) -> Result<Option<IconFileWithName>> {
     if let Some(sha) = sha {
-        let raw = download_url(&job.installation, &job.repo, filename, sha)
-            .await
-            .with_context(|| format!("Failed to download file {:?}", filename))?;
+        let handle = Handle::try_current()?;
+        let raw = handle.block_on(async {
+            download_url(&job.installation, &job.repo, filename, sha)
+                .await
+                .with_context(|| format!("Failed to download file {:?}", filename))
+        })?;
 
         let mut hasher = DefaultHasher::new();
         raw.hash(&mut hasher);
