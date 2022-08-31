@@ -99,10 +99,10 @@ pub fn get_diff_bounding_box(
 
     //this is a god awful way to expand bounds without it going out of bounds
 
-    rightmost = (rightmost + 2).clamp(0, max_x);
-    topmost = (topmost + 2).clamp(0, max_y);
-    leftmost = (leftmost - 2).clamp(0, max_x);
-    bottommost = (bottommost - 2).clamp(0, max_y);
+    rightmost = rightmost.saturating_add(2).clamp(0, max_x);
+    topmost = topmost.saturating_add(2).clamp(0, max_y);
+    leftmost = leftmost.saturating_sub(2).clamp(0, max_x);
+    bottommost = bottommost.saturating_sub(2).clamp(0, max_y);
 
     Some(BoundingBox::new(leftmost, bottommost, rightmost, topmost))
 }
