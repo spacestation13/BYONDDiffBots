@@ -121,7 +121,7 @@ pub fn get_diff_bounding_box(
         }
     };
     bottommost = {
-        if let Some(val) = topmost.checked_sub(2) {
+        if let Some(val) = bottommost.checked_sub(2) {
             val.clamp(0, max_y)
         } else {
             bottommost
