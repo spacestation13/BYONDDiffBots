@@ -8,8 +8,6 @@ use rocket::{
     State,
 };
 
-use crate::CONFIG;
-
 use diffbot_lib::{
     github::{
         github_api::CheckRun,
@@ -48,7 +46,7 @@ async fn process_pull(
     }
 
     let (blacklist, contact) = {
-        let conf = &CONFIG.get().unwrap();
+        let conf = &crate::CONFIG.get().unwrap();
         (&conf.blacklist, &conf.blacklist_contact)
     };
 

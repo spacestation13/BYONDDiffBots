@@ -36,8 +36,6 @@ impl actix_web::FromRequest for GithubEvent {
     }
 }
 
-use crate::CONFIG;
-
 async fn handle_pull_request(
     payload: PullRequestEventPayload,
     job_sender: DataJobSender,
@@ -78,7 +76,7 @@ async fn handle_pull_request(
     }
 
     let (blacklist, contact) = {
-        let conf = &CONFIG.get().unwrap();
+        let conf = &crate::CONFIG.get().unwrap();
         (&conf.blacklist, &conf.contact_msg)
     };
 

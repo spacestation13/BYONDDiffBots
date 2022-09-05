@@ -99,34 +99,10 @@ pub fn get_diff_bounding_box(
 
     //this is a god awful way to expand bounds without it going out of bounds
 
-    rightmost = {
-        if let Some(val) = rightmost.checked_add(2) {
-            val.clamp(0, max_x)
-        } else {
-            rightmost
-        }
-    };
-    topmost = {
-        if let Some(val) = topmost.checked_add(2) {
-            val.clamp(0, max_y)
-        } else {
-            topmost
-        }
-    };
-    leftmost = {
-        if let Some(val) = leftmost.checked_sub(2) {
-            val.clamp(0, max_x)
-        } else {
-            leftmost
-        }
-    };
-    bottommost = {
-        if let Some(val) = bottommost.checked_sub(2) {
-            val.clamp(0, max_y)
-        } else {
-            bottommost
-        }
-    };
+    rightmost = rightmost.saturating_add(2).clamp(1, max_x);
+    topmost = topmost.saturating_add(2).clamp(1, max_y);
+    leftmost = leftmost.saturating_sub(2).clamp(1, max_x);
+    bottommost = bottommost.saturating_sub(2).clamp(1, max_y);
 
     Some(BoundingBox::new(leftmost, bottommost, rightmost, topmost))
 }
