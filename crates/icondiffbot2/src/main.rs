@@ -50,6 +50,8 @@ pub struct WebConfig {
 pub struct Config {
     pub github: GithubConfig,
     pub web: WebConfig,
+    pub blacklist: std::collections::HashSet<u64>,
+    pub contact_msg: String,
 }
 
 static CONFIG: OnceCell<Config> = OnceCell::new();

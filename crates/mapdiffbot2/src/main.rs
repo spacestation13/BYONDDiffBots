@@ -30,7 +30,7 @@ pub struct Config {
     pub private_key_path: String,
     pub file_hosting_url: String,
     pub app_id: u64,
-    pub blacklist: Vec<u64>,
+    pub blacklist: std::collections::HashSet<u64>,
     pub blacklist_contact: String,
 }
 

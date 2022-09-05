@@ -36,6 +36,8 @@ impl actix_web::FromRequest for GithubEvent {
     }
 }
 
+use crate::CONFIG;
+
 async fn handle_pull_request(
     payload: PullRequestEventPayload,
     job_sender: DataJobSender,
@@ -72,6 +74,27 @@ async fn handle_pull_request(
         };
 
         check_run.mark_skipped(output).await?;
+        return Ok(());
+    }
+
+    let (blacklist, contact) = {
+        let conf = &CONFIG.get().unwrap();
+        (&conf.blacklist, &conf.contact_msg)
+    };
+
+    if blacklist.contains(&payload.repository.id) {
+        let output = Output {
+            title: "Repo blacklisted",
+            summary: format!(
+                "Repository {} is blacklisted. {}",
+                payload.repository.full_name(),
+                contact
+            ),
+            text: "".to_owned(),
+        };
+
+        check_run.mark_skipped(output).await?;
+
         return Ok(());
     }
 
