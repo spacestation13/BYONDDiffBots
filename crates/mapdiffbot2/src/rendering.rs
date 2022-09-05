@@ -303,7 +303,7 @@ pub fn render_diffs_for_directory<P: AsRef<Path>>(directory: P) {
                 let before_pixel = before.get_pixel(x, y);
                 let after_pixel = after.get_pixel(x, y);
                 if before_pixel == after_pixel {
-                    after_pixel.map_without_alpha(|c| c + ((255 - c) / 2))
+                    after_pixel.map_without_alpha(|c| c + ((255 - c) * 2 / 3))
                 } else {
                     image::Rgba([255, 0, 0, 255])
                 }
