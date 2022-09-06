@@ -9,8 +9,8 @@ use flume::Sender;
 use octocrab::models::InstallationId;
 use serde::{Deserialize, Serialize};
 
-pub trait JobRunner: Fn(&Job) -> Result<CheckOutputs> + Send + Clone + 'static {}
-impl<T> JobRunner for T where T: Fn(&Job) -> Result<CheckOutputs> + Send + Clone + 'static {}
+pub trait JobRunner: Fn(Job) -> Result<CheckOutputs> + Send + Clone + 'static {}
+impl<T> JobRunner for T where T: Fn(Job) -> Result<CheckOutputs> + Send + Clone + 'static {}
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct Job {

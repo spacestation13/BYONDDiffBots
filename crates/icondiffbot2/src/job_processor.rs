@@ -19,7 +19,7 @@ use std::{
 use tokio::runtime::Handle;
 
 #[tracing::instrument]
-pub fn do_job(job: &Job) -> Result<CheckOutputs> {
+pub fn do_job(job: Job) -> Result<CheckOutputs> {
     let handle = Handle::try_current()?;
 
     handle.block_on(async { job.check_run.mark_started().await })?;
@@ -27,7 +27,7 @@ pub fn do_job(job: &Job) -> Result<CheckOutputs> {
     let mut map = OutputTableBuilder::new();
 
     for dmi in &job.files {
-        let file = sha_to_iconfile(job, &dmi.filename, status_to_sha(job, &dmi.status))?;
+        let file = sha_to_iconfile(&job, &dmi.filename, status_to_sha(&job, &dmi.status))?;
 
         let states = render(&job, file)?;
 

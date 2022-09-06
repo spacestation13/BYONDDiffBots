@@ -106,9 +106,11 @@ async fn handle_pull_request(
     let changed_dmis: Vec<FileDiff> = files
         .into_iter()
         .filter(|e| e.filename.ends_with(".dmi"))
-        .filter(|e| match e.status {
-            ChangeType::Added | ChangeType::Deleted | ChangeType::Modified => true,
-            _ => false,
+        .filter(|e| {
+            matches!(
+                e.status,
+                ChangeType::Added | ChangeType::Deleted | ChangeType::Modified
+            )
         })
         .collect();
 

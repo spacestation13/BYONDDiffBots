@@ -71,9 +71,11 @@ async fn process_pull(
         .context("Getting files modified by PR")?
         .into_iter()
         .filter(|f| f.filename.ends_with(".dmm"))
-        .filter(|f| match f.status {
-            ChangeType::Added | ChangeType::Deleted | ChangeType::Modified => true,
-            _ => false,
+        .filter(|f| {
+            matches!(
+                f.status,
+                ChangeType::Added | ChangeType::Deleted | ChangeType::Modified
+            )
         })
         .collect::<Vec<_>>();
 

@@ -11,11 +11,8 @@ async fn handle_job<S: AsRef<str>, F>(name: S, job: Job, runner: F)
 where
     F: JobRunner,
 {
-    let (repo, pull_request, check_run) = (
-        job.repo.clone(),
-        job.pull_request.clone(),
-        job.check_run.clone(),
-    );
+    let (repo, pull_request, check_run) =
+        (job.repo.clone(), job.pull_request, job.check_run.clone());
     println!(
         "[{}] [{}#{}] [{}] Starting",
         chrono::Utc::now().to_rfc3339(),
@@ -27,7 +24,7 @@ where
     let _ = check_run.mark_started().await; // TODO: Put the failed marks in a queue to retry later
                                             //let now = Instant::now();
 
-    let output = tokio::task::spawn_blocking(move || runner(&job)).await;
+    let output = tokio::task::spawn_blocking(move || runner(job)).await;
 
     println!(
         "[{}] [{}#{}] [{}] Finished",

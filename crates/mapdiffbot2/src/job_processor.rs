@@ -43,23 +43,18 @@ fn render(
     let pull_branch = format!("mdb-{}-{}", base.sha, head.sha);
     let fetching_branch = format!("pull/{}/head:{}", pull_request_number, pull_branch);
 
-    let (base_branch, head_branch) = fetch_and_get_branches(
-        &base.sha,
-        &head.sha,
-        repo,
-        &fetching_branch,
-        &default_branch,
-    )
-    .context("Fetching and constructing diffs")?;
+    let (base_branch, head_branch) =
+        fetch_and_get_branches(&base.sha, &head.sha, repo, &fetching_branch, default_branch)
+            .context("Fetching and constructing diffs")?;
 
     dbg!("Parsing base/head for context");
     let path = repo_dir.absolutize().context("Making repo path absolute")?;
     let base_context =
-        with_checkout_and_dir(&base_branch, &repo, &path, || RenderingContext::new(&path))
+        with_checkout_and_dir(&base_branch, repo, &path, || RenderingContext::new(&path))
             .context("Parsing base")?;
 
     let head_context =
-        with_checkout_and_dir(&head_branch, &repo, &path, || RenderingContext::new(&path))
+        with_checkout_and_dir(&head_branch, repo, &path, || RenderingContext::new(&path))
             .context("Parsing head")?;
 
     let base_render_passes = dmm_tools::render_passes::configure(
@@ -93,9 +88,9 @@ fn render(
 
     dbg!("Loading maps");
 
-    let base_maps = with_checkout_and_dir(&base_branch, &repo, &path, || load_maps(modified_files))
+    let base_maps = with_checkout_and_dir(&base_branch, repo, &path, || load_maps(modified_files))
         .context("Loading base maps")?;
-    let head_maps = with_checkout_and_dir(&head_branch, &repo, &path, || load_maps(modified_files))
+    let head_maps = with_checkout_and_dir(&head_branch, repo, &path, || load_maps(modified_files))
         .context("Loading head maps")?;
 
     dbg!("Getting bounding boxes");
@@ -105,7 +100,7 @@ fn render(
     dbg!("Rendering removed/modified maps");
     // You might think to yourself, wtf is going on here?
     // And you'd be right.
-    let removed_maps = with_checkout_and_dir(&base_branch, &repo, &path, || {
+    let removed_maps = with_checkout_and_dir(&base_branch, repo, &path, || {
         render_map_regions(
             &base_context,
             &modified_maps.befores,
@@ -134,7 +129,7 @@ fn render(
 
     dbg!("Rendering added/modified maps");
 
-    let added_maps = with_checkout_and_dir(&head_branch, &repo, &path, || {
+    let added_maps = with_checkout_and_dir(&head_branch, repo, &path, || {
         render_map_regions(
             &head_context,
             &modified_maps.afters,
@@ -251,7 +246,7 @@ fn generate_finished_output<P: AsRef<Path>>(
     Ok(builder.build())
 }
 
-pub fn do_job(job: &Job) -> Result<CheckOutputs> {
+pub fn do_job(job: Job) -> Result<CheckOutputs> {
     std::env::set_current_dir(std::env::current_exe()?.parent().unwrap())?;
 
     dbg!("Starting Job");
@@ -322,7 +317,7 @@ pub fn do_job(job: &Job) -> Result<CheckOutputs> {
         base,
         head,
         (&added_files, &modified_files, &removed_files),
-        (&repository, &default_branch),
+        (&repository, default_branch),
         (&repo_dir, Path::new(output_directory)),
         job.pull_request,
     ) {
@@ -341,7 +336,7 @@ pub fn do_job(job: &Job) -> Result<CheckOutputs> {
     };
     dbg!("Cleaning repos");
 
-    clean_up_references(&repository, &default_branch).context("Cleaning up references")?;
+    clean_up_references(&repository, default_branch).context("Cleaning up references")?;
 
     res
 }
