@@ -203,7 +203,7 @@ fn generate_finished_output<P: AsRef<Path>>(
                 let name = format!("{}:{}", file.filename, level + 1);
 
                 builder.add_text(&format!(
-                    include_str!("diff_template_add.txt"),
+                    include_str!("../templates/diff_template_add.txt"),
                     filename = name,
                     image_link = link
                 ));
@@ -221,7 +221,7 @@ fn generate_finished_output<P: AsRef<Path>>(
 
                 #[allow(clippy::format_in_format_args)]
                 builder.add_text(&format!(
-                    include_str!("diff_template_mod.txt"),
+                    include_str!("../templates/diff_template_mod.txt"),
                     bounds = region.to_string(),
                     filename = name,
                     image_before_link = format!("{}-before.png", link),
@@ -241,7 +241,7 @@ fn generate_finished_output<P: AsRef<Path>>(
                 let name = format!("{}:{}", file.filename, level + 1);
 
                 builder.add_text(&format!(
-                    include_str!("diff_template_remove.txt"),
+                    include_str!("../templates/diff_template_remove.txt"),
                     filename = name,
                     image_link = link
                 ));
