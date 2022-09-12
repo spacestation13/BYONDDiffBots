@@ -1,5 +1,3 @@
-use std::sync::Arc;
-
 use anyhow::{Context, Result};
 use octocrab::models::InstallationId;
 
@@ -16,7 +14,7 @@ use diffbot_lib::{
         },
         graphql::get_pull_files,
     },
-    job::types::{Job, JobJournal, JobSender},
+    job::types::{Job, JobSender},
 };
 
 async fn process_pull(
@@ -24,8 +22,7 @@ async fn process_pull(
     pull: PullRequest,
     check_run: CheckRun,
     installation: &Installation,
-    job_sender: &JobSender,
-    journal: &Arc<Mutex<JobJournal>>,
+    job_sender: &Mutex<JobSender>,
 ) -> Result<()> {
     if pull
         .title
@@ -103,8 +100,9 @@ async fn process_pull(
         installation: InstallationId(installation.id),
     };
 
-    journal.lock().await.add_job(job.clone()).await;
-    job_sender.send_async(job).await?;
+    let job = rmp_serde::to_vec(&job)?;
+
+    job_sender.lock().await.send(job).await?;
 
     Ok(())
 }
@@ -126,8 +124,7 @@ impl<'r> FromRequest<'r> for GithubEvent {
 
 async fn handle_pull_request(
     payload: String,
-    job_sender: &State<JobSender>,
-    journal: &State<Arc<Mutex<JobJournal>>>,
+    job_sender: &State<Mutex<JobSender>>,
 ) -> Result<&'static str> {
     let payload: PullRequestEventPayload = serde_json::from_str(&payload)?;
     if payload.action != "opened" && payload.action != "synchronize" {
@@ -148,7 +145,6 @@ async fn handle_pull_request(
         check_run,
         &payload.installation,
         job_sender,
-        journal,
     )
     .await?;
 
@@ -159,17 +155,14 @@ async fn handle_pull_request(
 pub async fn process_github_payload(
     event: GithubEvent,
     payload: String,
-    job_sender: &State<JobSender>,
-    journal: &State<Arc<Mutex<JobJournal>>>,
+    job_sender: &State<Mutex<JobSender>>,
 ) -> Result<&'static str, &'static str> {
     if event.0 != "pull_request" {
         return Ok("Not a pull request event");
     }
 
-    handle_pull_request(payload, job_sender, journal)
-        .await
-        .map_err(|e| {
-            eprintln!("Error handling event: {:?}", e);
-            "An error occured while handling the event"
-        })
+    handle_pull_request(payload, job_sender).await.map_err(|e| {
+        eprintln!("Error handling event: {:?}", e);
+        "An error occured while handling the event"
+    })
 }

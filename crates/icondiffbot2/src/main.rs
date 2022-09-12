@@ -3,10 +3,7 @@ mod job_processor;
 mod sha;
 mod table_builder;
 
-use diffbot_lib::job::{
-    runner::handle_jobs,
-    types::{JobJournal, JobSender},
-};
+use diffbot_lib::job::{runner::handle_jobs, types::JobSender};
 use octocrab::OctocrabBuilder;
 use once_cell::sync::OnceCell;
 use serde::Deserialize;
@@ -14,7 +11,6 @@ use std::{
     fs::File,
     io::Read,
     path::{Path, PathBuf},
-    sync::Arc,
 };
 use tokio::sync::Mutex;
 
@@ -23,8 +19,7 @@ async fn index() -> &'static str {
     "IDB says hello!"
 }
 
-pub type DataJobSender = actix_web::web::Data<JobSender>;
-pub type DataJobJournal = actix_web::web::Data<Mutex<JobJournal>>;
+pub type DataJobSender = actix_web::web::Data<Mutex<JobSender>>;
 
 #[derive(Debug, Deserialize)]
 pub struct GithubConfig {
@@ -97,6 +92,8 @@ fn read_key(path: &Path) -> Vec<u8> {
     key
 }
 
+const JOB_JOURNAL_LOCATION: &'static str = "jobs";
+
 #[tokio::main]
 async fn main() -> std::io::Result<()> {
     // init_global_subscriber();
@@ -113,27 +110,16 @@ async fn main() -> std::io::Result<()> {
     ))
     .expect("Octocrab failed to initialise");
 
-    let journal = Arc::new(Mutex::new(
-        JobJournal::from_file("jobs.json").await.unwrap(),
-    ));
-
     tokio::fs::create_dir_all("./images").await.unwrap();
 
-    let (job_sender, job_receiver) = flume::unbounded();
+    let (job_sender, mut job_receiver) = yaque::channel(JOB_JOURNAL_LOCATION)
+        .expect("Couldn't open an on-disk queue, check permissions or drive space?");
 
-    let journal_clone = journal.clone();
     tokio::spawn(async move {
-        handle_jobs(
-            "IconDiffBot2",
-            job_receiver,
-            journal_clone,
-            job_processor::do_job,
-        )
-        .await
+        handle_jobs("IconDiffBot2", &mut job_receiver, job_processor::do_job).await
     });
 
-    let journal: DataJobJournal = journal.into();
-    let job_sender: DataJobSender = actix_web::web::Data::new(job_sender);
+    let job_sender: DataJobSender = actix_web::web::Data::new(Mutex::new(job_sender));
 
     actix_web::HttpServer::new(move || {
         let form_config = actix_web::web::FormConfig::default().limit(config.web.limits.forms);
@@ -142,7 +128,6 @@ async fn main() -> std::io::Result<()> {
         actix_web::App::new()
             .app_data(form_config)
             .app_data(string_config)
-            .app_data(journal.clone())
             .app_data(job_sender.clone())
             .service(index)
             .service(github_processor::process_github_payload_actix)

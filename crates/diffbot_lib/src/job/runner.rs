@@ -1,11 +1,4 @@
-use std::sync::Arc;
-
-use flume::Receiver;
-use tokio::sync::Mutex;
-
 use crate::job::types::{Job, JobRunner};
-
-use super::types::JobJournal;
 
 async fn handle_job<S: AsRef<str>, F>(name: S, job: Job, runner: F)
 where
@@ -106,47 +99,20 @@ where
     }
 }
 
-async fn recover_from_journal<S: AsRef<str>, F>(
-    name: S,
-    journal: &Arc<Mutex<JobJournal>>,
-    runner: F,
-) where
+pub async fn handle_jobs<S: AsRef<str>, F>(name: S, job_receiver: &mut yaque::Receiver, runner: F)
+where
     F: JobRunner,
 {
-    let num_jobs = journal.lock().await.get_job_count();
-    if num_jobs > 0 {
-        eprintln!("Recovering {} jobs from journal", num_jobs);
-    } else {
-        eprintln!("No jobs to recover from journal");
-        return;
-    }
-
     loop {
-        // Done this way to avoid a deadlock
-        let job = journal.lock().await.get_job();
-        if let Some(job) = job {
-            handle_job(&name, job, runner.clone()).await;
-            journal.lock().await.complete_job().await;
-        } else {
-            break;
-        }
-    }
-}
-
-pub async fn handle_jobs<S: AsRef<str>, F>(
-    name: S,
-    job_receiver: Receiver<Job>,
-    journal: Arc<Mutex<JobJournal>>,
-    runner: F,
-) where
-    F: JobRunner,
-{
-    recover_from_journal(&name, &journal, runner.clone()).await;
-    loop {
-        let job = job_receiver.recv_async().await;
-        if let Ok(job) = job {
-            handle_job(&name, job, runner.clone()).await;
-            journal.lock().await.complete_job().await;
+        if let Ok(jobguard) = job_receiver.recv().await {
+            let job = rmp_serde::from_slice(&jobguard);
+            match job {
+                Ok(job) => handle_job(&name, job, runner.clone()).await,
+                Err(err) => eprintln!("{}", err),
+            }
+            if let Err(err) = jobguard.commit() {
+                eprintln!("{}", err)
+            };
         } else {
             break;
         }

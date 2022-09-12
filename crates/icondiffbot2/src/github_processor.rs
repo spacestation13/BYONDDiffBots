@@ -13,7 +13,7 @@ use octocrab::models::InstallationId;
 
 use diffbot_lib::github::github_types::FileDiff;
 
-use crate::{DataJobJournal, DataJobSender};
+use crate::DataJobSender;
 
 pub struct GithubEvent(pub String);
 
@@ -39,7 +39,6 @@ impl actix_web::FromRequest for GithubEvent {
 async fn handle_pull_request(
     payload: PullRequestEventPayload,
     job_sender: DataJobSender,
-    journal: DataJobJournal,
 ) -> Result<()> {
     match payload.action.as_str() {
         "opened" => {}
@@ -141,8 +140,9 @@ async fn handle_pull_request(
         installation: InstallationId(installation.id),
     };
 
-    journal.lock().await.add_job(job.clone()).await;
-    job_sender.send_async(job).await?;
+    let job = rmp_serde::to_vec(&job)?;
+
+    job_sender.lock().await.send(job).await?;
 
     Ok(())
 }
@@ -152,7 +152,6 @@ pub async fn process_github_payload_actix(
     event: GithubEvent,
     payload: String,
     job_sender: DataJobSender,
-    journal: DataJobJournal,
 ) -> actix_web::Result<&'static str> {
     // TODO: Handle reruns
     if event.0 != "pull_request" {
@@ -161,7 +160,7 @@ pub async fn process_github_payload_actix(
 
     let payload: PullRequestEventPayload = serde_json::from_str(&payload)?;
 
-    handle_pull_request(payload, job_sender, journal)
+    handle_pull_request(payload, job_sender)
         .await
         .map_err(actix_web::error::ErrorBadRequest)?;
 

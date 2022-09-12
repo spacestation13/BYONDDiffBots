@@ -13,3 +13,5 @@ chrono = "0.4.22"
 tokio = { version = "1.20.1", features = ["fs"] }
 reqwest = "0.11.11"
 flume = "0.10.14"
+yaque = "0.6.4"
+rmp-serde = "1.1.0"

@@ -9,16 +9,13 @@ extern crate rocket;
 use std::fs::File;
 use std::io::Read;
 use std::path::PathBuf;
-use std::sync::Arc;
 
 use once_cell::sync::OnceCell;
 use rocket::figment::Figment;
 use rocket::fs::FileServer;
-use rocket::tokio::sync::Mutex;
 use serde::Deserialize;
 
 use diffbot_lib::job::runner::handle_jobs;
-use diffbot_lib::job::types::JobJournal;
 
 #[get("/")]
 async fn index() -> &'static str {
@@ -57,6 +54,8 @@ fn init_config(figment: &Figment) -> &Config {
     CONFIG.get().unwrap()
 }
 
+const JOB_JOURNAL_LOCATION: &'static str = "jobs";
+
 #[launch]
 async fn rocket() -> _ {
     let rocket = rocket::build();
@@ -70,26 +69,17 @@ async fn rocket() -> _ {
     ))
     .expect("fucked up octocrab");
 
-    let journal = Arc::new(Mutex::new(
-        JobJournal::from_file("jobs.json").await.unwrap(),
-    ));
-
-    let (job_sender, job_receiver) = flume::unbounded();
-    let journal_clone = journal.clone();
+    let (job_sender, mut job_receiver) = yaque::channel(JOB_JOURNAL_LOCATION)
+        .expect("Couldn't open an on-disk queue, check permissions or drive space?");
 
     rocket::tokio::spawn(async move {
-        handle_jobs(
-            "MapDiffBot2",
-            job_receiver,
-            journal_clone,
-            job_processor::do_job,
-        )
-        .await
+        handle_jobs("MapDiffBot2", &mut job_receiver, job_processor::do_job).await
     });
+
+    let job_sender = rocket::tokio::sync::Mutex::new(job_sender);
 
     rocket
         .manage(job_sender)
-        .manage(journal)
         .mount(
             "/",
             routes![index, github_processor::process_github_payload],

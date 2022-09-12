@@ -8,6 +8,7 @@ edition = "2021"
 [dependencies]
 serde = { version = "1.0.144", features = ["derive"] }
 serde_json = "1.0.85"
+rmp-serde = "1.1.0"
 octocrab = "0.17.0"
 dmm-tools = { git = "https://github.com/SpaceManiac/SpacemanDMM/", features = ["png", "gif"] }
 dreammaker = { git = "https://github.com/SpaceManiac/SpacemanDMM/" }
@@ -26,6 +27,7 @@ rayon = "1.5.3"
 toml = "0.5.9"
 ahash = "0.8.0"
 hashbrown = { version = "0.12.3", features = ["rayon"]}
+yaque = "0.6.4"
 
 actix-web = "4.1.0"
 actix-files = "0.6.2"
