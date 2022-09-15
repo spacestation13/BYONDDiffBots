@@ -1,9 +1,11 @@
 mod github_processor;
 mod job_processor;
+mod runner;
 mod sha;
 mod table_builder;
 
-use diffbot_lib::job::{runner::handle_jobs, types::JobSender};
+use async_mutex::Mutex;
+use diffbot_lib::job::types::JobSender;
 use octocrab::OctocrabBuilder;
 use once_cell::sync::OnceCell;
 use serde::Deserialize;
@@ -12,7 +14,6 @@ use std::{
     io::Read,
     path::{Path, PathBuf},
 };
-use tokio::sync::Mutex;
 
 #[actix_web::get("/")]
 async fn index() -> &'static str {
@@ -94,7 +95,7 @@ fn read_key(path: &Path) -> Vec<u8> {
 
 const JOB_JOURNAL_LOCATION: &'static str = "jobs";
 
-#[tokio::main]
+#[actix_web::main]
 async fn main() -> std::io::Result<()> {
     // init_global_subscriber();
 
@@ -110,14 +111,12 @@ async fn main() -> std::io::Result<()> {
     ))
     .expect("Octocrab failed to initialise");
 
-    tokio::fs::create_dir_all("./images").await.unwrap();
+    async_fs::create_dir_all("./images").await.unwrap();
 
-    let (job_sender, mut job_receiver) = yaque::channel(JOB_JOURNAL_LOCATION)
+    let (job_sender, job_receiver) = yaque::channel(JOB_JOURNAL_LOCATION)
         .expect("Couldn't open an on-disk queue, check permissions or drive space?");
 
-    tokio::spawn(async move {
-        handle_jobs("IconDiffBot2", &mut job_receiver, job_processor::do_job).await
-    });
+    actix_web::rt::spawn(async move { runner::handle_jobs("IconDiffBot2", job_receiver) });
 
     let job_sender: DataJobSender = actix_web::web::Data::new(Mutex::new(job_sender));
 

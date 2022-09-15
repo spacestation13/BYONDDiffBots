@@ -8,5 +8,5 @@ edition = "2021"
 [dependencies]
 octocrab = "0.17.0"
 diffbot_lib = { path = "../diffbot_lib" }
-clap = { version = "3.2.17", features = ["derive"] }
-tokio = { version = "1.20.1", features = ["full"] }
+clap = { version = "3.2.21", features = ["derive"] }
+tokio = { version = "1.21.1", features = ["full"] }

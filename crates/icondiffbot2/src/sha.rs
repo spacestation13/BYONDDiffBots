@@ -1,3 +1,4 @@
+use actix_web::rt::Runtime;
 use anyhow::{Context, Result};
 use diffbot_lib::{
     github::{github_api::download_url, github_types::ChangeType},
@@ -8,7 +9,6 @@ use std::{
     collections::hash_map::DefaultHasher,
     hash::{Hash, Hasher},
 };
-use tokio::runtime::Handle;
 
 #[derive(Debug)]
 pub struct IconFileWithName {
@@ -45,8 +45,8 @@ pub fn get_if_exists(
     sha: Option<&str>,
 ) -> Result<Option<IconFileWithName>> {
     if let Some(sha) = sha {
-        let handle = Handle::try_current()?;
-        let raw = handle.block_on(async {
+        let rt = Runtime::new()?;
+        let raw = rt.block_on(async {
             download_url(&job.installation, &job.repo, filename, sha)
                 .await
                 .with_context(|| format!("Failed to download file {:?}", filename))

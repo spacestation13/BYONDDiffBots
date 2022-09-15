@@ -2,6 +2,7 @@ mod git_operations;
 pub(crate) mod github_processor;
 pub(crate) mod job_processor;
 pub(crate) mod rendering;
+pub(crate) mod runner;
 
 #[macro_use]
 extern crate rocket;
@@ -14,8 +15,6 @@ use once_cell::sync::OnceCell;
 use rocket::figment::Figment;
 use rocket::fs::FileServer;
 use serde::Deserialize;
-
-use diffbot_lib::job::runner::handle_jobs;
 
 #[get("/")]
 async fn index() -> &'static str {
@@ -69,12 +68,10 @@ async fn rocket() -> _ {
     ))
     .expect("fucked up octocrab");
 
-    let (job_sender, mut job_receiver) = yaque::channel(JOB_JOURNAL_LOCATION)
+    let (job_sender, job_receiver) = yaque::channel(JOB_JOURNAL_LOCATION)
         .expect("Couldn't open an on-disk queue, check permissions or drive space?");
 
-    rocket::tokio::spawn(async move {
-        handle_jobs("MapDiffBot2", &mut job_receiver, job_processor::do_job).await
-    });
+    rocket::tokio::spawn(async move { runner::handle_jobs("MapDiffBot2", job_receiver).await });
 
     let job_sender = rocket::tokio::sync::Mutex::new(job_sender);
 

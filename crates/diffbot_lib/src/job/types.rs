@@ -7,8 +7,9 @@ use octocrab::models::InstallationId;
 use serde::{Deserialize, Serialize};
 use yaque::Sender;
 
-pub trait JobRunner: Fn(Job) -> Result<CheckOutputs> + Send + Clone + 'static {}
-impl<T> JobRunner for T where T: Fn(Job) -> Result<CheckOutputs> + Send + Clone + 'static {}
+pub type JobRunner = fn(Job) -> Result<CheckOutputs>;
+
+pub type JobSender = Sender;
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct Job {
@@ -20,5 +21,3 @@ pub struct Job {
     pub check_run: CheckRun,
     pub installation: InstallationId,
 }
-
-pub type JobSender = Sender;

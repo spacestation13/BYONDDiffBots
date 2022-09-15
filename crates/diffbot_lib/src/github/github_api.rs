@@ -6,8 +6,8 @@ use octocrab::models::repos::Content;
 use octocrab::models::InstallationId;
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
-use tokio::fs::File;
-use tokio::io::AsyncWriteExt;
+use async_fs::File;
+use futures_lite::io::AsyncWriteExt;
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct CheckRun {
@@ -210,7 +210,7 @@ pub async fn download_file<S: AsRef<str>>(
     path.push(&target.sha);
     path.set_extension("dmi");
 
-    tokio::fs::create_dir_all(path.parent().unwrap()).await?;
+    async_fs::create_dir_all(path.parent().unwrap()).await?;
     let mut file = File::create(&path).await?;
 
     let data = download_url(installation, repo, &filename, &commit).await?;

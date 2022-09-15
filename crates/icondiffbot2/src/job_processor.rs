@@ -16,11 +16,10 @@ use std::{
     io::{BufWriter, Write},
     path::Path,
 };
-use tokio::runtime::Handle;
 
 #[tracing::instrument]
 pub fn do_job(job: Job) -> Result<CheckOutputs> {
-    let handle = Handle::try_current()?;
+    let handle = actix_web::rt::Runtime::new()?;
 
     handle.block_on(async { job.check_run.mark_started().await })?;
 
