@@ -2,12 +2,12 @@ use crate::github::github_types::{
     CreateCheckRun, Empty, Output, RawCheckRun, Repository, UpdateCheckRunBuilder,
 };
 use anyhow::{format_err, Context, Result};
+use async_fs::File;
+use futures_lite::io::AsyncWriteExt;
 use octocrab::models::repos::Content;
 use octocrab::models::InstallationId;
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
-use async_fs::File;
-use futures_lite::io::AsyncWriteExt;
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct CheckRun {
