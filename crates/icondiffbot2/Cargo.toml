@@ -18,10 +18,7 @@ lazy_static = "1.4.0"
 reqwest = "0.11.11"
 diffbot_lib = { path = "../diffbot_lib" }
 anyhow = "1.0.65"
-flume = "0.10.14"
 ndarray = "0.15.6"
-sanitize-filename = "0.4.0"
-tracing-flame = "0.2.0"
 rayon = "1.5.3"
 toml = "0.5.9"
 ahash = "0.8.0"
@@ -32,9 +29,6 @@ actix-web = "4.2.1"
 actix-files = "0.6.2"
 async-fs = "1.6.0"
 async-mutex = "1.4.0"
-
-[dependencies.tracing-subscriber]
-version = "0.3.15"
 
 [dependencies.tracing]
 version = "0.1.36"
