@@ -63,8 +63,11 @@ pub fn get_diff_bounding_box(
             left_dims, right_dims
         );
     }
+
     let max_y = min(left_dims.1, right_dims.1);
     let max_x = min(left_dims.0, right_dims.0);
+    
+    dbg!("max_y: {}, max_x: {}", max_y, max_x);
 
     let mut rightmost = 0usize;
     let mut leftmost = max_x;
@@ -97,12 +100,16 @@ pub fn get_diff_bounding_box(
         return None;
     }
 
+    dbg!("Before expansion max: (right, top):({}, {}), min: (left, bottom):({}, {})", rightmost, topmost, leftmost, bottommost);
+
     //this is a god awful way to expand bounds without it going out of bounds
 
     rightmost = rightmost.saturating_add(2).clamp(1, max_x - 1);
     topmost = topmost.saturating_add(2).clamp(1, max_y - 1);
     leftmost = leftmost.saturating_sub(2).clamp(1, max_x - 1);
     bottommost = bottommost.saturating_sub(2).clamp(1, max_y -1);
+
+    dbg!("After expansion max: (right, top):({}, {}), min: (left, bottom):({}, {})", rightmost, topmost, leftmost, bottommost);
 
     Some(BoundingBox::new(leftmost, bottommost, rightmost, topmost))
 }
