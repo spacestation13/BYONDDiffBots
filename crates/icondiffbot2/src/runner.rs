@@ -2,19 +2,15 @@ use super::job_processor::do_job;
 use diffbot_lib::job::types::Job;
 
 pub async fn handle_jobs<S: AsRef<str>>(name: S, mut job_receiver: yaque::Receiver) {
-    loop {
-        if let Ok(jobguard) = job_receiver.recv().await {
-            let job = rmp_serde::from_slice(&jobguard);
-            match job {
-                Ok(job) => job_handler(name.as_ref(), job).await,
-                Err(err) => eprintln!("{}", err),
-            }
-            if let Err(err) = jobguard.commit() {
-                eprintln!("{}", err)
-            };
-        } else {
-            break;
+    while let Ok(jobguard) = job_receiver.recv().await {
+        let job = rmp_serde::from_slice(&jobguard);
+        match job {
+            Ok(job) => job_handler(name.as_ref(), job).await,
+            Err(err) => eprintln!("{}", err),
         }
+        if let Err(err) = jobguard.commit() {
+            eprintln!("{}", err)
+        };
     }
 }
 

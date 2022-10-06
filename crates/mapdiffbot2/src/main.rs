@@ -53,7 +53,7 @@ fn init_config(figment: &Figment) -> &Config {
     CONFIG.get().unwrap()
 }
 
-const JOB_JOURNAL_LOCATION: &'static str = "jobs";
+const JOB_JOURNAL_LOCATION: &str = "jobs";
 
 #[launch]
 async fn rocket() -> _ {

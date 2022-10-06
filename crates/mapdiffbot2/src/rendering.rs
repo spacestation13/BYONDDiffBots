@@ -66,7 +66,7 @@ pub fn get_diff_bounding_box(
 
     let max_y = min(left_dims.1, right_dims.1);
     let max_x = min(left_dims.0, right_dims.0);
-    
+
     dbg!("max_y: {}, max_x: {}", max_y, max_x);
 
     let mut rightmost = 0usize;
@@ -100,16 +100,28 @@ pub fn get_diff_bounding_box(
         return None;
     }
 
-    dbg!("Before expansion max: (right, top):({}, {}), min: (left, bottom):({}, {})", rightmost, topmost, leftmost, bottommost);
+    dbg!(
+        "Before expansion max: (right, top):({}, {}), min: (left, bottom):({}, {})",
+        rightmost,
+        topmost,
+        leftmost,
+        bottommost
+    );
 
     //this is a god awful way to expand bounds without it going out of bounds
 
     rightmost = rightmost.saturating_add(2).clamp(1, max_x - 1);
     topmost = topmost.saturating_add(2).clamp(1, max_y - 1);
     leftmost = leftmost.saturating_sub(2).clamp(1, max_x - 1);
-    bottommost = bottommost.saturating_sub(2).clamp(1, max_y -1);
+    bottommost = bottommost.saturating_sub(2).clamp(1, max_y - 1);
 
-    dbg!("After expansion max: (right, top):({}, {}), min: (left, bottom):({}, {})", rightmost, topmost, leftmost, bottommost);
+    dbg!(
+        "After expansion max: (right, top):({}, {}), min: (left, bottom):({}, {})",
+        rightmost,
+        topmost,
+        leftmost,
+        bottommost
+    );
 
     Some(BoundingBox::new(leftmost, bottommost, rightmost, topmost))
 }
@@ -310,7 +322,8 @@ pub fn render_diffs_for_directory<P: AsRef<Path>>(directory: P) {
                 let before_pixel = before.get_pixel(x, y);
                 let after_pixel = after.get_pixel(x, y);
                 if before_pixel == after_pixel {
-                    after_pixel.map_without_alpha(|c| c.saturating_add((255 - c).saturating_mul(2 / 3)))
+                    after_pixel
+                        .map_without_alpha(|c| c.saturating_add((255 - c).saturating_mul(2 / 3)))
                 } else {
                     image::Rgba([255, 0, 0, 255])
                 }

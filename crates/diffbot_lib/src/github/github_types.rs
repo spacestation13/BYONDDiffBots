@@ -128,9 +128,6 @@ pub struct UpdateCheckRun {
     pub output: Option<Output>,
 }
 
-#[derive(Serialize, Deserialize, Clone, Copy)]
-pub struct Empty {}
-
 pub type CheckOutputs = Vec<Output>;
 
 #[derive(Debug)]

@@ -7,7 +7,7 @@ pub async fn handle_output<S: AsRef<str>>(output: Vec<Output>, check_run: CheckR
         }
         1usize => {
             let res = check_run
-                .mark_succeeded(output.into_iter().nth(0).unwrap())
+                .mark_succeeded(output.into_iter().next().unwrap())
                 .await;
             if res.is_err() {
                 let _ = check_run

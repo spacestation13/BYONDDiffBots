@@ -1,5 +1,5 @@
 use crate::github::github_types::{
-    CreateCheckRun, Empty, Output, RawCheckRun, Repository, UpdateCheckRunBuilder,
+    CreateCheckRun, Output, RawCheckRun, Repository, UpdateCheckRunBuilder,
 };
 use anyhow::{format_err, Context, Result};
 use async_fs::File;
@@ -128,7 +128,7 @@ impl CheckRun {
     async fn update(&self, builder: UpdateCheckRunBuilder) -> Result<()> {
         let update = builder.build().context("Building UpdateCheckRun")?;
 
-        let _: Empty = octocrab::instance()
+        octocrab::instance()
             .installation(self.installation_id)
             .patch(
                 format!(
