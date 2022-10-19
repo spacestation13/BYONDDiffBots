@@ -2,10 +2,12 @@
 name = "icondiffbot_test_generator"
 version = "0.1.0"
 edition = "2021"
+license = "MIT"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
 octocrab = "0.17.0"
-clap = { version = "3.2.22", features = ["derive"] }
-tokio = { version = "1.21.1", features = ["full"] }
+diffbot_lib = { path = "../diffbot_lib" }
+clap = { version = "3.2.6", features = ["derive"] }
+tokio = { version = "1.18.1", features = ["full"] }
