@@ -26,84 +26,79 @@ pub fn fetch_and_get_branches<'a>(
         .connect(git2::Direction::Fetch)
         .context("Connecting to remote")?;
 
-    //tfw no try blocks
-    let base_branch = || -> Result<git2::Reference> {
-        remote
-            .fetch(
-                &[default_branch],
-                Some(FetchOptions::new().prune(git2::FetchPrune::On)),
-                None,
-            )
-            .context("Fetching base")?;
-        let fetch_head = repo
-            .find_reference("FETCH_HEAD")
-            .context("Getting FETCH_HEAD")?;
-
-        let base_commit = repo
-            .reference_to_annotated_commit(&fetch_head)
-            .context("Getting commit from FETCH_HEAD")?;
-
-        repo.resolve_reference_from_short_name(default_branch)?
-            .set_target(base_commit.id(), "Fast forwarding origin ref")
-            .context("Setting default branch to FETCH_HEAD's commit")?;
-
-        repo.set_head(
-            repo.resolve_reference_from_short_name(default_branch)?
-                .name()
-                .unwrap(),
+    remote
+        .fetch(
+            &[default_branch],
+            Some(FetchOptions::new().prune(git2::FetchPrune::On)),
+            None,
         )
-        .context("Setting HEAD to base")?;
+        .context("Fetching base")?;
+    let fetch_head = repo
+        .find_reference("FETCH_HEAD")
+        .context("Getting FETCH_HEAD")?;
 
-        let commit = repo
-            .find_commit(base_id)
-            .context("Finding commit from base SHA")?;
+    let base_commit = repo
+        .reference_to_annotated_commit(&fetch_head)
+        .context("Getting commit from FETCH_HEAD")?;
 
+    repo.resolve_reference_from_short_name(default_branch)?
+        .set_target(base_commit.id(), "Fast forwarding origin ref")
+        .context("Setting default branch to FETCH_HEAD's commit")?;
+
+    repo.set_head(
         repo.resolve_reference_from_short_name(default_branch)?
-            .set_target(commit.id(), "Setting default branch to the correct commit")?;
+            .name()
+            .unwrap(),
+    )
+    .context("Setting HEAD to base")?;
 
-        repo.resolve_reference_from_short_name(default_branch)
-            .map_err(|err| err.into())
-    }()
-    .context("Doing base commits")?;
+    let commit = repo
+        .find_commit(base_id)
+        .context("Finding commit from base SHA")?;
 
-    let head_branch = || -> Result<git2::Reference> {
-        remote
-            .fetch(
-                &[fetching_branch],
-                Some(FetchOptions::new().prune(git2::FetchPrune::On)),
-                None,
-            )
-            .context("Fetching head")?;
+    repo.resolve_reference_from_short_name(default_branch)?
+        .set_target(commit.id(), "Setting default branch to the correct commit")?;
 
-        let fetch_head = repo
-            .find_reference("FETCH_HEAD")
-            .context("Getting FETCH_HEAD")?;
+    let base_branch = repo
+        .resolve_reference_from_short_name(default_branch)
+        .context("Getting the base reference")?;
 
-        let head_name = format!("mdb-pull-{}-{}", base_sha, head_sha);
+    remote
+        .fetch(
+            &[fetching_branch],
+            Some(FetchOptions::new().prune(git2::FetchPrune::On)),
+            None,
+        )
+        .context("Fetching head")?;
 
-        let mut head_branch = repo
-            .branch_from_annotated_commit(
-                &head_name,
-                &repo.reference_to_annotated_commit(&fetch_head)?,
-                true,
-            )
-            .context("Creating branch")?
-            .into_reference();
+    let fetch_head = repo
+        .find_reference("FETCH_HEAD")
+        .context("Getting FETCH_HEAD")?;
 
-        repo.set_head(head_branch.name().unwrap())
-            .context("Setting HEAD to head")?;
+    let head_name = format!("mdb-pull-{}-{}", base_sha, head_sha);
 
-        let head_commit = repo.find_commit(head_id).context("Finding head commit")?;
+    let mut head_branch = repo
+        .branch_from_annotated_commit(
+            &head_name,
+            &repo.reference_to_annotated_commit(&fetch_head)?,
+            true,
+        )
+        .context("Creating branch")?
+        .into_reference();
 
-        head_branch.set_target(
-            head_commit.id(),
-            "Setting head branch to the correct commit",
-        )?;
+    repo.set_head(head_branch.name().unwrap())
+        .context("Setting HEAD to head")?;
 
-        repo.resolve_reference_from_short_name(&head_name)
-            .map_err(|err| err.into())
-    }()
-    .context("Doing head commits")?;
+    let head_commit = repo.find_commit(head_id).context("Finding head commit")?;
+
+    head_branch.set_target(
+        head_commit.id(),
+        "Setting head branch to the correct commit",
+    )?;
+
+    let head_branch = repo
+        .resolve_reference_from_short_name(&head_name)
+        .context("Getting the head reference")?;
 
     remote.disconnect().context("Disconnecting from remote")?;
 
