@@ -57,6 +57,8 @@ const JOB_JOURNAL_LOCATION: &str = "jobs";
 
 #[launch]
 async fn rocket() -> _ {
+    stable_eyre::install().expect("Eyre handler installation failed!");
+
     let rocket = rocket::build();
     let config = init_config(rocket.figment());
 
