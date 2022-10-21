@@ -71,7 +71,7 @@ async fn rocket() -> _ {
     let (job_sender, job_receiver) = yaque::channel(JOB_JOURNAL_LOCATION)
         .expect("Couldn't open an on-disk queue, check permissions or drive space?");
 
-    rocket::tokio::spawn(async move { runner::handle_jobs("MapDiffBot2", job_receiver).await });
+    rocket::tokio::spawn(runner::handle_jobs("MapDiffBot2", job_receiver));
 
     let job_sender = rocket::tokio::sync::Mutex::new(job_sender);
 
