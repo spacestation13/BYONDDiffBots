@@ -1,4 +1,4 @@
-use anyhow::{Context, Result};
+use eyre::{Context, Result};
 use octocrab::models::InstallationId;
 
 use rocket::{
@@ -27,7 +27,7 @@ async fn process_pull(
     if pull
         .title
         .as_ref()
-        .ok_or_else(|| anyhow::anyhow!("PR title is None"))?
+        .ok_or_else(|| eyre::anyhow!("PR title is None"))?
         .to_ascii_lowercase()
         .contains("[mdb ignore]")
     {

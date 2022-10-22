@@ -1,10 +1,10 @@
 use actix_web::rt::Runtime;
-use anyhow::{Context, Result};
 use diffbot_lib::{
     github::{github_api::download_url, github_types::ChangeType},
     job::types::Job,
 };
 use dmm_tools::dmi::IconFile;
+use eyre::{Context, Result};
 use std::{
     collections::hash_map::DefaultHasher,
     hash::{Hash, Hasher},

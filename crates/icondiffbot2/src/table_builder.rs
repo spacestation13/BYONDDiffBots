@@ -1,5 +1,5 @@
-use anyhow::Result;
 use diffbot_lib::github::github_types::{CheckOutputs, Output};
+use eyre::Result;
 use std::collections::HashMap;
 
 #[derive(Default, Debug)]

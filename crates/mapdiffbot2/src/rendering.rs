@@ -3,9 +3,9 @@ use std::{cmp::min, collections::HashSet, path::Path, sync::RwLock};
 extern crate dreammaker;
 
 use ahash::RandomState;
-use anyhow::{Context, Result};
 use diffbot_lib::github::github_types::FileDiff;
 use dmm_tools::{dmi::Image, dmm, minimap, render_passes::RenderPass, IconCache};
+use eyre::{Context, Result};
 use image::{io::Reader, GenericImageView, ImageBuffer, Pixel};
 use rayon::prelude::*;
 
@@ -129,7 +129,7 @@ pub fn get_diff_bounding_box(
 pub fn load_maps(files: &[&FileDiff]) -> Result<Vec<dmm::Map>> {
     files
         .iter()
-        .map(|file| dmm::Map::from_file(Path::new(&file.filename)).map_err(|e| anyhow::anyhow!(e)))
+        .map(|file| dmm::Map::from_file(Path::new(&file.filename)).map_err(|e| eyre::anyhow!(e)))
         .collect()
 }
 
@@ -257,7 +257,7 @@ pub fn render_map(
         bump: &bump,
     };
     minimap::generate(minimap_context, icon_cache)
-        .map_err(|_| anyhow::anyhow!("An error occured during map rendering"))
+        .map_err(|_| eyre::anyhow!("An error occured during map rendering"))
 }
 
 pub fn render_map_regions(

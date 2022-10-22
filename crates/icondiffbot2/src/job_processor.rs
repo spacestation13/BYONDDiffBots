@@ -3,11 +3,11 @@ use crate::{
     table_builder::OutputTableBuilder,
     CONFIG,
 };
-use anyhow::{Context, Result};
 use diffbot_lib::{github::github_types::CheckOutputs, job::types::Job};
 use dmm_tools::dmi::render::{IconRenderer, RenderType};
 use dmm_tools::dmi::State;
 use dreammaker::dmi::StateIndex;
+use eyre::{Context, Result};
 use hashbrown::HashSet;
 use rayon::prelude::*;
 use std::{
@@ -139,7 +139,7 @@ fn render(
                         ))
                     }
                 })
-                .filter_map(|r: Result<String, anyhow::Error>| {
+                .filter_map(|r: Result<String, eyre::Error>| {
                     r.map_err(|e| {
                         println!("Error encountered during parse: {}", e);
                     })
@@ -196,7 +196,7 @@ fn render(
                             Ok("".to_string())
                         }
                     })
-                    .filter_map(|r: Result<String, anyhow::Error>| {
+                    .filter_map(|r: Result<String, eyre::Error>| {
                         r.map_err(|e| {
                             println!("Error encountered during parse: {}", e);
                         })
@@ -283,7 +283,7 @@ fn full_render(job: &Job, target: &IconFileWithName) -> Result<Vec<(StateIndex, 
             render_state(&prefix, target, state, &renderer)
                 .with_context(|| format!("Failed to render state {}", state.name))
         })
-        .filter_map(|r: Result<(StateIndex, String), anyhow::Error>| {
+        .filter_map(|r: Result<(StateIndex, String), eyre::Error>| {
             r.map_err(|e| {
                 println!("Error encountered during parse: {}", e);
             })

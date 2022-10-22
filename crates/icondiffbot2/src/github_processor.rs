@@ -1,6 +1,5 @@
 use std::{future::Future, pin::Pin};
 
-use anyhow::Result;
 use diffbot_lib::{
     github::{
         github_api::CheckRun,
@@ -9,6 +8,7 @@ use diffbot_lib::{
     },
     job::types::Job,
 };
+use eyre::Result;
 use octocrab::models::InstallationId;
 
 use diffbot_lib::github::github_types::FileDiff;
@@ -60,7 +60,7 @@ async fn handle_pull_request(
         .pull_request
         .title
         .as_ref()
-        .ok_or_else(|| anyhow::anyhow!("PR title is None"))?
+        .ok_or_else(|| eyre::anyhow!("PR title is None"))?
         .to_ascii_lowercase()
         .contains("[idb ignore]")
     {

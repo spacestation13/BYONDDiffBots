@@ -1,8 +1,8 @@
 use crate::github::github_types::{
     CreateCheckRun, Output, RawCheckRun, Repository, UpdateCheckRunBuilder,
 };
-use anyhow::{format_err, Context, Result};
 use async_fs::File;
+use eyre::{format_err, Context, Result};
 use futures_lite::io::AsyncWriteExt;
 use octocrab::models::repos::Content;
 use octocrab::models::InstallationId;

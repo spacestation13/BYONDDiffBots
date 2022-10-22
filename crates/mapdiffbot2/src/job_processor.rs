@@ -1,4 +1,4 @@
-use anyhow::{Context, Result};
+use eyre::{Context, Result};
 use path_absolutize::Absolutize;
 use rayon::prelude::*;
 use rocket::tokio::runtime::Handle;
@@ -280,7 +280,7 @@ pub fn do_job(job: Job) -> Result<CheckOutputs> {
     let output_directory = output_directory
         .as_ref()
         .to_str()
-        .ok_or_else(|| anyhow::anyhow!("Failed to create absolute path to image directory",))?;
+        .ok_or_else(|| eyre::anyhow!("Failed to create absolute path to image directory",))?;
 
     dbg!("Filtering on status");
 
@@ -307,7 +307,7 @@ pub fn do_job(job: Job) -> Result<CheckOutputs> {
     let default_branch = remote.default_branch()?;
     let default_branch = default_branch
         .as_str()
-        .ok_or_else(|| anyhow::anyhow!("Default branch is not a valid string, what the fuck"))?;
+        .ok_or_else(|| eyre::anyhow!("Default branch is not a valid string, what the fuck"))?;
 
     remote.disconnect().context("Disconnecting from remote")?;
 

@@ -1,4 +1,4 @@
-use anyhow::{Context, Result};
+use eyre::{Context, Result};
 use std::path::Path;
 
 use git2::{build::CheckoutBuilder, FetchOptions, Repository};

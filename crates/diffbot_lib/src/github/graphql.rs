@@ -1,5 +1,5 @@
 use super::github_types::{ChangeType, FileDiff};
-use anyhow::Result;
+use eyre::Result;
 use octocrab::models::InstallationId;
 use serde::Deserialize;
 

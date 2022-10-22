@@ -54,7 +54,7 @@ static CONFIG: OnceCell<Config> = OnceCell::new();
 // static FLAME_LAYER_GUARD: OnceCell<tracing_flame::FlushGuard<std::io::BufWriter<File>>> =
 // OnceCell::new();
 
-fn init_config(path: &Path) -> anyhow::Result<&'static Config> {
+fn init_config(path: &Path) -> eyre::Result<&'static Config> {
     let mut config_str = String::new();
     File::open(path)?.read_to_string(&mut config_str)?;
 

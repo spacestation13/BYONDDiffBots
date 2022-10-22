@@ -2,7 +2,7 @@ use crate::github::{
     github_api::CheckRun,
     github_types::{self, Branch, CheckOutputs, FileDiff},
 };
-use anyhow::Result;
+use eyre::Result;
 use octocrab::models::InstallationId;
 use serde::{Deserialize, Serialize};
 use yaque::Sender;
