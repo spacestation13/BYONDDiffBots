@@ -42,6 +42,7 @@ async fn job_handler(name: &str, job: Job) {
         pull_request,
         check_run.id()
     );
+
     let output = {
         if let Err(_) = output {
             eprintln!("Job timed out!");
