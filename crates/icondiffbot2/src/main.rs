@@ -117,7 +117,7 @@ async fn main() -> std::io::Result<()> {
     let (job_sender, job_receiver) = yaque::channel(JOB_JOURNAL_LOCATION)
         .expect("Couldn't open an on-disk queue, check permissions or drive space?");
 
-    actix_web::rt::spawn(async move || runner::handle_jobs("IconDiffBot2", job_receiver).await);
+    actix_web::rt::spawn(async move { runner::handle_jobs("IconDiffBot2", job_receiver).await });
 
     let job_sender: DataJobSender = actix_web::web::Data::new(Mutex::new(job_sender));
 
