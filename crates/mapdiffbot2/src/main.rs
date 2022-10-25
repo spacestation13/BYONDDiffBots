@@ -55,8 +55,29 @@ fn init_config(figment: &Figment) -> &Config {
 
 const JOB_JOURNAL_LOCATION: &str = "jobs";
 
+static LOGGER: Logger = Logger;
+
+struct Logger;
+
+impl log::Log for Logger {
+    fn enabled(&self, _metadata: &log::Metadata) -> bool {
+        #[cfg(debug_assertions)]
+        return true;
+        #[cfg(not(debug_assertions))]
+        return _metadata.level() <= log::LevelFilter::Info;
+    }
+    fn log(&self, record: &log::Record) {
+        if self.enabled(record.metadata()) {
+            println!("{} - {}", record.level(), record.args());
+        }
+    }
+    fn flush(&self) {}
+}
+
 #[launch]
 async fn rocket() -> _ {
+    log::set_logger(&LOGGER).expect("Log init failed!");
+
     stable_eyre::install().expect("Eyre handler installation failed!");
 
     let rocket = rocket::build();

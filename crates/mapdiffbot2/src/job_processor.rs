@@ -1,4 +1,5 @@
 use eyre::{Context, Result};
+use log::trace;
 use path_absolutize::Absolutize;
 use rayon::prelude::*;
 use rocket::tokio::runtime::Handle;
@@ -39,7 +40,8 @@ fn render(
     pull_request_number: u64,
     // feel like this is a bit of a hack but it works for now
 ) -> Result<RenderedMaps> {
-    dbg!("Fetching and getting branches");
+    trace!("Fetching and getting branches");
+
     let pull_branch = format!("mdb-{}-{}", base.sha, head.sha);
     let fetching_branch = format!("pull/{}/head:{}", pull_request_number, pull_branch);
 
@@ -47,7 +49,8 @@ fn render(
         fetch_and_get_branches(&base.sha, &head.sha, repo, &fetching_branch, default_branch)
             .context("Fetching and constructing diffs")?;
 
-    dbg!("Parsing base/head for context");
+    trace!("Parsing base/head for context");
+
     let path = repo_dir.absolutize().context("Making repo path absolute")?;
     let base_context =
         with_checkout_and_dir(&base_branch, repo, &path, || RenderingContext::new(&path))
@@ -69,7 +72,7 @@ fn render(
         "hide-space,hide-invisible,random",
     );
 
-    dbg!("Initializing vars");
+    trace!("Initializing vars");
 
     // ADDED MAPS
     let added_directory = format!("{}/a", out_dir.display());
@@ -86,18 +89,18 @@ fn render(
     let removed_directory = Path::new(&removed_directory);
     let removed_errors = Default::default();
 
-    dbg!("Loading maps");
+    trace!("Loading maps");
 
     let base_maps = with_checkout_and_dir(&base_branch, repo, &path, || load_maps(modified_files))
         .context("Loading base maps")?;
     let head_maps = with_checkout_and_dir(&head_branch, repo, &path, || load_maps(modified_files))
         .context("Loading head maps")?;
 
-    dbg!("Getting bounding boxes");
+    trace!("Getting bounding boxes");
 
     let modified_maps = get_map_diff_bounding_boxes(base_maps, head_maps);
 
-    dbg!("Rendering removed/modified maps");
+    trace!("Rendering removed/modified maps");
     // You might think to yourself, wtf is going on here?
     // And you'd be right.
     let removed_maps = with_checkout_and_dir(&base_branch, repo, &path, || {
@@ -127,7 +130,7 @@ fn render(
         Ok(maps)
     })?;
 
-    dbg!("Rendering added/modified maps");
+    trace!("Rendering added/modified maps");
 
     let added_maps = with_checkout_and_dir(&head_branch, repo, &path, || {
         render_map_regions(
@@ -156,7 +159,7 @@ fn render(
     })
     .context("Rendering modified after and added maps")?;
 
-    dbg!("Rendering diffs for directories");
+    trace!("Rendering diffs for directories");
 
     (0..modified_files.len()).into_par_iter().for_each(|i| {
         render_diffs_for_directory(modified_directory.join(i.to_string()));
@@ -249,7 +252,7 @@ fn generate_finished_output<P: AsRef<Path>>(
 pub fn do_job(job: Job) -> Result<CheckOutputs> {
     std::env::set_current_dir(std::env::current_exe()?.parent().unwrap())?;
 
-    dbg!("Starting Job");
+    trace!("Starting Job");
 
     let base = &job.base;
     let head = &job.head;
@@ -259,7 +262,7 @@ pub fn do_job(job: Job) -> Result<CheckOutputs> {
     let handle = Handle::try_current().unwrap();
 
     if !repo_dir.exists() {
-        dbg!("Directory doesn't exist, creating dir");
+        trace!("Directory doesn't exist, creating dir");
         std::fs::create_dir_all(&repo_dir)?;
         handle.block_on(async {
 				let output = Output {
@@ -272,7 +275,7 @@ pub fn do_job(job: Job) -> Result<CheckOutputs> {
         clone_repo(&repo, &repo_dir).context("Cloning repo")?;
     }
 
-    dbg!("Absolutizing dirs");
+    trace!("Absolutizing dirs");
     let non_abs_directory = format!("images/{}/{}", job.repo.id, job.check_run.id());
     let output_directory = Path::new(&non_abs_directory)
         .absolutize()
@@ -282,7 +285,7 @@ pub fn do_job(job: Job) -> Result<CheckOutputs> {
         .to_str()
         .ok_or_else(|| eyre::anyhow!("Failed to create absolute path to image directory",))?;
 
-    dbg!("Filtering on status");
+    trace!("Filtering on status");
 
     let filter_on_status = |status: ChangeType| {
         job.files
@@ -295,7 +298,7 @@ pub fn do_job(job: Job) -> Result<CheckOutputs> {
     let modified_files = filter_on_status(ChangeType::Modified);
     let removed_files = filter_on_status(ChangeType::Deleted);
 
-    dbg!("Opening directory and fetching");
+    trace!("Opening directory and fetching");
     let repository = git2::Repository::open(&repo_dir).context("Opening repository")?;
 
     let mut remote = repository.find_remote("origin")?;
@@ -311,7 +314,7 @@ pub fn do_job(job: Job) -> Result<CheckOutputs> {
 
     remote.disconnect().context("Disconnecting from remote")?;
 
-    dbg!("Rendering");
+    trace!("Rendering");
 
     let res = match render(
         base,
@@ -322,7 +325,7 @@ pub fn do_job(job: Job) -> Result<CheckOutputs> {
         job.pull_request,
     ) {
         Ok(maps) => {
-            dbg!("Generating output");
+            trace!("Generating output");
             generate_finished_output(
                 &added_files,
                 &modified_files,
@@ -334,7 +337,7 @@ pub fn do_job(job: Job) -> Result<CheckOutputs> {
 
         Err(err) => Err(err),
     };
-    dbg!("Cleaning repos");
+    trace!("Cleaning repos");
 
     clean_up_references(&repository, default_branch).context("Cleaning up references")?;
 

@@ -1,4 +1,5 @@
 use eyre::{Context, Result};
+use log::{error, trace};
 use octocrab::models::InstallationId;
 
 use rocket::{
@@ -24,6 +25,8 @@ async fn process_pull(
     installation: &Installation,
     job_sender: &Mutex<JobSender>,
 ) -> Result<()> {
+    trace!("Processing pull request");
+
     if pull
         .title
         .as_ref()
@@ -104,6 +107,8 @@ async fn process_pull(
 
     job_sender.lock().await.send(job).await?;
 
+    trace!("Job sent to queue");
+
     Ok(())
 }
 
@@ -130,6 +135,8 @@ async fn handle_pull_request(
     if payload.action != "opened" && payload.action != "synchronize" {
         return Ok("PR not opened or updated");
     }
+
+    trace!("Creating checkrun");
 
     let check_run = CheckRun::create(
         &payload.repository.full_name(),
@@ -161,8 +168,10 @@ pub async fn process_github_payload(
         return Ok("Not a pull request event");
     }
 
+    trace!("Payload received, processing");
+
     handle_pull_request(payload, job_sender).await.map_err(|e| {
-        eprintln!("Error handling event: {:?}", e);
+        error!("Error handling event: {:?}", e);
         "An error occured while handling the event"
     })
 }

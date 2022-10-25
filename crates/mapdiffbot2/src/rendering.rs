@@ -7,6 +7,7 @@ use diffbot_lib::github::github_types::FileDiff;
 use dmm_tools::{dmi::Image, dmm, minimap, render_passes::RenderPass, IconCache};
 use eyre::{Context, Result};
 use image::{io::Reader, GenericImageView, ImageBuffer, Pixel};
+use log::{error, info, trace};
 use rayon::prelude::*;
 
 #[derive(Debug, Clone)]
@@ -58,7 +59,7 @@ pub fn get_diff_bounding_box(
     let left_dims = base_map.dim_xyz();
     let right_dims = head_map.dim_xyz();
     if left_dims != right_dims {
-        println!(
+        info!(
             "Maps have different sizes: {:?} {:?}",
             left_dims, right_dims
         );
@@ -67,7 +68,7 @@ pub fn get_diff_bounding_box(
     let max_y = min(left_dims.1, right_dims.1);
     let max_x = min(left_dims.0, right_dims.0);
 
-    dbg!("max_y: {}, max_x: {}", max_y, max_x);
+    trace!("max_y: {}, max_x: {}", max_y, max_x);
 
     let mut rightmost = 0usize;
     let mut leftmost = max_x;
@@ -100,7 +101,7 @@ pub fn get_diff_bounding_box(
         return None;
     }
 
-    dbg!(
+    trace!(
         "Before expansion max: (right, top):({}, {}), min: (left, bottom):({}, {})",
         rightmost,
         topmost,
@@ -115,7 +116,7 @@ pub fn get_diff_bounding_box(
     leftmost = leftmost.saturating_sub(2).clamp(1, max_x - 1);
     bottommost = bottommost.saturating_sub(2).clamp(1, max_y - 1);
 
-    dbg!(
+    trace!(
         "After expansion max: (right, top):({}, {}), min: (left, bottom):({}, {})",
         rightmost,
         topmost,
@@ -334,6 +335,6 @@ pub fn render_diffs_for_directory<P: AsRef<Path>>(directory: P) {
         })
         .filter_map(|r: Result<()>| r.err())
         .for_each(|e| {
-            eprintln!("Diff rendering error: {}", e);
+            error!("Diff rendering error: {}", e);
         });
 }

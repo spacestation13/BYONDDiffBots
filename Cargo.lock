@@ -1973,6 +1973,7 @@ dependencies = [
  "image",
  "jsonwebtoken",
  "lazy_static",
+ "log",
  "octocrab",
  "once_cell",
  "path-absolutize",
