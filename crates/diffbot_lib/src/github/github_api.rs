@@ -128,7 +128,9 @@ impl CheckRun {
     async fn update(&self, builder: UpdateCheckRunBuilder) -> Result<()> {
         let update = builder.build().context("Building UpdateCheckRun")?;
 
-        octocrab::instance()
+        #[derive(Deserialize)]
+        struct Empty {}
+        let _: Empty = octocrab::instance()
             .installation(self.installation_id)
             .patch(
                 format!(
