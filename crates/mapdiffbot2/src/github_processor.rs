@@ -1,5 +1,5 @@
+use diffbot_lib::log::{error, trace};
 use eyre::{Context, Result};
-use log::{error, trace};
 use octocrab::models::InstallationId;
 
 use rocket::{

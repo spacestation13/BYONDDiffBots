@@ -4,10 +4,10 @@ extern crate dreammaker;
 
 use ahash::RandomState;
 use diffbot_lib::github::github_types::FileDiff;
+use diffbot_lib::log::{error, info, trace};
 use dmm_tools::{dmi::Image, dmm, minimap, render_passes::RenderPass, IconCache};
 use eyre::{Context, Result};
 use image::{io::Reader, GenericImageView, ImageBuffer, Pixel};
-use log::{error, info, trace};
 use rayon::prelude::*;
 
 #[derive(Debug, Clone)]

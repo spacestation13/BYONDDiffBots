@@ -1,5 +1,5 @@
+use diffbot_lib::log::trace;
 use eyre::{Context, Result};
-use log::trace;
 use path_absolutize::Absolutize;
 use rayon::prelude::*;
 use rocket::tokio::runtime::Handle;

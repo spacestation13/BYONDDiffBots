@@ -3,16 +3,18 @@ use std::time::Duration;
 use super::job_processor::do_job;
 use diffbot_lib::job::types::Job;
 
+use diffbot_lib::log::{error, info};
+
 pub async fn handle_jobs<S: AsRef<str>>(name: S, mut job_receiver: yaque::Receiver) {
     loop {
         if let Ok(jobguard) = job_receiver.recv().await {
             let job = rmp_serde::from_slice(&jobguard);
             match job {
                 Ok(job) => job_handler(name.as_ref(), job).await,
-                Err(err) => eprintln!("{}", err),
+                Err(err) => error!("{}", err),
             }
             if let Err(err) = jobguard.commit() {
-                eprintln!("{}", err)
+                error!("{}", err)
             };
         }
     }
@@ -21,7 +23,7 @@ pub async fn handle_jobs<S: AsRef<str>>(name: S, mut job_receiver: yaque::Receiv
 async fn job_handler(name: &str, job: Job) {
     let (repo, pull_request, check_run) =
         (job.repo.clone(), job.pull_request, job.check_run.clone());
-    println!(
+    info!(
         "[{}#{}] [{}] Starting",
         repo.full_name(),
         pull_request,
@@ -36,7 +38,7 @@ async fn job_handler(name: &str, job: Job) {
     )
     .await;
 
-    println!(
+    info!(
         "[{}#{}] [{}] Finished",
         repo.full_name(),
         pull_request,
@@ -45,7 +47,7 @@ async fn job_handler(name: &str, job: Job) {
 
     let output = {
         if let Err(_) = output {
-            eprintln!("Job timed out!");
+            error!("Job timed out!");
             let _ = check_run.mark_failed("Job timed out after 1 hours!").await;
             return;
         }
@@ -60,7 +62,7 @@ async fn job_handler(name: &str, job: Job) {
             },
             Err(e) => e.to_string(),
         };
-        eprintln!("Join Handle error: {}", fuckup);
+        error!("Join Handle error: {}", fuckup);
         let _ = check_run.mark_failed(&fuckup).await;
         return;
     }
@@ -68,7 +70,7 @@ async fn job_handler(name: &str, job: Job) {
     let output = output.unwrap();
     if let Err(e) = output {
         let fuckup = format!("{:?}", e);
-        eprintln!("Other rendering error: {}", fuckup);
+        error!("Other rendering error: {}", fuckup);
         let _ = check_run.mark_failed(&fuckup).await;
         return;
     }

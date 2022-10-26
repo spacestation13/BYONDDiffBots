@@ -3,6 +3,7 @@ use crate::{
     table_builder::OutputTableBuilder,
     CONFIG,
 };
+use diffbot_lib::log::error;
 use diffbot_lib::{github::github_types::CheckOutputs, job::types::Job};
 use dmm_tools::dmi::render::{IconRenderer, RenderType};
 use dmm_tools::dmi::State;
@@ -141,7 +142,7 @@ fn render(
                 })
                 .filter_map(|r: Result<String, eyre::Error>| {
                     r.map_err(|e| {
-                        println!("Error encountered during parse: {}", e);
+                        error!("Error encountered during parse: {}", e);
                     })
                     .ok()
                 })
@@ -198,7 +199,7 @@ fn render(
                     })
                     .filter_map(|r: Result<String, eyre::Error>| {
                         r.map_err(|e| {
-                            println!("Error encountered during parse: {}", e);
+                            error!("Error encountered during parse: {}", e);
                         })
                         .ok()
                     })
@@ -285,7 +286,7 @@ fn full_render(job: &Job, target: &IconFileWithName) -> Result<Vec<(StateIndex, 
         })
         .filter_map(|r: Result<(StateIndex, String), eyre::Error>| {
             r.map_err(|e| {
-                println!("Error encountered during parse: {}", e);
+                error!("Error encountered during parse: {}", e);
             })
             .ok()
         })

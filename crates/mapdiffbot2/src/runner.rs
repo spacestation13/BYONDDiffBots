@@ -3,7 +3,7 @@ use std::time::Duration;
 use super::job_processor::do_job;
 use diffbot_lib::job::types::Job;
 
-use log::{error, info};
+use diffbot_lib::log::{error, info};
 
 pub async fn handle_jobs<S: AsRef<str>>(name: S, mut job_receiver: yaque::Receiver) {
     while let Ok(jobguard) = job_receiver.recv().await {

@@ -27,7 +27,6 @@ diffbot_lib = { path = "../diffbot_lib" }
 git2 = "0.15.0"
 yaque = "0.6.4"
 rmp-serde = "1.1.1"
-log = "0.4.17"
 
 [dependencies.rocket]
 version = "0.5.0-rc.2"
