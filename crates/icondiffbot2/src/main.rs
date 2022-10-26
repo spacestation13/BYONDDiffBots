@@ -95,11 +95,9 @@ fn read_key(path: &Path) -> Vec<u8> {
 
 const JOB_JOURNAL_LOCATION: &str = "jobs";
 
-static LOGGER: diffbot_lib::logger::DefaultLogger = diffbot_lib::logger::DefaultLogger;
-
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
-    diffbot_lib::log::set_logger(&LOGGER).expect("Log init failed!");
+    diffbot_lib::logger::init_logger().expect("Log init failed!");
 
     stable_eyre::install().expect("Eyre handler installation failed!");
 

@@ -55,11 +55,9 @@ fn init_config(figment: &Figment) -> &Config {
 
 const JOB_JOURNAL_LOCATION: &str = "jobs";
 
-static LOGGER: diffbot_lib::logger::DefaultLogger = diffbot_lib::logger::DefaultLogger;
-
 #[launch]
 async fn rocket() -> _ {
-    diffbot_lib::log::set_logger(&LOGGER).expect("Log init failed!");
+    diffbot_lib::logger::init_logger().expect("Log init failed!");
 
     stable_eyre::install().expect("Eyre handler installation failed!");
 

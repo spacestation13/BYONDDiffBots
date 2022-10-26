@@ -1,45 +1,49 @@
-use std::io::Write;
+pub fn init_logger() -> eyre::Result<()> {
+    use simplelog::*;
 
-pub struct DefaultLogger;
+    #[cfg(not(debug_assertions))]
+    TermLogger::init(
+        LevelFilter::Info,
+        Config::default(),
+        TerminalMode::Stdout,
+        ColorChoice::Always,
+    )?;
 
-impl log::Log for DefaultLogger {
-    fn enabled(&self, _metadata: &log::Metadata) -> bool {
-        #[cfg(debug_assertions)]
-        return true;
-        #[cfg(not(debug_assertions))]
-        return _metadata.level() <= log::LevelFilter::Info;
-    }
-    fn log(&self, record: &log::Record) {
-        if self.enabled(record.metadata()) {
-            println!("{} - {}", record.level(), record.args());
-        }
-    }
-    fn flush(&self) {}
+    #[cfg(debug_assertions)]
+    TermLogger::init(
+        LevelFilter::Trace,
+        Config::default(),
+        TerminalMode::Stdout,
+        ColorChoice::Always,
+    )?;
+
+    Ok(())
 }
 
-//this is obviously more expensive than the above
-pub struct FileLogger {
-    filename: &'static str,
-}
+pub fn init_file_logger(filename: &str) -> eyre::Result<()> {
+    use simplelog::*;
 
-impl log::Log for FileLogger {
-    fn enabled(&self, _metadata: &log::Metadata) -> bool {
-        #[cfg(debug_assertions)]
-        return true;
-        #[cfg(not(debug_assertions))]
-        return _metadata.level() <= log::LevelFilter::Info;
-    }
-    fn log(&self, record: &log::Record) {
-        if self.enabled(record.metadata()) {
-            if let Err(err) = std::fs::OpenOptions::new()
-                .append(true)
-                .create(true)
-                .open(self.filename)
-                .and_then(|mut file| writeln!(file, "{} - {}", record.level(), record.args()))
-            {
-                println!("{}", err)
-            };
-        }
-    }
-    fn flush(&self) {}
+    #[cfg(not(debug_assertions))]
+    WriteLogger::init(
+        LevelFilter::Info,
+        Config::default(),
+        std::fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(filename)
+            .expect("Opening log file for write failed"),
+    )?;
+
+    #[cfg(debug_assertions)]
+    WriteLogger::init(
+        LevelFilter::Trace,
+        Config::default(),
+        std::fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(filename)
+            .expect("Opening log file for write failed"),
+    )?;
+
+    Ok(())
 }
