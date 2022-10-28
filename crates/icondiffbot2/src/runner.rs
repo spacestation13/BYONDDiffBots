@@ -7,15 +7,21 @@ use diffbot_lib::log::{error, info};
 
 pub async fn handle_jobs<S: AsRef<str>>(name: S, mut job_receiver: yaque::Receiver) {
     loop {
-        if let Ok(jobguard) = job_receiver.recv().await {
-            let job = rmp_serde::from_slice(&jobguard);
-            match job {
-                Ok(job) => job_handler(name.as_ref(), job).await,
-                Err(err) => error!("{}", err),
+        match job_receiver.recv().await {
+            Ok(jobguard) => {
+                info!("Job received from queue");
+                let job = rmp_serde::from_slice(&jobguard);
+                match job {
+                    Ok(job) => job_handler(name.as_ref(), job).await,
+                    Err(err) => error!("Failed to parse job from queue: {}", err),
+                }
+                if let Err(err) = jobguard.commit() {
+                    error!("Failed to commit change to queue: {}", err)
+                };
             }
-            if let Err(err) = jobguard.commit() {
-                error!("{}", err)
-            };
+            Err(err) => {
+                error!("Cannot receive jobs from queue: {}", err)
+            }
         }
     }
 }
