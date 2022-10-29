@@ -10,7 +10,7 @@ pub async fn handle_jobs<S: AsRef<str>>(name: S, mut job_receiver: yaque::Receiv
         match job_receiver.recv().await {
             Ok(jobguard) => {
                 info!("Job received from queue");
-                let job = rmp_serde::from_slice(&jobguard);
+                let job = serde_json::from_slice(&jobguard);
                 match job {
                     Ok(job) => job_handler(name.as_ref(), job).await,
                     Err(err) => error!("Failed to parse job from queue: {}", err),

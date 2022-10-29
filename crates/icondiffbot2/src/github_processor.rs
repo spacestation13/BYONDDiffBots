@@ -140,7 +140,7 @@ async fn handle_pull_request(
         installation: InstallationId(installation.id),
     };
 
-    let job = rmp_serde::to_vec(&job)?;
+    let job = serde_json::to_vec(&job)?;
 
     job_sender.lock().await.send(job).await?;
 
