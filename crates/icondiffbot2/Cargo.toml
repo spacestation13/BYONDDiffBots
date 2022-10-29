@@ -8,7 +8,6 @@ license = "MIT"
 [dependencies]
 serde = { version = "1.0.145", features = ["derive"] }
 serde_json = "1.0.87"
-rmp-serde = "1.1.1"
 octocrab = "0.17.0"
 dmm-tools = { git = "https://github.com/SpaceManiac/SpacemanDMM/", features = ["png", "gif"] }
 dreammaker = { git = "https://github.com/SpaceManiac/SpacemanDMM/" }
