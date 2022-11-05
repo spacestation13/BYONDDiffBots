@@ -18,6 +18,8 @@ use diffbot_lib::{
     job::types::{Job, JobSender, JobType},
 };
 
+use std::sync::Arc;
+
 async fn process_pull(
     repo: Repository,
     pull: PullRequest,
@@ -129,7 +131,7 @@ impl<'r> FromRequest<'r> for GithubEvent {
 
 async fn handle_pull_request(
     payload: String,
-    job_sender: &State<Mutex<JobSender>>,
+    job_sender: &Mutex<JobSender>,
 ) -> Result<&'static str> {
     let payload: PullRequestEventPayload = serde_json::from_str(&payload)?;
     if payload.action != "opened" && payload.action != "synchronize" {
@@ -162,7 +164,7 @@ async fn handle_pull_request(
 pub async fn process_github_payload(
     event: GithubEvent,
     payload: String,
-    job_sender: &State<Mutex<JobSender>>,
+    job_sender: &State<Arc<Mutex<JobSender>>>,
 ) -> Result<&'static str, &'static str> {
     if event.0 != "pull_request" {
         return Ok("Not a pull request event");
