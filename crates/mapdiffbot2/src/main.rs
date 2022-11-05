@@ -30,6 +30,7 @@ pub struct Config {
     pub app_id: u64,
     pub blacklist: std::collections::HashSet<u64>,
     pub blacklist_contact: String,
+    pub gc_schedule: String,
 }
 
 static CONFIG: OnceCell<Config> = OnceCell::new();
@@ -90,7 +91,7 @@ async fn rocket() -> _ {
 
     sched
         .add(
-            tokio_cron_scheduler::Job::new("30 11 * * *", move |_, _| {
+            tokio_cron_scheduler::Job::new(config.gc_schedule.as_str(), move |_, _| {
                 let job = serde_json::to_vec(&JobType::CleanupJob)
                     .expect("Cannot serialize cleanupjob, what the fuck");
                 if let Err(err) = job1.blocking_lock().try_send(job) {
