@@ -15,7 +15,7 @@ use diffbot_lib::{
         },
         graphql::get_pull_files,
     },
-    job::types::{Job, JobSender},
+    job::types::{Job, JobSender, JobType},
 };
 
 async fn process_pull(
@@ -103,7 +103,7 @@ async fn process_pull(
         installation: InstallationId(installation.id),
     };
 
-    let job = serde_json::to_vec(&job)?;
+    let job = serde_json::to_vec(&JobType::GithubJob(job))?;
 
     job_sender.lock().await.send(job).await?;
 

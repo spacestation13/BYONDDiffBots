@@ -26,6 +26,8 @@ glob = "0.3.0"
 diffbot_lib = { path = "../diffbot_lib" }
 git2 = "0.15.0"
 yaque = "0.6.4"
+walkdir = "2.3.2"
+tokio-cron-scheduler = "0.8.1"
 
 [dependencies.rocket]
 version = "0.5.0-rc.2"

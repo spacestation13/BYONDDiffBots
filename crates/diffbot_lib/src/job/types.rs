@@ -12,6 +12,12 @@ pub type JobRunner = fn(Job) -> Result<CheckOutputs>;
 pub type JobSender = Sender;
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
+pub enum JobType {
+    GithubJob(Job),
+    CleanupJob,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct Job {
     pub repo: github_types::Repository,
     pub base: Branch,

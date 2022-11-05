@@ -11,10 +11,12 @@ use std::fs::File;
 use std::io::Read;
 use std::path::PathBuf;
 
+use diffbot_lib::job::types::JobType;
 use once_cell::sync::OnceCell;
 use rocket::figment::Figment;
 use rocket::fs::FileServer;
 use serde::Deserialize;
+use std::sync::Arc;
 
 #[get("/")]
 async fn index() -> &'static str {
@@ -57,6 +59,10 @@ const JOB_JOURNAL_LOCATION: &str = "jobs";
 
 #[launch]
 async fn rocket() -> _ {
+    let sched = tokio_cron_scheduler::JobScheduler::new()
+        .await
+        .expect("Cannot start cron scheduler");
+
     diffbot_lib::logger::init_logger().expect("Log init failed!");
 
     stable_eyre::install().expect("Eyre handler installation failed!");
@@ -77,10 +83,31 @@ async fn rocket() -> _ {
 
     rocket::tokio::spawn(async move { runner::handle_jobs("MapDiffBot2", job_receiver).await });
 
-    let job_sender = rocket::tokio::sync::Mutex::new(job_sender);
+    let job_sender = Arc::new(rocket::tokio::sync::Mutex::new(job_sender));
+
+    let job1 = job_sender.clone();
+    let job2 = job_sender.clone();
+
+    sched
+        .add(
+            tokio_cron_scheduler::Job::new("30 11 * * *", move |_, _| {
+                let job = serde_json::to_vec(&JobType::CleanupJob)
+                    .expect("Cannot serialize cleanupjob, what the fuck");
+                if let Err(err) = job1.blocking_lock().try_send(job) {
+                    error!("Cannot send cleanup job: {}", err)
+                };
+            })
+            .expect("Cannot create Cron Job"),
+        )
+        .await
+        .expect("Cannot add cron job, FUCK");
+
+    if let Err(err) = sched.start().await {
+        error!("Cron scheduler error: {}", err)
+    }
 
     rocket
-        .manage(job_sender)
+        .manage(job2)
         .mount(
             "/",
             routes![index, github_processor::process_github_payload],
