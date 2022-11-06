@@ -92,7 +92,7 @@ async fn rocket() -> _ {
     sched
         .add(
             tokio_cron_scheduler::Job::new(config.gc_schedule.as_str(), move |_, _| {
-                let job = serde_json::to_vec(&JobType::CleanupJob)
+                let job = serde_json::to_vec(&JobType::CleanupJob("GC_REQUEST_DUMMY".to_owned()))
                     .expect("Cannot serialize cleanupjob, what the fuck");
                 let sender_clone = job1.clone();
                 rocket::tokio::task::spawn_blocking(|| async move {

@@ -14,7 +14,7 @@ pub async fn handle_jobs<S: AsRef<str>>(name: S, mut job_receiver: yaque::Receiv
                 match job {
                     Ok(job) => match job {
                         JobType::GithubJob(job) => job_handler(name.as_ref(), job).await,
-                        JobType::CleanupJob => garbage_collect_all_repos().await,
+                        JobType::CleanupJob(_) => garbage_collect_all_repos().await,
                     },
                     Err(err) => error!("Failed to parse job from queue: {}", err),
                 }
