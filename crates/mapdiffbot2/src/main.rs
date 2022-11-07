@@ -89,34 +89,31 @@ async fn rocket() -> _ {
     let cron_str = config.gc_schedule.to_owned();
 
     rocket::tokio::spawn(async move {
-        let sched = tokio_cron_scheduler::JobScheduler::new()
-            .await
-            .expect("Cannot start cron scheduler");
-
-        sched
-            .add(
-                tokio_cron_scheduler::Job::new_async(cron_str.as_str(), move |_, _| {
-                    let sender_clone = job_clone.clone();
-                    Box::pin(async move {
-                        let job =
-                            serde_json::to_vec(&JobType::CleanupJob("GC_REQUEST_DUMMY".to_owned()))
-                                .expect("Cannot serialize cleanupjob, what the fuck");
-                        if let Err(err) = sender_clone.lock().await.send(job).await {
-                            error!("Cannot send cleanup job: {}", err)
-                        };
+        use delay_timer::prelude::*;
+        let scheduler = DelayTimerBuilder::default()
+            .tokio_runtime_by_default()
+            .build();
+        scheduler
+            .add_task(
+                TaskBuilder::default()
+                    .set_frequency_repeated_by_cron_str(cron_str.as_str())
+                    .set_maximum_parallel_runnable_num(1)
+                    .set_task_id(1)
+                    .spawn_async_routine(move || {
+                        let sender_clone = job_clone.clone();
+                        async move {
+                            let job = serde_json::to_vec(&JobType::CleanupJob(
+                                "GC_REQUEST_DUMMY".to_owned(),
+                            ))
+                            .expect("Cannot serialize cleanupjob, what the fuck");
+                            if let Err(err) = sender_clone.lock().await.send(job).await {
+                                error!("Cannot send cleanup job: {}", err)
+                            };
+                        }
                     })
-                })
-                .expect("Cannot create Cron Job"),
+                    .expect("Can't create Cron task"),
             )
-            .await
-            .expect("Cannot add cron job, FUCK");
-
-        loop {
-            if let Err(err) = sched.tick().await {
-                error!("Cron scheduler error: {}", err)
-            }
-            rocket::tokio::time::sleep(std::time::Duration::from_millis(500)).await;
-        }
+            .expect("cannot add cron job, FUCK");
     });
 
     rocket
