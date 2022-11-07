@@ -111,8 +111,11 @@ async fn rocket() -> _ {
             .await
             .expect("Cannot add cron job, FUCK");
 
-        if let Err(err) = sched.start().await {
-            error!("Cron scheduler error: {}", err)
+        loop {
+            if let Err(err) = sched.tick().await {
+                error!("Cron scheduler error: {}", err)
+            }
+            rocket::tokio::time::sleep(std::time::Duration::from_millis(500)).await;
         }
     });
 

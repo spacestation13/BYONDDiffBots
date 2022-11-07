@@ -250,8 +250,6 @@ fn generate_finished_output<P: AsRef<Path>>(
 }
 
 pub fn do_job(job: Job) -> Result<CheckOutputs> {
-    std::env::set_current_dir(std::env::current_exe()?.parent().unwrap())?;
-
     trace!("Starting Job");
 
     let base = &job.base;

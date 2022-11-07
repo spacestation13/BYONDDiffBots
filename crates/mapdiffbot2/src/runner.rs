@@ -126,11 +126,15 @@ async fn job_handler(name: &str, job: Job) {
 
     let _ = check_run.mark_started().await;
 
+    std::env::set_current_dir(std::env::current_exe().unwrap().parent().unwrap()).unwrap();
+
     let output = rocket::tokio::time::timeout(
         Duration::from_secs(3600),
         rocket::tokio::task::spawn_blocking(move || do_job(job)),
     )
     .await;
+
+    std::env::set_current_dir(std::env::current_exe().unwrap().parent().unwrap()).unwrap();
 
     info!(
         "[{}#{}] [{}] Finished",
