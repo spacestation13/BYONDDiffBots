@@ -84,7 +84,7 @@ fn init_config(path: &Path) -> eyre::Result<&'static Config> {
 
 fn read_key(path: &Path) -> Vec<u8> {
     let mut key_file =
-        File::open(&path).unwrap_or_else(|_| panic!("Unable to find file {}", path.display()));
+        File::open(path).unwrap_or_else(|_| panic!("Unable to find file {}", path.display()));
 
     let mut key = Vec::new();
     let _ = key_file

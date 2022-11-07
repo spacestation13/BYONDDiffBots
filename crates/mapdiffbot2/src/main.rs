@@ -67,7 +67,7 @@ async fn rocket() -> _ {
     diffbot_lib::logger::init_logger("info").expect("Log init failed!");
 
     let rocket = rocket::build();
-    let config = init_config(&rocket.figment());
+    let config = init_config(rocket.figment());
 
     let key = read_key(PathBuf::from(&config.private_key_path));
 
@@ -84,8 +84,7 @@ async fn rocket() -> _ {
 
     let job_sender = Arc::new(rocket::tokio::sync::Mutex::new(job_sender));
 
-    let job1 = job_sender.clone();
-    let job2 = job_sender.clone();
+    let job_clone = job_sender.clone();
 
     let cron_str = config.gc_schedule.to_owned();
 
@@ -97,7 +96,7 @@ async fn rocket() -> _ {
         sched
             .add(
                 tokio_cron_scheduler::Job::new_async(cron_str.as_str(), move |_, _| {
-                    let sender_clone = job1.clone();
+                    let sender_clone = job_clone.clone();
                     Box::pin(async move {
                         let job =
                             serde_json::to_vec(&JobType::CleanupJob("GC_REQUEST_DUMMY".to_owned()))
@@ -118,7 +117,7 @@ async fn rocket() -> _ {
     });
 
     rocket
-        .manage(job2)
+        .manage(job_sender)
         .mount(
             "/",
             routes![index, github_processor::process_github_payload],

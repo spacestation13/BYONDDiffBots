@@ -88,7 +88,7 @@ async fn garbage_collect_all_repos() {
     info!("Garbage collection finished!");
 
     let output = {
-        if let Err(_) = output {
+        if output.is_err() {
             error!("GC timed out!");
             return;
         }
@@ -111,7 +111,6 @@ async fn garbage_collect_all_repos() {
     if let Err(e) = output {
         let fuckup = format!("{:?}", e);
         error!("GC errored: {}", fuckup);
-        return;
     }
 }
 
@@ -141,7 +140,7 @@ async fn job_handler(name: &str, job: Job) {
     );
 
     let output = {
-        if let Err(_) = output {
+        if output.is_err() {
             error!("Job timed out!");
             let _ = check_run.mark_failed("Job timed out after 1 hours!").await;
             return;
