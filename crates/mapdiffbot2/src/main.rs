@@ -31,6 +31,7 @@ pub struct Config {
     pub blacklist: std::collections::HashSet<u64>,
     pub blacklist_contact: String,
     pub gc_schedule: String,
+    pub logging: String,
 }
 
 static CONFIG: OnceCell<Config> = OnceCell::new();
@@ -60,16 +61,13 @@ const JOB_JOURNAL_LOCATION: &str = "jobs";
 
 #[launch]
 async fn rocket() -> _ {
-    let sched = tokio_cron_scheduler::JobScheduler::new()
-        .await
-        .expect("Cannot start cron scheduler");
-
-    diffbot_lib::logger::init_logger().expect("Log init failed!");
+    std::env::set_current_dir(std::env::current_exe().unwrap().parent().unwrap()).unwrap();
 
     stable_eyre::install().expect("Eyre handler installation failed!");
+    diffbot_lib::logger::init_logger("info").expect("Log init failed!");
 
     let rocket = rocket::build();
-    let config = init_config(rocket.figment());
+    let config = init_config(&rocket.figment());
 
     let key = read_key(PathBuf::from(&config.private_key_path));
 
@@ -82,33 +80,42 @@ async fn rocket() -> _ {
     let (job_sender, job_receiver) = yaque::channel(JOB_JOURNAL_LOCATION)
         .expect("Couldn't open an on-disk queue, check permissions or drive space?");
 
-    rocket::tokio::spawn(async move { runner::handle_jobs("MapDiffBot2", job_receiver).await });
+    rocket::tokio::spawn(runner::handle_jobs("MapDiffBot2", job_receiver));
 
     let job_sender = Arc::new(rocket::tokio::sync::Mutex::new(job_sender));
 
     let job1 = job_sender.clone();
     let job2 = job_sender.clone();
 
-    sched
-        .add(
-            tokio_cron_scheduler::Job::new(config.gc_schedule.as_str(), move |_, _| {
-                let job = serde_json::to_vec(&JobType::CleanupJob("GC_REQUEST_DUMMY".to_owned()))
-                    .expect("Cannot serialize cleanupjob, what the fuck");
-                let sender_clone = job1.clone();
-                rocket::tokio::task::spawn_blocking(|| async move {
-                    if let Err(err) = sender_clone.lock().await.send(job).await {
-                        error!("Cannot send cleanup job: {}", err)
-                    };
-                });
-            })
-            .expect("Cannot create Cron Job"),
-        )
-        .await
-        .expect("Cannot add cron job, FUCK");
+    let cron_str = config.gc_schedule.to_owned();
 
-    if let Err(err) = sched.start().await {
-        error!("Cron scheduler error: {}", err)
-    }
+    rocket::tokio::spawn(async move {
+        let sched = tokio_cron_scheduler::JobScheduler::new()
+            .await
+            .expect("Cannot start cron scheduler");
+
+        sched
+            .add(
+                tokio_cron_scheduler::Job::new_async(cron_str.as_str(), move |_, _| {
+                    let sender_clone = job1.clone();
+                    Box::pin(async move {
+                        let job =
+                            serde_json::to_vec(&JobType::CleanupJob("GC_REQUEST_DUMMY".to_owned()))
+                                .expect("Cannot serialize cleanupjob, what the fuck");
+                        if let Err(err) = sender_clone.lock().await.send(job).await {
+                            error!("Cannot send cleanup job: {}", err)
+                        };
+                    })
+                })
+                .expect("Cannot create Cron Job"),
+            )
+            .await
+            .expect("Cannot add cron job, FUCK");
+
+        if let Err(err) = sched.start().await {
+            error!("Cron scheduler error: {}", err)
+        }
+    });
 
     rocket
         .manage(job2)

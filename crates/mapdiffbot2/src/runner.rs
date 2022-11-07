@@ -1,3 +1,4 @@
+use std::path::PathBuf;
 use std::time::Duration;
 
 use super::job_processor::do_job;
@@ -44,7 +45,12 @@ async fn garbage_collect_all_repos() {
                     .parent()
                     .expect("Couldn't find the current exe's parent dir"),
             )?;
-            for entry in walkdir::WalkDir::new("./repos").min_depth(2).max_depth(2) {
+            let path = PathBuf::from("./repos");
+            if !path.exists() {
+                info!("Repo path doesn't exist, skipping GC");
+                return Ok(());
+            }
+            for entry in walkdir::WalkDir::new(path).min_depth(2).max_depth(2) {
                 match entry {
                     Ok(entry) => {
                         let path = entry.into_path();

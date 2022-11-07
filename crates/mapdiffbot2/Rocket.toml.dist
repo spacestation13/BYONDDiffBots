@@ -10,6 +10,7 @@ blacklist = [
 ]
 blacklist_contact = "Good luck!"
 gc_schedule = "0 0 4 * * *"
+logging = "info"
 
 [global.limits]
 forms = 131072

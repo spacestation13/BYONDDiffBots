@@ -48,6 +48,7 @@ pub struct Config {
     pub web: WebConfig,
     pub blacklist: std::collections::HashSet<u64>,
     pub contact_msg: String,
+    pub logging: String,
 }
 
 static CONFIG: OnceCell<Config> = OnceCell::new();
@@ -97,15 +98,16 @@ const JOB_JOURNAL_LOCATION: &str = "jobs";
 
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
-    diffbot_lib::logger::init_logger().expect("Log init failed!");
+    std::env::set_current_dir(std::env::current_exe().unwrap().parent().unwrap()).unwrap();
 
     stable_eyre::install().expect("Eyre handler installation failed!");
-
     // init_global_subscriber();
 
     let config_path = Path::new(".").join("config.toml");
     let config =
         init_config(&config_path).unwrap_or_else(|_| panic!("Failed to read {:?}", config_path));
+
+    diffbot_lib::logger::init_logger(&config.logging).expect("Log init failed!");
 
     let key = read_key(&PathBuf::from(&config.github.private_key_path));
 
@@ -120,7 +122,7 @@ async fn main() -> std::io::Result<()> {
     let (job_sender, job_receiver) = yaque::channel(JOB_JOURNAL_LOCATION)
         .expect("Couldn't open an on-disk queue, check permissions or drive space?");
 
-    actix_web::rt::spawn(async move { runner::handle_jobs("IconDiffBot2", job_receiver).await });
+    actix_web::rt::spawn(runner::handle_jobs("IconDiffBot2", job_receiver));
 
     let job_sender: DataJobSender = actix_web::web::Data::new(Mutex::new(job_sender));
 

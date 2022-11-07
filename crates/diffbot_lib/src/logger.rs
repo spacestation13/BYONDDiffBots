@@ -1,17 +1,21 @@
-pub fn init_logger() -> eyre::Result<()> {
-    use simplelog::*;
+use simplelog::*;
 
-    #[cfg(not(debug_assertions))]
-    TermLogger::init(
-        LevelFilter::Info,
-        Config::default(),
-        TerminalMode::Stdout,
-        ColorChoice::Always,
-    )?;
+fn get_log_level(log_level: &str) -> LevelFilter {
+    match log_level {
+        "trace" => LevelFilter::Trace,
+        "debug" => LevelFilter::Debug,
+        "info" => LevelFilter::Info,
+        "warn" => LevelFilter::Warn,
+        "error" => LevelFilter::Error,
+        _ => LevelFilter::Off,
+    }
+}
 
-    #[cfg(debug_assertions)]
+pub fn init_logger(log_level: &str) -> eyre::Result<()> {
+    let level = get_log_level(log_level);
+
     TermLogger::init(
-        LevelFilter::Trace,
+        level,
         Config::default(),
         TerminalMode::Stdout,
         ColorChoice::Always,
@@ -20,23 +24,11 @@ pub fn init_logger() -> eyre::Result<()> {
     Ok(())
 }
 
-pub fn init_file_logger(filename: &str) -> eyre::Result<()> {
-    use simplelog::*;
+pub fn init_file_logger(log_level: &str, filename: &str) -> eyre::Result<()> {
+    let level = get_log_level(log_level);
 
-    #[cfg(not(debug_assertions))]
     WriteLogger::init(
-        LevelFilter::Info,
-        Config::default(),
-        std::fs::OpenOptions::new()
-            .create(true)
-            .append(true)
-            .open(filename)
-            .expect("Opening log file for write failed"),
-    )?;
-
-    #[cfg(debug_assertions)]
-    WriteLogger::init(
-        LevelFilter::Trace,
+        level,
         Config::default(),
         std::fs::OpenOptions::new()
             .create(true)
