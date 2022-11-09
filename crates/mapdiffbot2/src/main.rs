@@ -57,11 +57,17 @@ fn init_config(figment: &Figment) -> &Config {
     CONFIG.get().unwrap()
 }
 
-const JOB_JOURNAL_LOCATION: &str = "jobs";
+const JOB_JOURNAL_LOCATION: &str = "/jobs";
 
 #[launch]
 async fn rocket() -> _ {
-    std::env::set_current_dir(std::env::current_exe().unwrap().parent().unwrap()).unwrap();
+    let curr_dir = std::env::current_exe().unwrap();
+    let parent_curr = curr_dir.parent().unwrap();
+    let queue_dir: PathBuf = [parent_curr, JOB_JOURNAL_LOCATION.as_ref()]
+        .iter()
+        .collect();
+
+    std::env::set_current_dir(parent_curr).unwrap();
 
     stable_eyre::install().expect("Eyre handler installation failed!");
     diffbot_lib::logger::init_logger("info").expect("Log init failed!");
@@ -77,7 +83,7 @@ async fn rocket() -> _ {
     ))
     .expect("fucked up octocrab");
 
-    let (job_sender, job_receiver) = yaque::channel(JOB_JOURNAL_LOCATION)
+    let (job_sender, job_receiver) = yaque::channel(queue_dir)
         .expect("Couldn't open an on-disk queue, check permissions or drive space?");
 
     rocket::tokio::spawn(runner::handle_jobs("MapDiffBot2", job_receiver));
