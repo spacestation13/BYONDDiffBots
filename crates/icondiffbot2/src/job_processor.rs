@@ -45,7 +45,19 @@ fn render(
     // TODO: Alphabetize
     // TODO: Test more edge cases
     match diff {
-        (None, None) => unreachable!("Diffing (None, None) makes no sense"),
+        (None, None) => Ok((
+            "UNCHANGED",
+            vec![format!(
+                include_str!(concat!(
+                    env!("CARGO_MANIFEST_DIR"),
+                    "/templates/diff_line.txt"
+                )),
+                state_name = "",
+                old = "",
+                new = "",
+                change_text = "UNCHANGED",
+            )],
+        )),
         (None, Some(after)) => {
             let urls = full_render(job, &after).context("Failed to render new icon file")?;
 
