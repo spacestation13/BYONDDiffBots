@@ -1,0 +1,8 @@
+
+[global]
+address = "0.0.0.0"
+port = 7878
+
+[global.limits]
+forms = 131072
+string = 131072

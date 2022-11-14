@@ -22,8 +22,10 @@ ndarray = "0.15.6"
 rayon = "1.5.3"
 toml = "0.5.9"
 ahash = "0.8.0"
-hashbrown = { version = "0.12.3", features = ["rayon"]}
+hashbrown = { version = "0.13.1", features = ["rayon"]}
 yaque = "0.6.4"
+
+tokio = { version = "1.21.2", default_features = false, features = ["macros"]}
 
 actix-web = "4.2.1"
 actix-files = "0.6.2"

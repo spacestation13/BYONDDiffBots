@@ -1243,7 +1243,7 @@ version = "0.4.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c195cf4b2285d3c993eb887b4dc56b0d5728bbe1d0f9a99c0ac6bec2da3e4d85"
 dependencies = [
- "hashbrown",
+ "hashbrown 0.12.3",
 ]
 
 [[package]]
@@ -1572,6 +1572,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8a9ee70c43aaf417c914396645a0fa852624801b24ebb7ae78fe8272889ac888"
 dependencies = [
  "ahash 0.7.6",
+]
+
+[[package]]
+name = "hashbrown"
+version = "0.13.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "33ff8ae62cd3a9102e5637afc8452c55acf3844001bd5374e0b0bd7b6616c038"
+dependencies = [
+ "ahash 0.8.0",
  "rayon",
 ]
 
@@ -1738,7 +1747,7 @@ dependencies = [
  "dmm-tools",
  "dreammaker",
  "eyre",
- "hashbrown",
+ "hashbrown 0.13.1",
  "jsonwebtoken",
  "lazy_static",
  "ndarray",
@@ -1749,6 +1758,7 @@ dependencies = [
  "serde",
  "serde_json",
  "stable-eyre",
+ "tokio",
  "toml",
  "tracing",
  "yaque",
@@ -1812,7 +1822,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "10a35a97730320ffe8e2d410b5d3b69279b98d2c14bdb8b70ea89ecf7888d41e"
 dependencies = [
  "autocfg",
- "hashbrown",
+ "hashbrown 0.12.3",
  "serde",
 ]
 
@@ -2091,7 +2101,7 @@ version = "0.7.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e999beba7b6e8345721bd280141ed958096a2e4abdf74f67ff4ce49b4b54e47a"
 dependencies = [
- "hashbrown",
+ "hashbrown 0.12.3",
 ]
 
 [[package]]
@@ -2119,6 +2129,7 @@ dependencies = [
  "serde",
  "serde_json",
  "stable-eyre",
+ "toml",
  "walkdir",
  "yaque",
 ]

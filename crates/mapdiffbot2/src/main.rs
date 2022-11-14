@@ -13,7 +13,6 @@ use std::path::PathBuf;
 
 use diffbot_lib::job::types::JobType;
 use once_cell::sync::OnceCell;
-use rocket::figment::Figment;
 use rocket::fs::FileServer;
 use serde::Deserialize;
 use std::sync::Arc;
@@ -48,32 +47,29 @@ fn read_key(path: PathBuf) -> Vec<u8> {
     key
 }
 
-fn init_config(figment: &Figment) -> &Config {
-    let config: Config = figment
-        .extract()
-        .expect("Missing config values in Rocket.toml");
+fn init_config(path: &std::path::Path) -> eyre::Result<&'static Config> {
+    let mut config_str = String::new();
+    File::open(path)?.read_to_string(&mut config_str)?;
+
+    let config = toml::from_str(&config_str)?;
 
     CONFIG.set(config).expect("Failed to set config");
-    CONFIG.get().unwrap()
+    Ok(CONFIG.get().unwrap())
 }
 
-const JOB_JOURNAL_LOCATION: &str = "/jobs";
+const JOB_JOURNAL_LOCATION: &str = "jobs";
 
 #[launch]
-async fn rocket() -> _ {
-    let curr_dir = std::env::current_exe().unwrap();
-    let parent_curr = curr_dir.parent().unwrap();
-    let queue_dir: PathBuf = [parent_curr, JOB_JOURNAL_LOCATION.as_ref()]
-        .iter()
-        .collect();
-
-    std::env::set_current_dir(parent_curr).unwrap();
+fn rocket() -> _ {
+    std::env::set_current_dir(std::env::current_exe().unwrap().parent().unwrap()).unwrap();
 
     stable_eyre::install().expect("Eyre handler installation failed!");
-    diffbot_lib::logger::init_logger("info").expect("Log init failed!");
 
-    let rocket = rocket::build();
-    let config = init_config(rocket.figment());
+    let config_path = std::path::Path::new(".").join("config.toml");
+    let config =
+        init_config(&config_path).unwrap_or_else(|_| panic!("Failed to read {:?}", config_path));
+
+    diffbot_lib::logger::init_logger(&config.logging).expect("Log init failed!");
 
     let key = read_key(PathBuf::from(&config.private_key_path));
 
@@ -83,7 +79,7 @@ async fn rocket() -> _ {
     ))
     .expect("fucked up octocrab");
 
-    let (job_sender, job_receiver) = yaque::channel(queue_dir)
+    let (job_sender, job_receiver) = yaque::channel(JOB_JOURNAL_LOCATION)
         .expect("Couldn't open an on-disk queue, check permissions or drive space?");
 
     rocket::tokio::spawn(runner::handle_jobs("MapDiffBot2", job_receiver));
@@ -107,22 +103,28 @@ async fn rocket() -> _ {
                     .set_task_id(1)
                     .spawn_async_routine(move || {
                         let sender_clone = job_clone.clone();
+                        let job =
+                            serde_json::to_vec(&JobType::CleanupJob("GC_REQUEST_DUMMY".to_owned()))
+                                .expect("Cannot serialize cleanupjob, what the fuck");
                         async move {
-                            let job = serde_json::to_vec(&JobType::CleanupJob(
-                                "GC_REQUEST_DUMMY".to_owned(),
-                            ))
-                            .expect("Cannot serialize cleanupjob, what the fuck");
                             if let Err(err) = sender_clone.lock().await.send(job).await {
                                 error!("Cannot send cleanup job: {}", err)
-                            };
+                            }
                         }
                     })
                     .expect("Can't create Cron task"),
             )
             .expect("cannot add cron job, FUCK");
+        rocket::tokio::signal::ctrl_c()
+            .await
+            .expect("Cannot wait for sigterm");
+        scheduler.remove_task(1).expect("Can't remove task");
+        scheduler
+            .stop_delay_timer()
+            .expect("Can't stop delaytimer, FUCK");
     });
 
-    rocket
+    rocket::build()
         .manage(job_sender)
         .mount(
             "/",
