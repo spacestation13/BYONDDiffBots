@@ -157,34 +157,3 @@ query {{
     }
     Ok(ret)
 }
-/*
-#[derive(Deserialize)]
-pub struct CheckRun {}
-pub async fn create_check_run<I: Into<InstallationId>>(
-    installation: I,
-    repo_id: &str,
-    sha: &str,
-) -> Result<CheckRun> {
-    let crab = octocrab::instance().installation(installation.into());
-    let run: CheckRun = crab
-        .graphql(&format!(
-            "
-mutation {{
-  createCheckRun(input: {{
-    clientMutationId:\"MAPDIFF\"
-    repositoryId: \"{}\"
-    name:\"MapDiffBot2\"
-    headSha: \"{}\"
-  }}) {{
-    checkRun {{
-      id
-    }}
-  }}
-}}
-        ",
-            repo_id, sha
-        ))
-        .await?;
-    Ok(CheckRun {})
-}
-*/
