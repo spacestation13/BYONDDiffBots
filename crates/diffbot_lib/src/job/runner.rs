@@ -2,10 +2,10 @@ use crate::github::{github_api::CheckRun, github_types::Output};
 
 pub async fn handle_output<S: AsRef<str>>(output: Vec<Output>, check_run: CheckRun, name: S) {
     match output.len() {
-        0usize => {
+        0 => {
             let _ = check_run.mark_failed("Rendering returned nothing!").await;
         }
-        1usize => {
+        1 => {
             let res = check_run
                 .mark_succeeded(output.into_iter().next().unwrap())
                 .await;
@@ -15,11 +15,10 @@ pub async fn handle_output<S: AsRef<str>>(output: Vec<Output>, check_run: CheckR
                     .await;
             }
         }
-        _ => {
-            let len = output.len();
+        len => {
             for (idx, item) in output.into_iter().enumerate() {
                 match idx {
-                    0usize => {
+                    0 => {
                         let _ = check_run
                             .rename(&format!("{} (1/{})", name.as_ref(), len))
                             .await;
