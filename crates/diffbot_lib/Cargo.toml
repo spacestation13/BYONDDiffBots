@@ -5,13 +5,13 @@ edition = "2021"
 license = "MIT"
 
 [dependencies]
-serde = { version = "1.0.145", features = ["derive"] }
-serde_json = "1.0.87"
+serde = { version = "1.0.148", features = ["derive"] }
+serde_json = "1.0.89"
 octocrab = "0.17.0"
 eyre = "0.6.8"
 derive_builder = "0.11.2"
-chrono = "0.4.22"
-reqwest = "0.11.12"
+chrono = "0.4.23"
+reqwest = "0.11.13"
 yaque = "0.6.4"
 async-fs = "1.6.0"
 futures-lite = "1.12.0"
