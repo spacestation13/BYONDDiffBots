@@ -127,18 +127,25 @@ pub fn get_diff_bounding_box(
     Some(BoundingBox::new(leftmost, bottommost, rightmost, topmost))
 }
 
-pub fn load_maps(files: &[&FileDiff]) -> Result<Vec<dmm::Map>> {
-    files
-        .iter()
-        .map(|file| dmm::Map::from_file(Path::new(&file.filename)).map_err(|e| eyre::anyhow!(e)))
-        .collect()
-}
-
-pub fn load_maps_with_whole_map_regions(files: &[&FileDiff]) -> Result<Vec<MapWithRegions>> {
+pub fn load_maps(files: &[&FileDiff], path: &std::path::Path) -> Result<Vec<dmm::Map>> {
     files
         .iter()
         .map(|file| {
-            let map = dmm::Map::from_file(Path::new(&file.filename))?;
+            let actual_path = path.join(Path::new(&file.filename));
+            dmm::Map::from_file(&actual_path).map_err(|e| eyre::anyhow!(e))
+        })
+        .collect()
+}
+
+pub fn load_maps_with_whole_map_regions(
+    files: &[&FileDiff],
+    path: &std::path::Path,
+) -> Result<Vec<MapWithRegions>> {
+    files
+        .iter()
+        .map(|file| {
+            let actual_path = path.join(Path::new(&file.filename));
+            let map = dmm::Map::from_file(&actual_path)?;
             let bbox = BoundingBox::for_full_map(&map);
             let zs = map.dim_z();
             Ok(MapWithRegions {
@@ -292,11 +299,15 @@ pub fn render_map_regions(
                     )
                     .with_context(|| format!("Rendering map {idx}"))?;
 
-                    let directory = format!("{}/{}", output_dir.display(), idx);
+                    let directory = output_dir.join(Path::new(&idx.to_string()));
 
                     std::fs::create_dir_all(&directory).context("Creating directories")?;
                     image
-                        .to_file(format!("{}/{}-{}", directory, z_level, filename).as_ref())
+                        .to_file(
+                            directory
+                                .join(Path::new(&format!("{}-{}", z_level, filename)))
+                                .as_ref(),
+                        )
                         .with_context(|| format!("Saving image {idx}"))?;
                 }
             }

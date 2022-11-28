@@ -98,8 +98,6 @@ const JOB_JOURNAL_LOCATION: &str = "jobs";
 
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
-    std::env::set_current_dir(std::env::current_exe().unwrap().parent().unwrap()).unwrap();
-
     stable_eyre::install().expect("Eyre handler installation failed!");
     // init_global_subscriber();
 

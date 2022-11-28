@@ -3,13 +3,6 @@ use std::path::Path;
 
 use git2::{build::CheckoutBuilder, FetchOptions, Repository};
 
-fn with_repo_dir<T>(repo: &Path, f: impl FnOnce() -> Result<T>) -> Result<T> {
-    std::env::set_current_dir(repo)?;
-    let result = f();
-    std::env::set_current_dir(std::env::current_exe()?.parent().unwrap())?;
-    result
-}
-
 pub fn fetch_and_get_branches<'a>(
     base_sha: &str,
     head_sha: &str,
@@ -149,22 +142,19 @@ pub fn clean_up_references(repo: &Repository, default: &str) -> Result<()> {
     Ok(())
 }
 
-pub fn with_checkout_and_dir<T>(
+pub fn with_checkout<T>(
     checkout_ref: &git2::Reference,
     repo: &Repository,
-    repodir: &Path,
     f: impl FnOnce() -> Result<T>,
 ) -> Result<T> {
-    with_repo_dir(repodir, || {
-        repo.set_head(checkout_ref.name().unwrap())?;
-        repo.checkout_head(Some(
-            CheckoutBuilder::new()
-                .force()
-                .remove_ignored(true)
-                .remove_untracked(true),
-        ))?;
-        f()
-    })
+    repo.set_head(checkout_ref.name().unwrap())?;
+    repo.checkout_head(Some(
+        CheckoutBuilder::new()
+            .force()
+            .remove_ignored(true)
+            .remove_untracked(true),
+    ))?;
+    f()
 }
 
 pub fn clone_repo(url: &str, dir: &Path) -> Result<()> {

@@ -7,7 +7,7 @@ use std::path::Path;
 use std::path::PathBuf;
 
 use super::git_operations::{
-    clean_up_references, clone_repo, fetch_and_get_branches, with_checkout_and_dir,
+    clean_up_references, clone_repo, fetch_and_get_branches, with_checkout,
 };
 
 use crate::rendering::{
@@ -52,13 +52,11 @@ fn render(
     trace!("Parsing base/head for context");
 
     let path = repo_dir.absolutize().context("Making repo path absolute")?;
-    let base_context =
-        with_checkout_and_dir(&base_branch, repo, &path, || RenderingContext::new(&path))
-            .context("Parsing base")?;
+    let base_context = with_checkout(&base_branch, repo, || RenderingContext::new(&path))
+        .context("Parsing base")?;
 
-    let head_context =
-        with_checkout_and_dir(&head_branch, repo, &path, || RenderingContext::new(&path))
-            .context("Parsing head")?;
+    let head_context = with_checkout(&head_branch, repo, || RenderingContext::new(&path))
+        .context("Parsing head")?;
 
     let base_render_passes = dmm_tools::render_passes::configure(
         base_context.map_config(),
@@ -91,9 +89,9 @@ fn render(
 
     trace!("Loading maps");
 
-    let base_maps = with_checkout_and_dir(&base_branch, repo, &path, || load_maps(modified_files))
+    let base_maps = with_checkout(&base_branch, repo, || load_maps(modified_files, &path))
         .context("Loading base maps")?;
-    let head_maps = with_checkout_and_dir(&head_branch, repo, &path, || load_maps(modified_files))
+    let head_maps = with_checkout(&head_branch, repo, || load_maps(modified_files, &path))
         .context("Loading head maps")?;
 
     trace!("Getting bounding boxes");
@@ -103,7 +101,7 @@ fn render(
     trace!("Rendering removed/modified maps");
     // You might think to yourself, wtf is going on here?
     // And you'd be right.
-    let removed_maps = with_checkout_and_dir(&base_branch, repo, &path, || {
+    let removed_maps = with_checkout(&base_branch, repo, || {
         render_map_regions(
             &base_context,
             &modified_maps.befores,
@@ -114,8 +112,8 @@ fn render(
         )
         .context("Rendering modified before maps")?;
 
-        let maps =
-            load_maps_with_whole_map_regions(removed_files).context("Loading removed maps")?;
+        let maps = load_maps_with_whole_map_regions(removed_files, &path)
+            .context("Loading removed maps")?;
 
         render_map_regions(
             &base_context,
@@ -132,7 +130,7 @@ fn render(
 
     trace!("Rendering added/modified maps");
 
-    let added_maps = with_checkout_and_dir(&head_branch, repo, &path, || {
+    let added_maps = with_checkout(&head_branch, repo, || {
         render_map_regions(
             &head_context,
             &modified_maps.afters,
@@ -143,7 +141,8 @@ fn render(
         )
         .context("Rendering modified after maps")?;
 
-        let maps = load_maps_with_whole_map_regions(added_files).context("Loading added maps")?;
+        let maps =
+            load_maps_with_whole_map_regions(added_files, &path).context("Loading added maps")?;
 
         render_map_regions(
             &head_context,

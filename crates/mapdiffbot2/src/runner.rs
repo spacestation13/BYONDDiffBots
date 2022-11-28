@@ -38,11 +38,6 @@ async fn garbage_collect_all_repos() {
         Duration::from_secs(3600),
         //tfw no try blocks
         rocket::tokio::task::spawn_blocking(move || -> Result<()> {
-            std::env::set_current_dir(
-                std::env::current_exe()?
-                    .parent()
-                    .expect("Couldn't find the current exe's parent dir"),
-            )?;
             let path = PathBuf::from("./repos");
             if !path.exists() {
                 info!("Repo path doesn't exist, skipping GC");
@@ -124,15 +119,11 @@ async fn job_handler(name: &str, job: Job) {
 
     let _ = check_run.mark_started().await;
 
-    std::env::set_current_dir(std::env::current_exe().unwrap().parent().unwrap()).unwrap();
-
     let output = rocket::tokio::time::timeout(
         Duration::from_secs(3600),
         rocket::tokio::task::spawn_blocking(move || do_job(job)),
     )
     .await;
-
-    std::env::set_current_dir(std::env::current_exe().unwrap().parent().unwrap()).unwrap();
 
     info!(
         "[{}#{}] [{}] Finished",
