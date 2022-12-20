@@ -6,21 +6,21 @@ license = "MIT"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-serde = { version = "1.0.148", features = ["derive"] }
-serde_json = { version = "1.0.89"}
-toml = "0.5.9"
+serde = { version = "1.0.151", features = ["derive"] }
+serde_json = { version = "1.0.91"}
+toml = "0.5.10"
 octocrab = "0.17.0"
 flume = "0.10.14"
 dmm-tools = { git = "https://github.com/SpaceManiac/SpacemanDMM/", features = ["png"] }
 dreammaker = { git = "https://github.com/SpaceManiac/SpacemanDMM/" }
 ahash = "0.8.2"
 path-absolutize = "3.0.14"
-jsonwebtoken = "8.1.1"
+jsonwebtoken = "8.2.0"
 lazy_static = "1.4.0"
 eyre = "0.6.8"
 stable-eyre = "0.2"
-rayon = "1.6.0"
-derive_builder = "0.11.2"
+rayon = "1.6.1"
+derive_builder = "0.12.0"
 once_cell = "1.16.0"
 image = "0.24.5"
 glob = "0.3.0"

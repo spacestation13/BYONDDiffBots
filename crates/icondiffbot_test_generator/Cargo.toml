@@ -8,5 +8,5 @@ license = "MIT"
 
 [dependencies]
 octocrab = "0.17.0"
-clap = { version = "4.0.27", features = ["derive"] }
-tokio = { version = "1.22.0", features = ["full"] }
+clap = { version = "4.0.29", features = ["derive"] }
+tokio = { version = "1.23.0", features = ["full"] }
