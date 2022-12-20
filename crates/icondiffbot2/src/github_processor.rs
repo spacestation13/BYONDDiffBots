@@ -74,10 +74,8 @@ async fn handle_pull_request(
         return Ok(());
     }
 
-    let (blacklist, contact) = {
-        let conf = &crate::CONFIG.get().unwrap();
-        (&conf.blacklist, &conf.contact_msg)
-    };
+    let conf = &crate::CONFIG.get().unwrap();
+    let (blacklist, contact) = (&conf.blacklist, &conf.contact_msg);
 
     if blacklist.contains(&payload.repository.id) {
         let output = Output {
