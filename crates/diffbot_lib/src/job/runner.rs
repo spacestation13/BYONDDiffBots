@@ -4,7 +4,12 @@ pub async fn handle_output<S: AsRef<str>>(output: Vec<Output>, check_run: CheckR
     match output.len() {
         0 => {
             let _ = check_run
-                .mark_succeeded("No Changes detected, have metadatas been modified?")
+                .mark_succeeded(Output {
+                    title: "No relevant changes",
+                    summary: "No relevant changes detected, have metadatas been modified?"
+                        .to_owned(),
+                    text: "".to_owned(),
+                })
                 .await;
         }
         1 => {
