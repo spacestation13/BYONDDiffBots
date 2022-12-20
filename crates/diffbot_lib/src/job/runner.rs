@@ -3,7 +3,9 @@ use crate::github::{github_api::CheckRun, github_types::Output};
 pub async fn handle_output<S: AsRef<str>>(output: Vec<Output>, check_run: CheckRun, name: S) {
     match output.len() {
         0 => {
-            let _ = check_run.mark_failed("Rendering returned nothing!").await;
+            let _ = check_run
+                .mark_succeded("No Changes detected, have metadatas been modified?")
+                .await;
         }
         1 => {
             let res = check_run
