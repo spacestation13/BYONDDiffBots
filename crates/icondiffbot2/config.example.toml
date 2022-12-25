@@ -1,3 +1,8 @@
+blacklist = [
+	1337,
+]
+blacklist_contact = "Good luck!"
+
 logging = "info"
 
 [github]

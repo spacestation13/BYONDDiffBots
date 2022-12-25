@@ -1,12 +1,8 @@
-use diffbot_lib::log::{error, trace};
+use diffbot_lib::log;
 use eyre::{Context, Result};
 use octocrab::models::InstallationId;
 
-use rocket::{
-    http::Status, outcome::Outcome, request, request::FromRequest, tokio::sync::Mutex, Request,
-    State,
-};
-
+use crate::DataJobSender;
 use diffbot_lib::{
     github::{
         github_api::CheckRun,
@@ -15,19 +11,17 @@ use diffbot_lib::{
         },
         graphql::get_pull_files,
     },
-    job::types::{Job, JobSender, JobType},
+    job::types::{Job, JobType},
 };
-
-use std::sync::Arc;
 
 async fn process_pull(
     repo: Repository,
     pull: PullRequest,
     check_run: CheckRun,
     installation: &Installation,
-    job_sender: &Mutex<JobSender>,
+    job_sender: DataJobSender,
 ) -> Result<()> {
-    trace!("Processing pull request");
+    log::trace!("Processing pull request");
 
     if pull
         .title
@@ -109,36 +103,42 @@ async fn process_pull(
 
     job_sender.lock().await.send(job).await?;
 
-    trace!("Job sent to queue");
+    log::trace!("Job sent to queue");
 
     Ok(())
 }
 
+use std::{future::Future, pin::Pin};
+
 #[derive(Debug)]
 pub struct GithubEvent(pub String);
 
-#[rocket::async_trait]
-impl<'r> FromRequest<'r> for GithubEvent {
-    type Error = &'static str;
+impl actix_web::FromRequest for GithubEvent {
+    type Error = std::io::Error;
 
-    async fn from_request(req: &'r Request<'_>) -> request::Outcome<Self, Self::Error> {
-        match req.headers().get_one("X-Github-Event") {
-            Some(event) => Outcome::Success(GithubEvent(event.to_owned())),
-            None => Outcome::Failure((Status::BadRequest, "Missing X-Github-Event header")),
-        }
+    type Future = Pin<Box<dyn Future<Output = Result<Self, Self::Error>>>>;
+
+    fn from_request(req: &actix_web::HttpRequest, _: &mut actix_web::dev::Payload) -> Self::Future {
+        let req = req.clone();
+        Box::pin(async move {
+            match req.headers().get("X-Github-Event") {
+                Some(event) => Ok(GithubEvent(event.to_str().unwrap().to_owned())),
+                None => Err(std::io::Error::new(
+                    std::io::ErrorKind::InvalidData,
+                    "Missing X-Github-Event header",
+                )),
+            }
+        })
     }
 }
 
-async fn handle_pull_request(
-    payload: String,
-    job_sender: &Mutex<JobSender>,
-) -> Result<&'static str> {
+async fn handle_pull_request(payload: String, job_sender: DataJobSender) -> Result<&'static str> {
     let payload: PullRequestEventPayload = serde_json::from_str(&payload)?;
     if payload.action != "opened" && payload.action != "synchronize" {
         return Ok("PR not opened or updated");
     }
 
-    trace!("Creating checkrun");
+    log::trace!("Creating checkrun");
 
     let check_run = CheckRun::create(
         &payload.repository.full_name(),
@@ -160,20 +160,20 @@ async fn handle_pull_request(
     Ok("Check submitted")
 }
 
-#[post("/payload", format = "json", data = "<payload>")]
+#[actix_web::post("/payload")]
 pub async fn process_github_payload(
     event: GithubEvent,
     payload: String,
-    job_sender: &State<Arc<Mutex<JobSender>>>,
-) -> Result<&'static str, &'static str> {
+    job_sender: DataJobSender,
+) -> actix_web::Result<&'static str> {
     if event.0 != "pull_request" {
         return Ok("Not a pull request event");
     }
 
-    trace!("Payload received, processing");
+    log::trace!("Payload received, processing");
 
     handle_pull_request(payload, job_sender).await.map_err(|e| {
-        error!("Error handling event: {:?}", e);
-        "An error occured while handling the event"
+        log::error!("Error handling event: {:?}", e);
+        actix_web::error::ErrorBadRequest(e)
     })
 }

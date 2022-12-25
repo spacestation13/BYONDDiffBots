@@ -4,8 +4,7 @@ mod runner;
 mod sha;
 mod table_builder;
 
-use async_mutex::Mutex;
-use diffbot_lib::job::types::JobSender;
+use diffbot_lib::{async_fs, async_mutex::Mutex, job::types::JobSender};
 use octocrab::OctocrabBuilder;
 use once_cell::sync::OnceCell;
 use serde::Deserialize;
@@ -15,12 +14,16 @@ use std::{
     path::{Path, PathBuf},
 };
 
+#[cfg(not(target_env = "msvc"))]
+#[global_allocator]
+static GLOBAL: jemallocator::Jemalloc = jemallocator::Jemalloc;
+
+pub type DataJobSender = actix_web::web::Data<Mutex<JobSender>>;
+
 #[actix_web::get("/")]
 async fn index() -> &'static str {
     "IDB says hello!"
 }
-
-pub type DataJobSender = actix_web::web::Data<Mutex<JobSender>>;
 
 #[derive(Debug, Deserialize)]
 pub struct GithubConfig {
@@ -39,16 +42,23 @@ pub struct WebConfig {
     pub address: String,
     pub port: u16,
     pub file_hosting_url: String,
-    pub limits: WebLimitsConfig,
+    pub limits: Option<WebLimitsConfig>,
 }
 
 #[derive(Debug, Deserialize)]
 pub struct Config {
     pub github: GithubConfig,
     pub web: WebConfig,
+    #[serde(default = "std::collections::HashSet::new")]
     pub blacklist: std::collections::HashSet<u64>,
-    pub contact_msg: String,
+    #[serde(default = "String::new")]
+    pub blacklist_contact: String,
+    #[serde(default = "default_log_level")]
     pub logging: String,
+}
+
+fn default_log_level() -> String {
+    "info".to_string()
 }
 
 static CONFIG: OnceCell<Config> = OnceCell::new();
@@ -97,7 +107,7 @@ fn read_key(path: &Path) -> Vec<u8> {
 const JOB_JOURNAL_LOCATION: &str = "jobs";
 
 #[actix_web::main]
-async fn main() -> std::io::Result<()> {
+async fn main() -> eyre::Result<()> {
     stable_eyre::install().expect("Eyre handler installation failed!");
     // init_global_subscriber();
 
@@ -125,9 +135,17 @@ async fn main() -> std::io::Result<()> {
     let job_sender: DataJobSender = actix_web::web::Data::new(Mutex::new(job_sender));
 
     actix_web::HttpServer::new(move || {
-        let form_config = actix_web::web::FormConfig::default().limit(config.web.limits.forms);
-        let string_config =
-            actix_web::web::PayloadConfig::default().limit(config.web.limits.string);
+        use actix_web::web::{FormConfig, PayloadConfig};
+        //absolutely rancid
+        let (form_config, string_config) = config.web.limits.as_ref().map_or(
+            (FormConfig::default(), PayloadConfig::default()),
+            |limits| {
+                (
+                    FormConfig::default().limit(limits.forms),
+                    PayloadConfig::default().limit(limits.string),
+                )
+            },
+        );
         actix_web::App::new()
             .app_data(form_config)
             .app_data(string_config)
@@ -138,5 +156,6 @@ async fn main() -> std::io::Result<()> {
     })
     .bind((config.web.address.as_ref(), config.web.port))?
     .run()
-    .await
+    .await?;
+    Ok(())
 }

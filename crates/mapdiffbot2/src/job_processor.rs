@@ -2,7 +2,6 @@ use diffbot_lib::log::trace;
 use eyre::{Context, Result};
 use path_absolutize::Absolutize;
 use rayon::prelude::*;
-use rocket::tokio::runtime::Handle;
 use std::path::Path;
 use std::path::PathBuf;
 
@@ -179,7 +178,7 @@ fn generate_finished_output<P: AsRef<Path>>(
     maps: RenderedMaps,
 ) -> Result<CheckOutputs> {
     let conf = CONFIG.get().unwrap();
-    let file_url = &conf.file_hosting_url;
+    let file_url = &conf.web.file_hosting_url;
     let non_abs_directory = file_directory.as_ref().to_string_lossy();
 
     let mut builder = CheckOutputBuilder::new(
@@ -256,7 +255,7 @@ pub fn do_job(job: Job) -> Result<CheckOutputs> {
     let repo = format!("https://github.com/{}", job.repo.full_name());
     let repo_dir: PathBuf = ["./repos/", &job.repo.full_name()].iter().collect();
 
-    let handle = Handle::try_current().unwrap();
+    let handle = actix_web::rt::Runtime::new()?;
 
     if !repo_dir.exists() {
         trace!("Directory doesn't exist, creating dir");
@@ -264,7 +263,7 @@ pub fn do_job(job: Job) -> Result<CheckOutputs> {
         handle.block_on(async {
 				let output = Output {
 					title: "Cloning repo...",
-					summary: "The repository is being cloned, this will take a few minutes. Future runs will not require cloning.".to_owned(),
+				    summary: "The repository is being cloned, this will take a few minutes. Future runs will not require cloning.".to_owned(),
 					text: "".to_owned(),
 				};
 				let _ = job.check_run.set_output(output).await; // we don't really care if updating the job fails, just continue

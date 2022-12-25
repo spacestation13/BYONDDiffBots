@@ -4,26 +4,26 @@ use std::time::Duration;
 use super::job_processor::do_job;
 use diffbot_lib::job::types::{Job, JobType};
 
-use diffbot_lib::log::{error, info};
+use diffbot_lib::log;
 
 pub async fn handle_jobs<S: AsRef<str>>(name: S, mut job_receiver: yaque::Receiver) {
     loop {
         match job_receiver.recv().await {
             Ok(jobguard) => {
-                info!("Job received from queue");
+                log::info!("Job received from queue");
                 let job: Result<JobType, serde_json::Error> = serde_json::from_slice(&jobguard);
                 match job {
                     Ok(job) => match job {
                         JobType::GithubJob(job) => job_handler(name.as_ref(), job).await,
                         JobType::CleanupJob(_) => garbage_collect_all_repos().await,
                     },
-                    Err(err) => error!("Failed to parse job from queue: {}", err),
+                    Err(err) => log::error!("Failed to parse job from queue: {}", err),
                 }
                 if let Err(err) = jobguard.commit() {
-                    error!("Failed to commit change to queue: {}", err)
+                    log::error!("Failed to commit change to queue: {}", err)
                 };
             }
-            Err(err) => error!("{}", err),
+            Err(err) => log::error!("{}", err),
         }
     }
 }
@@ -32,15 +32,15 @@ async fn garbage_collect_all_repos() {
     use eyre::Result;
     use path_absolutize::Absolutize;
     use std::process::Command;
-    info!("Garbage collection starting!");
+    log::info!("Garbage collection starting!");
 
-    let output = rocket::tokio::time::timeout(
+    let output = actix_web::rt::time::timeout(
         Duration::from_secs(3600),
         //tfw no try blocks
-        rocket::tokio::task::spawn_blocking(move || -> Result<()> {
+        actix_web::rt::task::spawn_blocking(move || -> Result<()> {
             let path = PathBuf::from("./repos");
             if !path.exists() {
-                info!("Repo path doesn't exist, skipping GC");
+                log::info!("Repo path doesn't exist, skipping GC");
                 return Ok(());
             }
             for entry in walkdir::WalkDir::new(path).min_depth(2).max_depth(2) {
@@ -54,12 +54,12 @@ async fn garbage_collect_all_repos() {
                                 Command::new("git").current_dir(&path).arg("gc").status()?;
                             if !output.success() {
                                 match output.code() {
-                                    Some(num) => error!(
+                                    Some(num) => log::error!(
                                         "GC failed on dir {} with code {}",
                                         path.display(),
                                         num
                                     ),
-                                    None => error!(
+                                    None => log::error!(
                                         "GC failed on dir {}, process terminated!",
                                         path.display(),
                                     ),
@@ -67,10 +67,10 @@ async fn garbage_collect_all_repos() {
                             }
                             Ok(())
                         }() {
-                            error!("{}", err);
+                            log::error!("{}", err);
                         }
                     }
-                    Err(err) => error!("Walkdir failed: {}", err),
+                    Err(err) => log::error!("Walkdir failed: {}", err),
                 }
             }
             Ok(())
@@ -78,11 +78,11 @@ async fn garbage_collect_all_repos() {
     )
     .await;
 
-    info!("Garbage collection finished!");
+    log::info!("Garbage collection finished!");
 
     let output = {
         if output.is_err() {
-            error!("GC timed out!");
+            log::error!("GC timed out!");
             return;
         }
         output.unwrap()
@@ -96,21 +96,21 @@ async fn garbage_collect_all_repos() {
             },
             Err(e) => e.to_string(),
         };
-        error!("Join Handle error: {}", fuckup);
+        log::error!("Join Handle error: {}", fuckup);
         return;
     }
 
     let output = output.unwrap();
     if let Err(e) = output {
         let fuckup = format!("{:?}", e);
-        error!("GC errored: {}", fuckup);
+        log::error!("GC errored: {}", fuckup);
     }
 }
 
 async fn job_handler(name: &str, job: Job) {
     let (repo, pull_request, check_run) =
         (job.repo.clone(), job.pull_request, job.check_run.clone());
-    info!(
+    log::info!(
         "[{}#{}] [{}] Starting",
         repo.full_name(),
         pull_request,
@@ -119,13 +119,13 @@ async fn job_handler(name: &str, job: Job) {
 
     let _ = check_run.mark_started().await;
 
-    let output = rocket::tokio::time::timeout(
+    let output = actix_web::rt::time::timeout(
         Duration::from_secs(3600),
-        rocket::tokio::task::spawn_blocking(move || do_job(job)),
+        actix_web::rt::task::spawn_blocking(move || do_job(job)),
     )
     .await;
 
-    info!(
+    log::info!(
         "[{}#{}] [{}] Finished",
         repo.full_name(),
         pull_request,
@@ -134,7 +134,7 @@ async fn job_handler(name: &str, job: Job) {
 
     let output = {
         if output.is_err() {
-            error!("Job timed out!");
+            log::error!("Job timed out!");
             let _ = check_run.mark_failed("Job timed out after 1 hours!").await;
             return;
         }
@@ -149,7 +149,7 @@ async fn job_handler(name: &str, job: Job) {
             },
             Err(e) => e.to_string(),
         };
-        error!("Join Handle error: {}", fuckup);
+        log::error!("Join Handle error: {}", fuckup);
         let _ = check_run.mark_failed(&fuckup).await;
         return;
     }
@@ -157,7 +157,7 @@ async fn job_handler(name: &str, job: Job) {
     let output = output.unwrap();
     if let Err(e) = output {
         let fuckup = format!("{:?}", e);
-        error!("Other rendering error: {}", fuckup);
+        log::error!("Other rendering error: {}", fuckup);
         let _ = check_run.mark_failed(&fuckup).await;
         return;
     }
