@@ -16,7 +16,7 @@ use std::sync::Arc;
 
 #[cfg(not(target_env = "msvc"))]
 #[global_allocator]
-static GLOBAL: jemallocator::Jemalloc = jemallocator::Jemalloc;
+static GLOBAL: tikv_jemallocator::Jemalloc = tikv_jemallocator::Jemalloc;
 
 pub type DataJobSender = actix_web::web::Data<Arc<Mutex<diffbot_lib::job::types::JobSender>>>;
 

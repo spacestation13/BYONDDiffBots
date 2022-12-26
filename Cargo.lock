@@ -1570,7 +1570,6 @@ dependencies = [
  "dreammaker",
  "eyre",
  "hashbrown 0.13.1",
- "jemallocator",
  "jsonwebtoken",
  "lazy_static",
  "ndarray",
@@ -1581,6 +1580,7 @@ dependencies = [
  "serde",
  "serde_json",
  "stable-eyre",
+ "tikv-jemallocator",
  "toml",
  "tracing",
  "yaque",
@@ -1723,27 +1723,6 @@ name = "itoa"
 version = "1.0.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "fad582f4b9e86b6caa621cabeb0963332d92eea04729ab12892c2533951e6440"
-
-[[package]]
-name = "jemalloc-sys"
-version = "0.5.2+5.3.0-patched"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "134163979b6eed9564c98637b710b40979939ba351f59952708234ea11b5f3f8"
-dependencies = [
- "cc",
- "fs_extra",
- "libc",
-]
-
-[[package]]
-name = "jemallocator"
-version = "0.5.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "16c2514137880c52b0b4822b563fadd38257c1f380858addb74a400889696ea6"
-dependencies = [
- "jemalloc-sys",
- "libc",
-]
 
 [[package]]
 name = "jobserver"
@@ -1961,7 +1940,6 @@ dependencies = [
  "git2",
  "glob",
  "image",
- "jemallocator",
  "jsonwebtoken",
  "lazy_static",
  "octocrab",
@@ -1971,6 +1949,7 @@ dependencies = [
  "serde",
  "serde_json",
  "stable-eyre",
+ "tikv-jemallocator",
  "toml",
  "walkdir",
  "yaque",
@@ -3104,6 +3083,27 @@ dependencies = [
  "flate2",
  "jpeg-decoder",
  "weezl",
+]
+
+[[package]]
+name = "tikv-jemalloc-sys"
+version = "0.5.2+5.3.0-patched"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ec45c14da997d0925c7835883e4d5c181f196fa142f8c19d7643d1e9af2592c3"
+dependencies = [
+ "cc",
+ "fs_extra",
+ "libc",
+]
+
+[[package]]
+name = "tikv-jemallocator"
+version = "0.5.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "20612db8a13a6c06d57ec83953694185a367e16945f66565e8028d2c0bd76979"
+dependencies = [
+ "libc",
+ "tikv-jemalloc-sys",
 ]
 
 [[package]]
