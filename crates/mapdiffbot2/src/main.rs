@@ -122,7 +122,7 @@ async fn main() -> eyre::Result<()> {
 
     let cron_str = config.gc_schedule.to_owned();
 
-    actix_web::rt::spawn(async move { gc_job::gc_scheduler(cron_str, job_clone) });
+    actix_web::rt::spawn(async move { gc_job::gc_scheduler(cron_str, job_clone).await });
 
     actix_web::HttpServer::new(move || {
         use actix_web::web::{FormConfig, PayloadConfig};
