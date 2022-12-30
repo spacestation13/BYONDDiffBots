@@ -1,3 +1,10 @@
+blacklist = [
+	1337,
+]
+blacklist_contact = "Good luck!"
+
+logging = "info"
+
 [github]
 app_id = 123456
 private_key_path = "diffbot.pem"
@@ -10,3 +17,4 @@ file_hosting_url = "http://example.com:1234/images"
 [web.limits]
 forms = 131072
 string = 131072
+

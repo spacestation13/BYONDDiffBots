@@ -1,14 +1,13 @@
 use std::{cmp::min, collections::HashSet, path::Path, sync::RwLock};
 
-extern crate dreammaker as dm;
+extern crate dreammaker;
 
 use ahash::RandomState;
-use anyhow::{Context, Result};
-use dm::objtree::ObjectTree;
+use diffbot_lib::github::github_types::FileDiff;
+use diffbot_lib::log::{error, info, trace};
 use dmm_tools::{dmi::Image, dmm, minimap, render_passes::RenderPass, IconCache};
-use image::io::Reader as ImageReader;
-use image::{GenericImageView, ImageBuffer, Pixel};
-use octocrab::models::pulls::FileDiff;
+use eyre::{Context, Result};
+use image::{io::Reader, GenericImageView, ImageBuffer, Pixel};
 use rayon::prelude::*;
 
 #[derive(Debug, Clone)]
@@ -60,19 +59,24 @@ pub fn get_diff_bounding_box(
     let left_dims = base_map.dim_xyz();
     let right_dims = head_map.dim_xyz();
     if left_dims != right_dims {
-        println!(
+        info!(
             "Maps have different sizes: {:?} {:?}",
             left_dims, right_dims
         );
     }
 
-    let mut rightmost = 0usize;
-    let mut leftmost = left_dims.0;
-    let mut topmost = 0usize;
-    let mut bottommost = left_dims.1;
+    let max_y = min(left_dims.1, right_dims.1);
+    let max_x = min(left_dims.0, right_dims.0);
 
-    for y in 0..min(left_dims.1, right_dims.1) {
-        for x in 0..min(left_dims.0, right_dims.0) {
+    trace!("max_y: {}, max_x: {}", max_y, max_x);
+
+    let mut rightmost = 0usize;
+    let mut leftmost = max_x;
+    let mut topmost = 0usize;
+    let mut bottommost = max_y;
+
+    for y in 0..max_y {
+        for x in 0..max_x {
             let left_tile = &base_map.dictionary[&base_map.grid[(z_level, left_dims.1 - y - 1, x)]];
             let right_tile =
                 &head_map.dictionary[&head_map.grid[(z_level, right_dims.1 - y - 1, x)]];
@@ -97,21 +101,51 @@ pub fn get_diff_bounding_box(
         return None;
     }
 
+    trace!(
+        "Before expansion max: (right, top):({}, {}), min: (left, bottom):({}, {})",
+        rightmost,
+        topmost,
+        leftmost,
+        bottommost
+    );
+
+    //this is a god awful way to expand bounds without it going out of bounds
+
+    rightmost = rightmost.saturating_add(2).clamp(1, max_x - 1);
+    topmost = topmost.saturating_add(2).clamp(1, max_y - 1);
+    leftmost = leftmost.saturating_sub(2).clamp(1, max_x - 1);
+    bottommost = bottommost.saturating_sub(2).clamp(1, max_y - 1);
+
+    trace!(
+        "After expansion max: (right, top):({}, {}), min: (left, bottom):({}, {})",
+        rightmost,
+        topmost,
+        leftmost,
+        bottommost
+    );
+
     Some(BoundingBox::new(leftmost, bottommost, rightmost, topmost))
 }
 
-pub fn load_maps(files: &[&FileDiff]) -> Result<Vec<dmm::Map>> {
-    files
-        .iter()
-        .map(|file| dmm::Map::from_file(Path::new(&file.filename)).map_err(|e| anyhow::anyhow!(e)))
-        .collect()
-}
-
-pub fn load_maps_with_whole_map_regions(files: &[&FileDiff]) -> Result<Vec<MapWithRegions>> {
+pub fn load_maps(files: &[&FileDiff], path: &std::path::Path) -> Result<Vec<dmm::Map>> {
     files
         .iter()
         .map(|file| {
-            let map = dmm::Map::from_file(Path::new(&file.filename))?;
+            let actual_path = path.join(Path::new(&file.filename));
+            dmm::Map::from_file(&actual_path).map_err(|e| eyre::anyhow!(e))
+        })
+        .collect()
+}
+
+pub fn load_maps_with_whole_map_regions(
+    files: &[&FileDiff],
+    path: &std::path::Path,
+) -> Result<Vec<MapWithRegions>> {
+    files
+        .iter()
+        .map(|file| {
+            let actual_path = path.join(Path::new(&file.filename));
+            let map = dmm::Map::from_file(&actual_path)?;
             let bbox = BoundingBox::for_full_map(&map);
             let zs = map.dim_z();
             Ok(MapWithRegions {
@@ -170,19 +204,19 @@ pub fn get_map_diff_bounding_boxes(
 }
 
 pub struct RenderingContext {
-    map_renderer_config: dm::config::MapRenderer,
-    obj_tree: ObjectTree,
+    map_renderer_config: dreammaker::config::MapRenderer,
+    obj_tree: dreammaker::objtree::ObjectTree,
     icon_cache: IconCache,
 }
 
 impl RenderingContext {
     pub fn new(path: &Path) -> Result<Self> {
-        let dm_context = dm::Context::default();
+        let dm_context = dreammaker::Context::default();
         let mut icon_cache = IconCache::default();
 
-        let environment = match dm::detect_environment(path, dm::DEFAULT_ENV) {
+        let environment = match dreammaker::detect_environment(path, dreammaker::DEFAULT_ENV) {
             Ok(Some(found)) => found,
-            _ => dm::DEFAULT_ENV.into(),
+            _ => dreammaker::DEFAULT_ENV.into(),
         };
 
         if let Some(parent) = environment.parent() {
@@ -190,10 +224,10 @@ impl RenderingContext {
         }
 
         dm_context.autodetect_config(&environment);
-        let pp = dm::preprocessor::Preprocessor::new(&dm_context, environment)
+        let pp = dreammaker::preprocessor::Preprocessor::new(&dm_context, environment)
             .context("Creating preprocessor")?;
-        let indents = dm::indents::IndentProcessor::new(&dm_context, pp);
-        let parser = dm::parser::Parser::new(&dm_context, indents);
+        let indents = dreammaker::indents::IndentProcessor::new(&dm_context, pp);
+        let parser = dreammaker::parser::Parser::new(&dm_context, indents);
 
         let obj_tree = parser.parse_object_tree();
         let map_renderer_config = dm_context.config().map_renderer.clone();
@@ -205,13 +239,13 @@ impl RenderingContext {
         })
     }
 
-    pub fn map_config(&self) -> &dm::config::MapRenderer {
+    pub fn map_config(&self) -> &dreammaker::config::MapRenderer {
         &self.map_renderer_config
     }
 }
 
 pub fn render_map(
-    objtree: &ObjectTree,
+    objtree: &dreammaker::objtree::ObjectTree,
     icon_cache: &IconCache,
     map: &dmm::Map,
     z_level: usize,
@@ -231,7 +265,7 @@ pub fn render_map(
         bump: &bump,
     };
     minimap::generate(minimap_context, icon_cache)
-        .map_err(|_| anyhow::anyhow!("An error occured during map rendering"))
+        .map_err(|_| eyre::anyhow!("An error occured during map rendering"))
 }
 
 pub fn render_map_regions(
@@ -265,11 +299,15 @@ pub fn render_map_regions(
                     )
                     .with_context(|| format!("Rendering map {idx}"))?;
 
-                    let directory = format!("{}/{}", output_dir.display(), idx);
+                    let directory = output_dir.join(Path::new(&idx.to_string()));
 
                     std::fs::create_dir_all(&directory).context("Creating directories")?;
                     image
-                        .to_file(format!("{}/{}-{}", directory, z_level, filename).as_ref())
+                        .to_file(
+                            directory
+                                .join(Path::new(&format!("{}-{}", z_level, filename)))
+                                .as_ref(),
+                        )
                         .with_context(|| format!("Saving image {idx}"))?;
                 }
             }
@@ -289,14 +327,14 @@ pub fn render_diffs_for_directory<P: AsRef<Path>>(directory: P) {
         .map(|entry| {
             let fuck = entry.to_string_lossy();
             let replaced_entry = fuck.replace("-before.png", "-after.png");
-            let before = ImageReader::open(&entry)?.decode()?;
-            let after = ImageReader::open(&replaced_entry)?.decode()?;
+            let before = Reader::open(&entry)?.decode()?;
+            let after = Reader::open(&replaced_entry)?.decode()?;
 
             ImageBuffer::from_fn(after.width(), after.height(), |x, y| {
                 let before_pixel = before.get_pixel(x, y);
                 let after_pixel = after.get_pixel(x, y);
                 if before_pixel == after_pixel {
-                    after_pixel.map_without_alpha(|c| c / 3)
+                    after_pixel.map_without_alpha(|c| c.saturating_add((255 - c) / 3))
                 } else {
                     image::Rgba([255, 0, 0, 255])
                 }
@@ -307,6 +345,6 @@ pub fn render_diffs_for_directory<P: AsRef<Path>>(directory: P) {
         })
         .filter_map(|r: Result<()>| r.err())
         .for_each(|e| {
-            eprintln!("Diff rendering error: {}", e);
+            error!("Diff rendering error: {}", e);
         });
 }

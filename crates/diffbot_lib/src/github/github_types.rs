@@ -2,11 +2,6 @@ use derive_builder::Builder;
 use serde::{Deserialize, Serialize};
 
 #[derive(Deserialize, Debug, Clone)]
-pub struct User {
-    pub login: String,
-}
-
-#[derive(Deserialize, Debug, Clone)]
 pub struct Installation {
     pub id: u64,
 }
@@ -14,9 +9,7 @@ pub struct Installation {
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct Repository {
     pub url: String,
-    pub name: String,
     pub id: u64,
-    pub default_branch: Option<String>,
 }
 
 impl Repository {
@@ -28,22 +21,10 @@ impl Repository {
         let mut iter = self.url.split('/').skip(4).take(2).map(|a| a.to_string());
         (iter.next().unwrap(), iter.next().unwrap())
     }
-
-    // pub fn owner(&self) -> String {
-    //     self.url
-    //         .split('/')
-    //         .skip(4)
-    //         .take(1)
-    //         .collect::<Vec<&str>>()
-    //         .join("")
-    // }
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct Branch {
-    #[serde(rename = "ref")]
-    pub name: String,
-    pub repo: Repository,
     pub sha: String,
 }
 
@@ -81,7 +62,6 @@ pub struct CheckSuitePayload {
     pub action: String,
     pub repository: Repository,
     pub check_suite: CheckSuite,
-    pub installation: Installation,
 }
 
 #[derive(Deserialize, Debug)]
@@ -89,7 +69,6 @@ pub struct CheckRunPayload {
     pub action: String,
     pub repository: Repository,
     pub check_run: RawCheckRun,
-    pub installation: Installation,
 }
 
 #[derive(Deserialize, Debug)]
@@ -103,7 +82,7 @@ pub struct PullRequestEventPayload {
 
 #[derive(Serialize, Debug)]
 pub struct Output {
-    pub title: String,
+    pub title: &'static str,
     pub summary: String,
     pub text: String,
 }
@@ -112,6 +91,22 @@ pub struct Output {
 pub struct CreateCheckRun {
     pub name: String,
     pub head_sha: String,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct FileDiff {
+    pub filename: String,
+    pub status: ChangeType,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ChangeType {
+    Added,
+    Changed,
+    Copied,
+    Deleted,
+    Modified,
+    Renamed,
 }
 
 #[derive(Serialize, Builder, Default)]
@@ -133,27 +128,18 @@ pub struct UpdateCheckRun {
     pub output: Option<Output>,
 }
 
-#[derive(Serialize, Deserialize, Clone, Copy)]
-pub struct Empty {}
-
-#[derive(Debug)]
-pub enum CheckOutputs {
-    One(Output),
-    Many(Output, Vec<Output>),
-}
+pub type CheckOutputs = Vec<Output>;
 
 #[derive(Debug)]
 pub struct CheckOutputBuilder {
-    title: String,
-    summary: String,
+    title: &'static str,
+    summary: &'static str,
     current_text: String,
     outputs: Vec<Output>,
 }
 
 impl CheckOutputBuilder {
-    pub fn new<S: Into<String>>(title: S, summary: S) -> Self {
-        let title = title.into();
-        let summary = summary.into();
+    pub fn new(title: &'static str, summary: &'static str) -> Self {
         Self {
             title,
             summary,
@@ -167,8 +153,8 @@ impl CheckOutputBuilder {
         // Leaving a 5k character safety margin is prob overkill but oh well
         if self.current_text.len() > 60_000 {
             let output = Output {
-                title: self.title.clone(),
-                summary: self.summary.clone(),
+                title: self.title,
+                summary: self.summary.to_string(),
                 text: std::mem::take(&mut self.current_text),
             };
             self.outputs.push(output);
@@ -186,16 +172,11 @@ impl CheckOutputBuilder {
         if !current_text.is_empty() {
             let output = Output {
                 title,
-                summary,
+                summary: summary.to_string(),
                 text: current_text,
             };
             outputs.push(output);
         }
-        let first = outputs.remove(0);
-        if outputs.is_empty() {
-            CheckOutputs::One(first)
-        } else {
-            CheckOutputs::Many(first, outputs)
-        }
+        outputs
     }
 }

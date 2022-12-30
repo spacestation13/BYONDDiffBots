@@ -1,10 +1,10 @@
-use anyhow::Result;
 use diffbot_lib::github::github_types::{CheckOutputs, Output};
+use eyre::Result;
 use std::collections::HashMap;
 
 #[derive(Default, Debug)]
 pub struct OutputTableBuilder<'a> {
-    map: HashMap<&'a str, (String, Vec<String>)>,
+    map: HashMap<&'a str, (&'static str, Vec<String>)>,
 }
 
 impl<'a> OutputTableBuilder<'a> {
@@ -16,13 +16,13 @@ impl<'a> OutputTableBuilder<'a> {
     pub fn insert(
         &mut self,
         k: &'a str,
-        v: (String, Vec<String>),
-    ) -> Option<(String, Vec<String>)> {
+        v: (&'static str, Vec<String>),
+    ) -> Option<(&'static str, Vec<String>)> {
         self.map.insert(k, v)
     }
 
     #[tracing::instrument]
-    pub async fn build(&self) -> Result<CheckOutputs> {
+    pub fn build(&self) -> Result<CheckOutputs> {
         // TODO: Make this not shit
         let mut file_names: HashMap<&str, u32> = HashMap::new();
         let mut details: Vec<(String, &str, String)> = Vec::new();
@@ -73,8 +73,8 @@ impl<'a> OutputTableBuilder<'a> {
 
             if current_output_text.len() + diff_block.len() > 60_000 {
                 chunks.push(Output {
-                    title: "Icon difference rendering".to_owned(),
-                    summary: "*This is still a beta. Please file any issues [here](https://github.com/spacestation13/BYONDDiffBots/).*\n\nIcons with diff:".to_owned(),
+                    title: "Icon difference rendering",
+                    summary: "*This is still a beta. Please file any issues [here](https://github.com/spacestation13/BYONDDiffBots/).*\n\nIcons with diff:".to_string(),
                     text: std::mem::take(&mut current_output_text)
                 });
             }
@@ -84,17 +84,11 @@ impl<'a> OutputTableBuilder<'a> {
 
         if !current_output_text.is_empty() {
             chunks.push(Output {
-                title: "Icon difference rendering".to_owned(),
-                summary: "*This is still a beta. Please file any issues [here](https://github.com/spacestation13/BYONDDiffBots/).*\n\nIcons with diff:".to_owned(),
+                title: "Icon difference rendering",
+                summary: "*This is still a beta. Please file any issues [here](https://github.com/spacestation13/BYONDDiffBots/).*\n\nIcons with diff:".to_string(),
                 text: std::mem::take(&mut current_output_text)
             });
         }
-
-        let first = chunks.drain(0..1).next().unwrap();
-        if !chunks.is_empty() {
-            Ok(CheckOutputs::Many(first, chunks))
-        } else {
-            Ok(CheckOutputs::One(first))
-        }
+        Ok(chunks)
     }
 }

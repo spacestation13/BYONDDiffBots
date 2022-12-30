@@ -3,62 +3,66 @@ use crate::{
     table_builder::OutputTableBuilder,
     CONFIG,
 };
-use anyhow::{Context, Result};
+use diffbot_lib::log::error;
 use diffbot_lib::{github::github_types::CheckOutputs, job::types::Job};
 use dmm_tools::dmi::render::{IconRenderer, RenderType};
 use dmm_tools::dmi::State;
 use dreammaker::dmi::StateIndex;
+use eyre::{Context, Result};
 use hashbrown::HashSet;
 use rayon::prelude::*;
 use std::{
-    collections::hash_map::DefaultHasher,
     fs::File,
     hash::{Hash, Hasher},
     io::{BufWriter, Write},
     path::Path,
 };
-use tokio::runtime::Handle;
-use tracing::{info_span, Instrument};
 
 #[tracing::instrument]
-pub fn do_job(job: &Job) -> Result<CheckOutputs> {
-    // TODO: Maybe have jobs just be async?
-    let handle = Handle::try_current()?;
-    handle.block_on(async { handle_changed_files(job).await })
-}
+pub fn do_job(job: Job) -> Result<CheckOutputs> {
+    let handle = actix_web::rt::Runtime::new()?;
 
-#[tracing::instrument]
-pub async fn handle_changed_files(job: &Job) -> Result<CheckOutputs> {
-    job.check_run.mark_started().await?;
+    handle.block_on(async { job.check_run.mark_started().await })?;
 
     let mut map = OutputTableBuilder::new();
 
     for dmi in &job.files {
-        let file = sha_to_iconfile(job, &dmi.filename, status_to_sha(job, &dmi.status)).await?;
+        let file = sha_to_iconfile(&job, &dmi.filename, status_to_sha(&job, &dmi.status))?;
 
-        let j = job.clone();
-        let states = tokio::task::spawn_blocking(move || render(&j, file)).await??;
+        let states = render(&job, file)?;
 
         map.insert(dmi.filename.as_str(), states);
     }
 
-    map.build().instrument(info_span!("Building table")).await
+    map.build()
 }
 
 #[tracing::instrument]
 fn render(
     job: &Job,
     diff: (Option<IconFileWithName>, Option<IconFileWithName>),
-) -> Result<(String, Vec<String>)> {
+) -> Result<(&'static str, Vec<String>)> {
     // TODO: Alphabetize
     // TODO: Test more edge cases
     match diff {
-        (None, None) => unreachable!("Diffing (None, None) makes no sense"),
+        (None, None) => Ok((
+            "UNCHANGED",
+            vec![format!(
+                include_str!(concat!(
+                    env!("CARGO_MANIFEST_DIR"),
+                    "/templates/diff_line.txt"
+                )),
+                state_name = "",
+                old = "",
+                new = "",
+                change_text = "UNCHANGED",
+            )],
+        )),
         (None, Some(after)) => {
             let urls = full_render(job, &after).context("Failed to render new icon file")?;
 
             Ok((
-                "ADDED".to_owned(),
+                "ADDED",
                 urls.par_iter()
                     .map(|(state_name, url)| {
                         format!(
@@ -79,7 +83,7 @@ fn render(
             let urls = full_render(job, &before).context("Failed to render deleted icon file")?;
 
             Ok((
-                "DELETED".to_owned(),
+                "DELETED",
                 urls.par_iter()
                     .map(|(state_name, url)| {
                         format!(
@@ -97,9 +101,9 @@ fn render(
             ))
         }
         (Some(before), Some(after)) => {
-            let before_states: HashSet<&StateIndex> =
+            let before_states: HashSet<&StateIndex, ahash::RandomState> =
                 before.icon.metadata.state_names.keys().collect();
-            let after_states: HashSet<&StateIndex> =
+            let after_states: HashSet<&StateIndex, ahash::RandomState> =
                 after.icon.metadata.state_names.keys().collect();
 
             let prefix = format!("{}/{}", job.installation, job.pull_request);
@@ -148,9 +152,9 @@ fn render(
                         ))
                     }
                 })
-                .filter_map(|r: Result<String, anyhow::Error>| {
+                .filter_map(|r: Result<String, eyre::Error>| {
                     r.map_err(|e| {
-                        println!("Error encountered during parse: {}", e);
+                        error!("Error encountered during parse: {}", e);
                     })
                     .ok()
                 })
@@ -205,16 +209,16 @@ fn render(
                             Ok("".to_string())
                         }
                     })
-                    .filter_map(|r: Result<String, anyhow::Error>| {
+                    .filter_map(|r: Result<String, eyre::Error>| {
                         r.map_err(|e| {
-                            println!("Error encountered during parse: {}", e);
+                            error!("Error encountered during parse: {}", e);
                         })
                         .ok()
                     })
                     .filter(|s| !s.is_empty()),
             );
 
-            Ok(("MODIFIED".to_owned(), table))
+            Ok(("MODIFIED", table))
         }
     }
 }
@@ -231,7 +235,7 @@ fn render_state<'a, S: AsRef<str> + std::fmt::Debug>(
     std::fs::create_dir_all(&directory)
         .with_context(|| format!("Failed to create directory {:?}", directory))?;
 
-    let mut hasher = DefaultHasher::new();
+    let mut hasher = ahash::AHasher::default();
     target.sha.hash(&mut hasher);
     target.full_name.hash(&mut hasher);
     target.hash.hash(&mut hasher);
@@ -292,9 +296,9 @@ fn full_render(job: &Job, target: &IconFileWithName) -> Result<Vec<(StateIndex, 
             render_state(&prefix, target, state, &renderer)
                 .with_context(|| format!("Failed to render state {}", state.name))
         })
-        .filter_map(|r: Result<(StateIndex, String), anyhow::Error>| {
+        .filter_map(|r: Result<(StateIndex, String), eyre::Error>| {
             r.map_err(|e| {
-                println!("Error encountered during parse: {}", e);
+                error!("Error encountered during parse: {}", e);
             })
             .ok()
         })

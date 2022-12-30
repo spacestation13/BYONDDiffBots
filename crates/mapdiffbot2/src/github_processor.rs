@@ -1,37 +1,37 @@
-use std::sync::Arc;
-
-use anyhow::{Context, Result};
-use octocrab::models::pulls::FileDiff;
+use diffbot_lib::log;
+use eyre::{Context, Result};
 use octocrab::models::InstallationId;
-use rocket::http::Status;
-use rocket::outcome::Outcome;
-use rocket::request;
-use rocket::request::FromRequest;
-use rocket::tokio::sync::Mutex;
-use rocket::Request;
-use rocket::State;
 
-use crate::CONFIG;
-use diffbot_lib::github::github_api::*;
-use diffbot_lib::github::github_types::*;
-use diffbot_lib::job::types::{Job, JobJournal, JobSender};
+use crate::DataJobSender;
+use diffbot_lib::{
+    github::{
+        github_api::CheckRun,
+        github_types::{
+            ChangeType, Installation, Output, PullRequest, PullRequestEventPayload, Repository,
+        },
+        graphql::get_pull_files,
+    },
+    job::types::{Job, JobType},
+};
 
 async fn process_pull(
+    repo: Repository,
     pull: PullRequest,
     check_run: CheckRun,
     installation: &Installation,
-    job_sender: &JobSender,
-    journal: &Arc<Mutex<JobJournal>>,
+    job_sender: DataJobSender,
 ) -> Result<()> {
+    log::trace!("Processing pull request");
+
     if pull
         .title
         .as_ref()
-        .ok_or_else(|| anyhow::anyhow!("PR title is None"))?
+        .ok_or_else(|| eyre::anyhow!("PR title is None"))?
         .to_ascii_lowercase()
         .contains("[mdb ignore]")
     {
         let output = Output {
-            title: "PR Ignored".to_owned(),
+            title: "PR Ignored",
             summary: "This PR has `[MDB IGNORE]` in the title. Aborting.".to_owned(),
             text: "".to_owned(),
         };
@@ -42,16 +42,16 @@ async fn process_pull(
     }
 
     let (blacklist, contact) = {
-        let conf = &CONFIG.get().unwrap();
+        let conf = &crate::CONFIG.get().unwrap();
         (&conf.blacklist, &conf.blacklist_contact)
     };
 
-    if blacklist.contains(&pull.base.repo.id) {
+    if blacklist.contains(&repo.id) {
         let output = Output {
-            title: "Repo blacklisted".to_owned(),
+            title: "Repo blacklisted",
             summary: format!(
                 "Repository {} is blacklisted. {}",
-                pull.base.repo.full_name(),
+                repo.full_name(),
                 contact
             ),
             text: "".to_owned(),
@@ -62,17 +62,23 @@ async fn process_pull(
         return Ok(());
     }
 
-    let files: Vec<FileDiff> = get_pull_files(installation, &pull)
+    let files = get_pull_files(repo.name_tuple(), installation.id, &pull)
         .await
         .context("Getting files modified by PR")?
         .into_iter()
         .filter(|f| f.filename.ends_with(".dmm"))
-        .collect();
+        .filter(|f| {
+            matches!(
+                f.status,
+                ChangeType::Added | ChangeType::Deleted | ChangeType::Modified
+            )
+        })
+        .collect::<Vec<_>>();
 
     if files.is_empty() {
         let output = Output {
-            title: "No map changes".to_owned(),
-            summary: "There are no changed map files to render.".to_owned(),
+            title: "No map changes",
+            summary: "There are no relevant changed map files to render.".to_owned(),
             text: "".to_owned(),
         };
 
@@ -84,6 +90,7 @@ async fn process_pull(
     check_run.mark_queued().await?;
 
     let job = Job {
+        repo,
         base: pull.base,
         head: pull.head,
         pull_request: pull.number,
@@ -92,39 +99,49 @@ async fn process_pull(
         installation: InstallationId(installation.id),
     };
 
-    journal.lock().await.add_job(job.clone()).await;
-    job_sender.0.send_async(job).await?;
+    let job = serde_json::to_vec(&JobType::GithubJob(job))?;
+
+    job_sender.lock().await.send(job).await?;
+
+    log::trace!("Job sent to queue");
 
     Ok(())
 }
 
+use std::{future::Future, pin::Pin};
+
 #[derive(Debug)]
 pub struct GithubEvent(pub String);
 
-#[rocket::async_trait]
-impl<'r> FromRequest<'r> for GithubEvent {
-    type Error = &'static str;
+impl actix_web::FromRequest for GithubEvent {
+    type Error = std::io::Error;
 
-    async fn from_request(req: &'r Request<'_>) -> request::Outcome<Self, Self::Error> {
-        match req.headers().get_one("X-Github-Event") {
-            Some(event) => Outcome::Success(GithubEvent(event.to_owned())),
-            None => Outcome::Failure((Status::BadRequest, "Missing X-Github-Event header")),
-        }
+    type Future = Pin<Box<dyn Future<Output = Result<Self, Self::Error>>>>;
+
+    fn from_request(req: &actix_web::HttpRequest, _: &mut actix_web::dev::Payload) -> Self::Future {
+        let req = req.clone();
+        Box::pin(async move {
+            match req.headers().get("X-Github-Event") {
+                Some(event) => Ok(GithubEvent(event.to_str().unwrap().to_owned())),
+                None => Err(std::io::Error::new(
+                    std::io::ErrorKind::InvalidData,
+                    "Missing X-Github-Event header",
+                )),
+            }
+        })
     }
 }
 
-async fn handle_pull_request(
-    payload: String,
-    job_sender: &State<JobSender>,
-    journal: &State<Arc<Mutex<JobJournal>>>,
-) -> Result<&'static str> {
+async fn handle_pull_request(payload: String, job_sender: DataJobSender) -> Result<&'static str> {
     let payload: PullRequestEventPayload = serde_json::from_str(&payload)?;
     if payload.action != "opened" && payload.action != "synchronize" {
         return Ok("PR not opened or updated");
     }
 
+    log::trace!("Creating checkrun");
+
     let check_run = CheckRun::create(
-        &payload.pull_request.base.repo.full_name(),
+        &payload.repository.full_name(),
         &payload.pull_request.head.sha,
         payload.installation.id,
         None,
@@ -132,32 +149,31 @@ async fn handle_pull_request(
     .await?;
 
     process_pull(
+        payload.repository,
         payload.pull_request,
         check_run,
         &payload.installation,
         job_sender,
-        journal,
     )
     .await?;
 
     Ok("Check submitted")
 }
 
-#[post("/payload", format = "json", data = "<payload>")]
+#[actix_web::post("/payload")]
 pub async fn process_github_payload(
     event: GithubEvent,
     payload: String,
-    job_sender: &State<JobSender>,
-    journal: &State<Arc<Mutex<JobJournal>>>,
-) -> Result<&'static str, &'static str> {
+    job_sender: DataJobSender,
+) -> actix_web::Result<&'static str> {
     if event.0 != "pull_request" {
         return Ok("Not a pull request event");
     }
 
-    handle_pull_request(payload, job_sender, journal)
-        .await
-        .map_err(|e| {
-            eprintln!("Error handling event: {:?}", e);
-            "An error occured while handling the event"
-        })
+    log::trace!("Payload received, processing");
+
+    handle_pull_request(payload, job_sender).await.map_err(|e| {
+        log::error!("Error handling event: {:?}", e);
+        actix_web::error::ErrorBadRequest(e)
+    })
 }

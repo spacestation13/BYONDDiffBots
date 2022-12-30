@@ -1,12 +1,13 @@
-use crate::github::github_types::*;
-use anyhow::{format_err, Context, Result};
-use octocrab::models::pulls::FileDiff;
+use crate::github::github_types::{
+    CreateCheckRun, Output, RawCheckRun, Repository, UpdateCheckRunBuilder,
+};
+use async_fs::File;
+use eyre::{format_err, Context, Result};
+use futures_lite::io::AsyncWriteExt;
 use octocrab::models::repos::Content;
 use octocrab::models::InstallationId;
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
-use tokio::fs::File;
-use tokio::io::AsyncWriteExt;
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct CheckRun {
@@ -87,7 +88,7 @@ impl CheckRun {
                 .conclusion("failure")
                 .completed_at(chrono::Utc::now().to_rfc3339())
                 .output(Output {
-                    title: "Error handling job".to_owned(),
+                    title: "Error handling job",
                     summary,
                     text: "".to_owned(),
                 }),
@@ -127,6 +128,8 @@ impl CheckRun {
     async fn update(&self, builder: UpdateCheckRunBuilder) -> Result<()> {
         let update = builder.build().context("Building UpdateCheckRun")?;
 
+        #[derive(Deserialize)]
+        struct Empty {}
         let _: Empty = octocrab::instance()
             .installation(self.installation_id)
             .patch(
@@ -146,18 +149,6 @@ impl CheckRun {
     pub fn id(&self) -> u64 {
         self.id
     }
-}
-
-pub async fn get_pull_files(
-    installation: &Installation,
-    pull: &PullRequest,
-) -> Result<Vec<FileDiff>> {
-    let crab = octocrab::instance().installation(installation.id.into());
-    let (user, repo) = pull.base.repo.name_tuple();
-    let files = crab.pulls(user, repo).list_files(pull.number).await?;
-    crab.all_pages(files)
-        .await
-        .context("Failed to get all pages for pull request diff")
 }
 
 static DOWNLOAD_DIR: &str = "download";
@@ -221,7 +212,7 @@ pub async fn download_file<S: AsRef<str>>(
     path.push(&target.sha);
     path.set_extension("dmi");
 
-    tokio::fs::create_dir_all(path.parent().unwrap()).await?;
+    async_fs::create_dir_all(path.parent().unwrap()).await?;
     let mut file = File::create(&path).await?;
 
     let data = download_url(installation, repo, &filename, &commit).await?;
