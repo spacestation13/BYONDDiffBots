@@ -183,8 +183,8 @@ fn generate_finished_output<P: AsRef<Path>>(
 
     let mut builder = CheckOutputBuilder::new(
     "Map renderings",
-    "*This is still a beta. Please file any issues [here](https://github.com/MCHSL/mapdiffbot2/issues).*\n\nMaps with diff:",
-	);
+    "*Please file any issues [here](https://github.com/spacestation13/BYONDDiffBots/issues).*\n\nMaps with diff:",
+    );
 
     let link_base = format!("{}/{}", file_url, non_abs_directory);
 
@@ -261,13 +261,13 @@ pub fn do_job(job: Job) -> Result<CheckOutputs> {
         trace!("Directory doesn't exist, creating dir");
         std::fs::create_dir_all(&repo_dir)?;
         handle.block_on(async {
-				let output = Output {
-					title: "Cloning repo...",
-				    summary: "The repository is being cloned, this will take a few minutes. Future runs will not require cloning.".to_owned(),
-					text: "".to_owned(),
-				};
-				let _ = job.check_run.set_output(output).await; // we don't really care if updating the job fails, just continue
-			});
+                let output = Output {
+                    title: "Cloning repo...",
+                    summary: "The repository is being cloned, this will take a few minutes. Future runs will not require cloning.".to_owned(),
+                    text: "".to_owned(),
+                };
+                let _ = job.check_run.set_output(output).await; // we don't really care if updating the job fails, just continue
+            });
         clone_repo(&repo, &repo_dir).context("Cloning repo")?;
     }
 
