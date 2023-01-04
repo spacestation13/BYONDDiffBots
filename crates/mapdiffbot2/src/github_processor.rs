@@ -153,7 +153,7 @@ pub async fn process_github_payload(
 
     diffbot_lib::verify::verify_signature(
         secret.map(|a| a.as_str()),
-        event.1.as_ref().map(|a| a.as_str()),
+        event.1.as_deref(),
         &payload,
     )?;
 

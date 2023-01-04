@@ -328,7 +328,7 @@ pub fn render_diffs_for_directory<P: AsRef<Path>>(directory: P) {
             let fuck = entry.to_string_lossy();
             let replaced_entry = fuck.replace("-before.png", "-after.png");
             let before = Reader::open(&entry)?.decode()?;
-            let after = Reader::open(&replaced_entry)?.decode()?;
+            let after = Reader::open(replaced_entry)?.decode()?;
 
             ImageBuffer::from_fn(after.width(), after.height(), |x, y| {
                 let before_pixel = before.get_pixel(x, y);
