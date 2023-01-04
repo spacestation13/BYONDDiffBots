@@ -57,6 +57,7 @@ pub struct Config {
     pub gc_schedule: String,
     #[serde(default = "default_log_level")]
     pub logging: String,
+    pub secret: Option<String>,
 }
 
 fn default_schedule() -> String {

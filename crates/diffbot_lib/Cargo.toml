@@ -16,6 +16,10 @@ yaque = "0.6.4"
 futures-lite = "1.12.0"
 log = "0.4.17"
 simplelog = "0.12.0"
+sha2 = "0.10.6"
+hmac = "0.12.1"
+
+actix-web = "4.2.1"
 
 async-fs = "1.6.0"
 async-mutex = "1.4.0"

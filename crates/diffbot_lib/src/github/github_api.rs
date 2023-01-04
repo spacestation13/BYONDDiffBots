@@ -8,6 +8,53 @@ use octocrab::models::repos::Content;
 use octocrab::models::InstallationId;
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
+use std::{future::Future, pin::Pin};
+
+pub struct GithubEvent(pub String, pub Option<String>);
+
+impl actix_web::FromRequest for GithubEvent {
+    type Error = std::io::Error;
+
+    type Future = Pin<Box<dyn Future<Output = Result<Self, Self::Error>>>>;
+
+    fn from_request(req: &actix_web::HttpRequest, _: &mut actix_web::dev::Payload) -> Self::Future {
+        let req = req.clone();
+        Box::pin(async move {
+            let event_header = match req.headers().get("X-Github-Event") {
+                Some(event) => event
+                    .to_str()
+                    .map_err(|_| {
+                        std::io::Error::new(
+                            std::io::ErrorKind::InvalidData,
+                            "Corrupt X-Github-Event header, failed to convert to string",
+                        )
+                    })?
+                    .to_owned(),
+                None => {
+                    return Err(std::io::Error::new(
+                        std::io::ErrorKind::InvalidData,
+                        "Missing X-Github-Event header",
+                    ))
+                }
+            };
+            let hmac_header = match req.headers().get("X-Hub-Signature-256") {
+                Some(event) => Some(
+                    event
+                        .to_str()
+                        .map_err(|_| {
+                            std::io::Error::new(
+                                std::io::ErrorKind::InvalidData,
+                                "Corrupt X-Hub-Signature-256 header, failed to convert to string",
+                            )
+                        })?
+                        .to_owned(),
+                ),
+                _ => None,
+            };
+            Ok(GithubEvent(event_header, hmac_header))
+        })
+    }
+}
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct CheckRun {

@@ -55,6 +55,7 @@ pub struct Config {
     pub blacklist_contact: String,
     #[serde(default = "default_log_level")]
     pub logging: String,
+    pub secret: Option<String>,
 }
 
 fn default_log_level() -> String {
