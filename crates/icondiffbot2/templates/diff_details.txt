@@ -1,7 +1,7 @@
 <details>
-	<summary>
-	{typ} - {filename}
-	</summary>
+    <summary>
+    {typ} - {filename}
+    </summary>
 
 |State Name (duplicate)|Old Icon|New Icon|Status|
 |----------|--------|--------|------|
