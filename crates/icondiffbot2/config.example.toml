@@ -1,5 +1,5 @@
 blacklist = [
-	1337,
+    1337,
 ]
 blacklist_contact = "Good luck!"
 

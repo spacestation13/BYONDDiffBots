@@ -1,7 +1,7 @@
 <details>
-	<summary>
-	ADDED - {filename}
-	</summary>
+    <summary>
+    ADDED - {filename}
+    </summary>
 
 Added:
 [Raw link]({image_link})

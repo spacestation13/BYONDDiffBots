@@ -77,7 +77,7 @@ impl CheckRun {
             .post(
                 format!("/repos/{full_repo}/check-runs"),
                 Some(&CreateCheckRun {
-                    name: name.unwrap_or("MapDiffBot2").to_string(),
+                    name: name.unwrap_or("BYONDDiffBot").to_string(),
                     head_sha: head_sha.to_string(),
                 }),
             )
@@ -257,7 +257,7 @@ pub async fn download_file<S: AsRef<str>>(
     path.push(".");
     path.push(DOWNLOAD_DIR);
     path.push(&target.sha);
-    path.set_extension("dmi");
+    path.set_extension("dmi"); // Method should have an IDB qualifier due to being a shared crate
 
     async_fs::create_dir_all(path.parent().unwrap()).await?;
     let mut file = File::create(&path).await?;

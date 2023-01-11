@@ -1,7 +1,7 @@
 <details>
-	<summary>
-	MODIFIED - {filename}
-	</summary>
+    <summary>
+    MODIFIED - {filename}
+    </summary>
 
 Modified region: {bounds}
 
