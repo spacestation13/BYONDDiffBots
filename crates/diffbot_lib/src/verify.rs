@@ -16,7 +16,7 @@ pub fn verify_signature(
             return Err(actix_web::error::ErrorBadRequest("Expected signature in header"))
         };
 
-        log::trace!("Received sig: {:?}", sig.clone());
+        log::trace!("Received sig: {:?}", sig);
 
         //have to wrap it to stop timing attacks on comparison
         let actual_signature = CtOutput::new(GenericArray::clone_from_slice(sig));
