@@ -57,14 +57,7 @@ pub struct Config {
     pub gc_schedule: String,
     #[serde(default = "default_log_level")]
     pub logging: String,
-    pub secret: Option<Secret>,
-}
-
-#[derive(Debug, Deserialize)]
-#[serde(transparent)]
-pub struct Secret {
-    #[serde(with = "hex::serde")]
-    hex: Vec<u8>,
+    pub secret: Option<String>,
 }
 
 fn default_schedule() -> String {

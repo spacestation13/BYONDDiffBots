@@ -139,7 +139,7 @@ pub async fn process_github_payload_actix(
     };
 
     diffbot_lib::verify::verify_signature(
-        secret.map(|v| v.hex.as_slice()),
+        secret.map(|v| v.as_str()),
         event.1.as_deref(),
         &payload,
     )?;
