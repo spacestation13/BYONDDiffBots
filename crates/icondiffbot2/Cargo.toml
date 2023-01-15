@@ -22,8 +22,9 @@ ndarray = "0.15.6"
 rayon = "1.6.1"
 toml = "0.5.10"
 ahash = "0.8.2"
-hashbrown = { version = "0.13.1", features = ["rayon"]}
+hashbrown = { version = "0.13.2", features = ["rayon"]}
 yaque = "0.6.4"
+hex = { version = "0.4.3", features = ["serde"] }
 
 actix-web = "4.2.1"
 actix-files = "0.6.2"

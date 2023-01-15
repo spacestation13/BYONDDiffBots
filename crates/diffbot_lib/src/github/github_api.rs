@@ -10,7 +10,7 @@ use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 use std::{future::Future, pin::Pin};
 
-pub struct GithubEvent(pub String, pub Option<String>);
+pub struct GithubEvent(pub String, pub Option<Vec<u8>>);
 
 impl actix_web::FromRequest for GithubEvent {
     type Error = std::io::Error;
@@ -38,17 +38,26 @@ impl actix_web::FromRequest for GithubEvent {
                 }
             };
             let hmac_header = match req.headers().get("X-Hub-Signature-256") {
-                Some(event) => Some(
-                    event
-                        .to_str()
-                        .map_err(|_| {
-                            std::io::Error::new(
-                                std::io::ErrorKind::InvalidData,
-                                "Corrupt X-Hub-Signature-256 header, failed to convert to string",
-                            )
-                        })?
-                        .to_owned(),
-                ),
+                Some(event) => {
+                    let sig = event.to_str().map_err(|_| {
+                        std::io::Error::new(
+                            std::io::ErrorKind::InvalidData,
+                            "Corrupt X-Hub-Signature-256 header, failed to convert to string",
+                        )
+                    })?;
+
+                    //remove the `sha256=` part
+                    let (_, sig) = sig.split_at(7);
+
+                    let sig_bytes = hex::decode(sig).map_err(|_| {
+                        std::io::Error::new(
+                            std::io::ErrorKind::InvalidData,
+                            "Corrupt X-Hub-Signature-256 header, failed to decode hex string",
+                        )
+                    })?;
+
+                    Some(sig_bytes)
+                }
                 _ => None,
             };
             Ok(GithubEvent(event_header, hmac_header))
