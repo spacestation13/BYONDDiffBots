@@ -5,6 +5,9 @@ blacklist_contact = "Good luck!"
 
 logging = "info"
 
+# Webhook secret goes here
+# secret = "abcdef"
+
 [github]
 app_id = 123456
 private_key_path = "diffbot.pem"

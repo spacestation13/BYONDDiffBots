@@ -7,6 +7,9 @@ gc_schedule = "0 0 4 * * *"
 
 logging = "info"
 
+# Webhook secret goes here
+# secret = "abcdef"
+
 [github]
 app_id = 123456
 private_key_path = "diffbot.pem"
