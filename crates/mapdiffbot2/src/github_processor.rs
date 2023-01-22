@@ -120,7 +120,7 @@ async fn handle_pull_request(payload: String, job_sender: DataJobSender) -> Resu
         &payload.repository.full_name(),
         &payload.pull_request.head.sha,
         payload.installation.id,
-        None,
+        Some("MapDiffBot2"),
     )
     .await?;
 
