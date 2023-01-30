@@ -14,19 +14,19 @@ dreammaker = { git = "https://github.com/SpaceManiac/SpacemanDMM/" }
 once_cell = "1.17.0"
 jsonwebtoken = "8.2.0"
 lazy_static = "1.4.0"
-reqwest = "0.11.13"
+reqwest = "0.11.14"
 diffbot_lib = { path = "../diffbot_lib" }
 eyre = "0.6.8"
 stable-eyre = "0.2"
 ndarray = "0.15.6"
 rayon = "1.6.1"
-toml = "0.5.10"
-ahash = "0.8.2"
+toml = "0.7.0"
+ahash = "0.8.3"
 hashbrown = { version = "0.13.2", features = ["rayon"]}
 yaque = "0.6.4"
 hex = { version = "0.4.3", features = ["serde"] }
 
-actix-web = "4.2.1"
+actix-web = "4.3.0"
 actix-files = "0.6.2"
 
 [target.'cfg(not(target_env = "msvc"))'.dependencies]
