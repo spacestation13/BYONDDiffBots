@@ -49,6 +49,7 @@ fn render(
             .context("Fetching and constructing diffs")?;
 
     let path = repo_dir.absolutize().context("Making repo path absolute")?;
+
     let base_context = with_checkout(&base_branch, repo, || RenderingContext::new(&path))
         .context("Parsing base")?;
 
@@ -67,49 +68,14 @@ fn render(
         "hide-space,hide-invisible,random",
     );
 
-    // ADDED MAPS
-    let added_directory = format!("{}/a", out_dir.display());
-    let added_directory = Path::new(&added_directory);
-    let added_errors = Default::default();
-
-    // MODIFIED MAPS
-    let modified_directory = format!("{}/m", out_dir.display());
-    let modified_directory = Path::new(&modified_directory);
-    let modified_before_errors = Default::default();
-    let modified_after_errors = Default::default();
-
+    //do removed maps
     let removed_directory = format!("{}/r", out_dir.display());
     let removed_directory = Path::new(&removed_directory);
     let removed_errors = Default::default();
 
-    trace!("Loading maps");
-
-    let base_maps = with_checkout(&base_branch, repo, || load_maps(modified_files, &path))
-        .context("Loading base maps")?;
-    let head_maps = with_checkout(&head_branch, repo, || load_maps(modified_files, &path))
-        .context("Loading head maps")?;
-
-    trace!("Getting bounding boxes");
-
-    let modified_maps = get_map_diff_bounding_boxes(base_maps, head_maps);
-
-    trace!("Rendering removed/modified maps");
-    // You might think to yourself, wtf is going on here?
-    // And you'd be right.
     let removed_maps = with_checkout(&base_branch, repo, || {
-        render_map_regions(
-            &base_context,
-            &modified_maps.befores,
-            &head_render_passes,
-            modified_directory,
-            "before.png",
-            &modified_before_errors,
-        )
-        .context("Rendering modified before maps")?;
-
         let maps = load_maps_with_whole_map_regions(removed_files, &path)
             .context("Loading removed maps")?;
-
         render_map_regions(
             &base_context,
             &maps,
@@ -119,24 +85,17 @@ fn render(
             &removed_errors,
         )
         .context("Rendering removed maps")?;
-
         Ok(maps)
     })?;
 
-    let added_maps = with_checkout(&head_branch, repo, || {
-        render_map_regions(
-            &head_context,
-            &modified_maps.afters,
-            &head_render_passes,
-            modified_directory,
-            "after.png",
-            &modified_after_errors,
-        )
-        .context("Rendering modified after maps")?;
+    //do added maps
+    let added_directory = format!("{}/a", out_dir.display());
+    let added_directory = Path::new(&added_directory);
+    let added_errors = Default::default();
 
+    let added_maps = with_checkout(&head_branch, repo, || {
         let maps =
             load_maps_with_whole_map_regions(added_files, &path).context("Loading added maps")?;
-
         render_map_regions(
             &head_context,
             &maps,
@@ -146,10 +105,48 @@ fn render(
             &added_errors,
         )
         .context("Rendering added maps")?;
-
         Ok(maps)
     })
     .context("Rendering modified after and added maps")?;
+
+    //do modified maps
+    let base_maps = with_checkout(&base_branch, repo, || load_maps(modified_files, &path))
+        .context("Loading base maps")?;
+    let head_maps = with_checkout(&head_branch, repo, || load_maps(modified_files, &path))
+        .context("Loading head maps")?;
+
+    let modified_maps = get_map_diff_bounding_boxes(base_maps, head_maps);
+
+    let modified_directory = format!("{}/m", out_dir.display());
+    let modified_directory = Path::new(&modified_directory);
+    let modified_before_errors = Default::default();
+    let modified_after_errors = Default::default();
+
+    with_checkout(&base_branch, repo, || {
+        render_map_regions(
+            &base_context,
+            &modified_maps.befores,
+            &head_render_passes,
+            modified_directory,
+            "before.png",
+            &modified_before_errors,
+        )
+        .context("Rendering modified before maps")?;
+        Ok(())
+    })?;
+
+    with_checkout(&head_branch, repo, || {
+        render_map_regions(
+            &head_context,
+            &modified_maps.afters,
+            &head_render_passes,
+            modified_directory,
+            "after.png",
+            &modified_after_errors,
+        )
+        .context("Rendering modified after maps")?;
+        Ok(())
+    })?;
 
     (0..modified_files.len()).into_par_iter().for_each(|i| {
         render_diffs_for_directory(modified_directory.join(i.to_string()));
