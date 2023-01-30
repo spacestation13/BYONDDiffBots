@@ -48,8 +48,6 @@ fn render(
         fetch_and_get_branches(&base.sha, &head.sha, repo, &fetching_branch, default_branch)
             .context("Fetching and constructing diffs")?;
 
-    trace!("Parsing base/head for context");
-
     let path = repo_dir.absolutize().context("Making repo path absolute")?;
     let base_context = with_checkout(&base_branch, repo, || RenderingContext::new(&path))
         .context("Parsing base")?;
@@ -68,8 +66,6 @@ fn render(
         "",
         "hide-space,hide-invisible,random",
     );
-
-    trace!("Initializing vars");
 
     // ADDED MAPS
     let added_directory = format!("{}/a", out_dir.display());
@@ -127,8 +123,6 @@ fn render(
         Ok(maps)
     })?;
 
-    trace!("Rendering added/modified maps");
-
     let added_maps = with_checkout(&head_branch, repo, || {
         render_map_regions(
             &head_context,
@@ -156,8 +150,6 @@ fn render(
         Ok(maps)
     })
     .context("Rendering modified after and added maps")?;
-
-    trace!("Rendering diffs for directories");
 
     (0..modified_files.len()).into_par_iter().for_each(|i| {
         render_diffs_for_directory(modified_directory.join(i.to_string()));
