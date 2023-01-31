@@ -78,7 +78,7 @@ fn render(
             .context("Loading removed maps")?;
         render_map_regions(
             &base_context,
-            &maps,
+            &maps.iter().collect::<Vec<_>>(),
             &base_render_passes,
             removed_directory,
             "removed.png",
@@ -98,7 +98,7 @@ fn render(
             load_maps_with_whole_map_regions(added_files, &path).context("Loading added maps")?;
         render_map_regions(
             &head_context,
-            &maps,
+            &maps.iter().collect::<Vec<_>>(),
             &head_render_passes,
             added_directory,
             "added.png",
@@ -110,12 +110,12 @@ fn render(
     .context("Rendering modified after and added maps")?;
 
     //do modified maps
-    let base_maps = with_checkout(&base_branch, repo, || load_maps(modified_files, &path))
+    let base_maps = with_checkout(&base_branch, repo, || Ok(load_maps(modified_files, &path)))
         .context("Loading base maps")?;
-    let head_maps = with_checkout(&head_branch, repo, || load_maps(modified_files, &path))
+    let head_maps = with_checkout(&head_branch, repo, || Ok(load_maps(modified_files, &path)))
         .context("Loading head maps")?;
 
-    let modified_maps = get_map_diff_bounding_boxes(base_maps, head_maps);
+    let modified_maps = get_map_diff_bounding_boxes(base_maps, head_maps)?;
 
     let modified_directory = format!("{}/m", out_dir.display());
     let modified_directory = Path::new(&modified_directory);
@@ -125,7 +125,12 @@ fn render(
     with_checkout(&base_branch, repo, || {
         render_map_regions(
             &base_context,
-            &modified_maps.befores,
+            modified_maps
+                .befores
+                .iter()
+                .filter_map(|res| res.as_ref().ok())
+                .collect::<Vec<_>>()
+                .as_slice(),
             &head_render_passes,
             modified_directory,
             "before.png",
@@ -138,7 +143,12 @@ fn render(
     with_checkout(&head_branch, repo, || {
         render_map_regions(
             &head_context,
-            &modified_maps.afters,
+            modified_maps
+                .afters
+                .iter()
+                .filter_map(|opt| opt.as_ref())
+                .collect::<Vec<_>>()
+                .as_slice(),
             &head_render_passes,
             modified_directory,
             "after.png",
@@ -199,21 +209,35 @@ fn generate_finished_output<P: AsRef<Path>>(
         .iter()
         .zip(maps.modified_maps.befores.iter())
         .enumerate()
-        .for_each(|(file_index, (file, map))| {
-            map.iter_levels().for_each(|(level, region)| {
-                let link = format!("{}/m/{}/{}", link_base, file_index, level);
-                let name = format!("{}:{}", file.filename, level + 1);
+        .for_each(|(file_index, (file, map))| match map {
+            Ok(map) => {
+                map.iter_levels().for_each(|(level, region)| {
+                    let link = format!("{}/m/{}/{}", link_base, file_index, level);
+                    let name = format!("{}:{}", file.filename, level + 1);
 
-                #[allow(clippy::format_in_format_args)]
+                    #[allow(clippy::format_in_format_args)]
+                    builder.add_text(&format!(
+                        include_str!("../templates/diff_template_mod.txt"),
+                        bounds = region.to_string(),
+                        filename = name,
+                        image_before_link = format!("{}-before.png", link),
+                        image_after_link = format!("{}-after.png", link),
+                        image_diff_link = format!("{}-diff.png", link)
+                    ));
+                });
+            }
+            Err(e) => {
+                let mut truncated_err = format!("{:?}", e);
+                truncated_err.truncate(500);
                 builder.add_text(&format!(
                     include_str!("../templates/diff_template_mod.txt"),
-                    bounds = region.to_string(),
-                    filename = name,
-                    image_before_link = format!("{}-before.png", link),
-                    image_after_link = format!("{}-after.png", link),
-                    image_diff_link = format!("{}-diff.png", link)
+                    bounds = "Unknown",
+                    filename = file.filename,
+                    image_before_link = truncated_err,
+                    image_after_link = "OLD MAP FAILED TO RENDER, CANNOT DIFF",
+                    image_diff_link = "OLD MAP FAILED TO RENDER, CANNOT DIFF"
                 ));
-            });
+            }
         });
 
     removed_files

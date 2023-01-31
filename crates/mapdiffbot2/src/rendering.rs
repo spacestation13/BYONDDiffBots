@@ -127,12 +127,14 @@ pub fn get_diff_bounding_box(
     Some(BoundingBox::new(leftmost, bottommost, rightmost, topmost))
 }
 
-pub fn load_maps(files: &[&FileDiff], path: &std::path::Path) -> Result<Vec<dmm::Map>> {
+pub fn load_maps(files: &[&FileDiff], path: &std::path::Path) -> Vec<Result<dmm::Map>> {
     files
         .iter()
         .map(|file| {
             let actual_path = path.join(Path::new(&file.filename));
-            dmm::Map::from_file(&actual_path).map_err(|e| eyre::anyhow!(e))
+            dmm::Map::from_file(&actual_path)
+                .map_err(|e| eyre::anyhow!(e))
+                .context(format!("Map name: {}", &file.filename))
         })
         .collect()
 }
@@ -173,34 +175,52 @@ impl MapWithRegions {
 }
 
 pub struct MapsWithRegions {
-    pub befores: Vec<MapWithRegions>,
-    pub afters: Vec<MapWithRegions>,
+    pub befores: Vec<Result<MapWithRegions>>,
+    pub afters: Vec<Option<MapWithRegions>>,
 }
 
 pub fn get_map_diff_bounding_boxes(
-    base_maps: Vec<dmm::Map>,
-    head_maps: Vec<dmm::Map>,
-) -> MapsWithRegions {
-    let (befores, afters) = base_maps
-        .into_par_iter()
-        .zip(head_maps.into_par_iter())
-        .map(|(base, head)| {
-            let diffs = (0..base.dim_z())
-                .map(|z| get_diff_bounding_box(&base, &head, z))
-                .collect::<Vec<_>>();
-            let before = MapWithRegions {
-                map: base,
-                bounding_boxes: diffs.clone(),
-            };
-            let after = MapWithRegions {
-                map: head,
-                bounding_boxes: diffs,
-            };
-            (before, after)
-        })
-        .collect();
+    base_maps: Vec<Result<dmm::Map>>,
+    head_maps: Vec<Result<dmm::Map>>,
+) -> Result<MapsWithRegions> {
+    let (mut befores, mut afters) = (
+        Vec::with_capacity(base_maps.len()),
+        Vec::with_capacity(head_maps.len()),
+    );
 
-    MapsWithRegions { befores, afters }
+    for (base, head) in base_maps.into_iter().zip(head_maps.into_iter()) {
+        let (before, after) = match (base, head) {
+            (Err(e), Ok(_)) => Ok((Err(e), None)),
+            (Ok(base), Ok(head)) => {
+                let diffs = (0..base.dim_z())
+                    .map(|z| get_diff_bounding_box(&base, &head, z))
+                    .collect::<Vec<_>>();
+                let before = MapWithRegions {
+                    map: base,
+                    bounding_boxes: diffs.clone(),
+                };
+                let after = MapWithRegions {
+                    map: head,
+                    bounding_boxes: diffs,
+                };
+                Ok((Ok(before), Some(after)))
+            }
+            (Ok(_), Err(e)) => Err(e),  //Fails on head parse fail
+            (Err(_), Err(e)) => Err(e), //Fails on head parse fail
+        }?; //Stop the entire thing if head parse fails
+        match before {
+            Ok(o) => {
+                befores.push(Ok(o));
+                afters.push(Some(after.unwrap()))
+            }
+            Err(e) => {
+                befores.push(Err(e));
+                afters.push(None);
+            }
+        }
+    }
+
+    Ok(MapsWithRegions { befores, afters })
 }
 
 pub struct RenderingContext {
@@ -270,7 +290,7 @@ pub fn render_map(
 
 pub fn render_map_regions(
     context: &RenderingContext,
-    maps: &[MapWithRegions],
+    maps: &[&MapWithRegions],
     render_passes: &[Box<dyn RenderPass>],
     output_dir: &Path,
     filename: &str,
