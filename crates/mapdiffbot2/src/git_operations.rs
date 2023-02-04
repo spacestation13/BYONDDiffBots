@@ -68,7 +68,7 @@ pub fn fetch_and_get_branches<'a>(
         .find_reference("FETCH_HEAD")
         .context("Getting FETCH_HEAD")?;
 
-    let head_name = format!("mdb-pull-{}-{}", base_sha, head_sha);
+    let head_name = format!("mdb-pull-{base_sha}-{head_sha}");
 
     let mut head_branch = repo
         .branch_from_annotated_commit(

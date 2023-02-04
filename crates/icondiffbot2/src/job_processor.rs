@@ -233,7 +233,7 @@ fn render_state<'a, S: AsRef<str> + std::fmt::Debug>(
     let directory = Path::new(".").join("images").join(prefix.as_ref());
     // Always remember to mkdir -p your paths
     std::fs::create_dir_all(&directory)
-        .with_context(|| format!("Failed to create directory {:?}", directory))?;
+        .with_context(|| format!("Failed to create directory {directory:?}"))?;
 
     let mut hasher = ahash::AHasher::default();
     target.sha.hash(&mut hasher);
@@ -271,10 +271,7 @@ fn render_state<'a, S: AsRef<str> + std::fmt::Debug>(
     );
 
     buffer.flush().with_context(|| {
-        format!(
-            "Failed to flush BufWriter to disk for state {:?} at {:?}",
-            state, &path
-        )
+        format!("Failed to flush BufWriter to disk for state {state:?} at {path:?}")
     })?;
 
     Ok((state.get_state_name_index(), url))

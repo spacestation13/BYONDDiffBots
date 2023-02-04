@@ -100,7 +100,7 @@ async fn main() -> eyre::Result<()> {
 
     let config_path = std::path::Path::new(".").join("config.toml");
     let config =
-        init_config(&config_path).unwrap_or_else(|_| panic!("Failed to read {:?}", config_path));
+        init_config(&config_path).unwrap_or_else(|_| panic!("Failed to read {config_path:?}"));
 
     diffbot_lib::logger::init_logger(&config.logging).expect("Log init failed!");
 

@@ -102,7 +102,7 @@ async fn garbage_collect_all_repos() {
 
     let output = output.unwrap();
     if let Err(e) = output {
-        let fuckup = format!("{:?}", e);
+        let fuckup = format!("{e:?}");
         log::error!("GC errored: {}", fuckup);
     }
 }
@@ -156,7 +156,7 @@ async fn job_handler(name: &str, job: Job) {
 
     let output = output.unwrap();
     if let Err(e) = output {
-        let fuckup = format!("{:?}", e);
+        let fuckup = format!("{e:?}");
         log::error!("Other rendering error: {}", fuckup);
         let _ = check_run.mark_failed(&fuckup).await;
         return;

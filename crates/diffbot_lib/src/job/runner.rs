@@ -18,7 +18,7 @@ pub async fn handle_output<S: AsRef<str>>(output: Vec<Output>, check_run: CheckR
                 .await;
             if res.is_err() {
                 let _ = check_run
-                    .mark_failed(&format!("Failed to upload job output: {:?}", res))
+                    .mark_failed(&format!("Failed to upload job output: {res:?}"))
                     .await;
             }
         }
@@ -32,7 +32,7 @@ pub async fn handle_output<S: AsRef<str>>(output: Vec<Output>, check_run: CheckR
                         let res = check_run.mark_succeeded(item).await;
                         if res.is_err() {
                             let _ = check_run
-                                .mark_failed(&format!("Failed to upload job output: {:?}", res))
+                                .mark_failed(&format!("Failed to upload job output: {res:?}"))
                                 .await;
                             return;
                         }
@@ -45,7 +45,7 @@ pub async fn handle_output<S: AsRef<str>>(output: Vec<Output>, check_run: CheckR
                             let res = check.mark_succeeded(item).await;
                             if res.is_err() {
                                 let _ = check_run
-                                    .mark_failed(&format!("Failed to upload job output: {:?}", res))
+                                    .mark_failed(&format!("Failed to upload job output: {res:?}"))
                                     .await;
                                 return;
                             }

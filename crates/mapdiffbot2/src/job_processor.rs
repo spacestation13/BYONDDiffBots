@@ -42,7 +42,7 @@ fn render(
     trace!("Fetching and getting branches");
 
     let pull_branch = format!("mdb-{}-{}", base.sha, head.sha);
-    let fetching_branch = format!("pull/{}/head:{}", pull_request_number, pull_branch);
+    let fetching_branch = format!("pull/{pull_request_number}/head:{pull_branch}");
 
     let (base_branch, head_branch) =
         fetch_and_get_branches(&base.sha, &head.sha, repo, &fetching_branch, default_branch)
@@ -185,7 +185,7 @@ fn generate_finished_output<P: AsRef<Path>>(
     "*Please file any issues [here](https://github.com/spacestation13/BYONDDiffBots/issues).*\n\nMaps with diff:",
     );
 
-    let link_base = format!("{}/{}", file_url, non_abs_directory);
+    let link_base = format!("{file_url}/{non_abs_directory}");
 
     // Those are CPU bound but parallelizing would require builder to be thread safe and it's probably not worth the overhead
     added_files
@@ -194,7 +194,7 @@ fn generate_finished_output<P: AsRef<Path>>(
         .enumerate()
         .for_each(|(file_index, (file, map))| {
             map.iter_levels().for_each(|(level, _)| {
-                let link = format!("{}/a/{}/{}-added.png", link_base, file_index, level);
+                let link = format!("{link_base}/a/{file_index}/{level}-added.png");
                 let name = format!("{}:{}", file.filename, level + 1);
 
                 builder.add_text(&format!(
@@ -212,7 +212,7 @@ fn generate_finished_output<P: AsRef<Path>>(
         .for_each(|(file_index, (file, map))| match map {
             Ok(map) => {
                 map.iter_levels().for_each(|(level, region)| {
-                    let link = format!("{}/m/{}/{}", link_base, file_index, level);
+                    let link = format!("{link_base}/m/{file_index}/{level}");
                     let name = format!("{}:{}", file.filename, level + 1);
 
                     #[allow(clippy::format_in_format_args)]
@@ -220,14 +220,14 @@ fn generate_finished_output<P: AsRef<Path>>(
                         include_str!("../templates/diff_template_mod.txt"),
                         bounds = region.to_string(),
                         filename = name,
-                        image_before_link = format!("{}-before.png", link),
-                        image_after_link = format!("{}-after.png", link),
-                        image_diff_link = format!("{}-diff.png", link)
+                        image_before_link = format!("{link}-before.png"),
+                        image_after_link = format!("{link}-after.png"),
+                        image_diff_link = format!("{link}-diff.png")
                     ));
                 });
             }
             Err(e) => {
-                let mut truncated_err = format!("{:?}", e);
+                let mut truncated_err = format!("{e:?}");
                 truncated_err.truncate(500);
                 builder.add_text(&format!(
                     include_str!("../templates/diff_template_mod.txt"),
@@ -246,7 +246,7 @@ fn generate_finished_output<P: AsRef<Path>>(
         .enumerate()
         .for_each(|(file_index, (file, map))| {
             map.iter_levels().for_each(|(level, _)| {
-                let link = format!("{}/r/{}/{}-removed.png", link_base, file_index, level);
+                let link = format!("{link_base}/r/{file_index}/{level}-removed.png");
                 let name = format!("{}:{}", file.filename, level + 1);
 
                 builder.add_text(&format!(

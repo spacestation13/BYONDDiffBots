@@ -49,7 +49,7 @@ pub fn get_if_exists(
         let raw = rt.block_on(async {
             download_url(&job.installation, &job.repo, filename, sha)
                 .await
-                .with_context(|| format!("Failed to download file {:?}", filename))
+                .with_context(|| format!("Failed to download file {filename:?}"))
         })?;
 
         let mut hasher = DefaultHasher::new();
@@ -61,7 +61,7 @@ pub fn get_if_exists(
             sha: sha.to_string(),
             hash,
             icon: IconFile::from_bytes(&raw)
-                .with_context(|| format!("IconFile::from_bytes failed for {:?}", filename))?,
+                .with_context(|| format!("IconFile::from_bytes failed for {filename:?}"))?,
         }))
     } else {
         Ok(None)

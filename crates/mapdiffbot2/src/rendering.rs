@@ -325,7 +325,7 @@ pub fn render_map_regions(
                     image
                         .to_file(
                             directory
-                                .join(Path::new(&format!("{}-{}", z_level, filename)))
+                                .join(Path::new(&format!("{z_level}-{filename}")))
                                 .as_ref(),
                         )
                         .with_context(|| format!("Saving image {idx}"))?;
