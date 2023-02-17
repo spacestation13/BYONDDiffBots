@@ -1,38 +1,33 @@
 use eyre::{Context, Result};
 use std::path::Path;
+use std::str::FromStr;
 
-use git2::{build::CheckoutBuilder, FetchOptions, Repository};
+use gix::prelude::*;
 
 pub fn fetch_and_get_branches<'a>(
     base_sha: &str,
     head_sha: &str,
-    repo: &'a git2::Repository,
+    repo: &'a gix::Repository,
     fetching_branch: &str,
     default_branch: &str,
-) -> Result<(git2::Reference<'a>, git2::Reference<'a>)> {
-    let base_id = git2::Oid::from_str(base_sha).context("Parsing base sha")?;
-    let head_id = git2::Oid::from_str(head_sha).context("Parsing head sha")?;
+) -> Result<(gix::Reference<'a>, gix::Reference<'a>)> {
+    let base_id = gix::ObjectId::from_str(base_sha).context("Parsing base sha")?;
+    let head_id = gix::ObjectId::from_str(head_sha).context("Parsing head sha")?;
 
     let mut remote = repo.find_remote("origin")?;
 
     remote
-        .connect(git2::Direction::Fetch)
-        .context("Connecting to remote")?;
-
-    remote
-        .fetch(
-            &[default_branch],
-            Some(FetchOptions::new().prune(git2::FetchPrune::On)),
-            None,
-        )
+        .connect(gix::remote::Direction::Fetch, gix::progress::Discard)
+        .context("Connecting to remote")?
+        .prepare_fetch(gix::remote::ref_map::Options::default())
+        .context("Preparing fetch")?
+        .receive(&std::sync::atomic::AtomicBool::new(false))
         .context("Fetching base")?;
+
     let fetch_head = repo
         .find_reference("FETCH_HEAD")
-        .context("Getting FETCH_HEAD")?;
-
-    let base_commit = repo
-        .reference_to_annotated_commit(&fetch_head)
-        .context("Getting commit from FETCH_HEAD")?;
+        .context("Getting FETCH_HEAD")?
+        .into_fully_peeled_id()?;
 
     repo.resolve_reference_from_short_name(default_branch)?
         .set_target(base_commit.id(), "Fast forwarding origin ref")
