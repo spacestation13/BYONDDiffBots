@@ -10,15 +10,16 @@ pub struct Installation {
 pub struct Repository {
     pub url: String,
     pub id: u64,
+    pub name: String,
 }
 
 impl Repository {
     pub fn full_name(&self) -> String {
-        self.url.split('/').skip(4).collect::<Vec<&str>>().join("/")
+        self.name.clone()
     }
 
     pub fn name_tuple(&self) -> (String, String) {
-        let mut iter = self.url.split('/').skip(4).take(2).map(|a| a.to_string());
+        let mut iter = self.url.split('/').map(|a| a.to_string());
         (iter.next().unwrap(), iter.next().unwrap())
     }
 }
@@ -26,6 +27,7 @@ impl Repository {
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct Branch {
     pub sha: String,
+    pub r#ref: String,
 }
 
 #[derive(Deserialize, Debug, Clone)]

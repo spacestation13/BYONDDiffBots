@@ -7,8 +7,8 @@ pub fn fetch_and_get_branches<'a>(
     base_sha: &str,
     head_sha: &str,
     repo: &'a git2::Repository,
-    fetching_branch: &str,
-    default_branch: &str,
+    head_branch_name: &str,
+    base_branch_name: &str,
 ) -> Result<(git2::Reference<'a>, git2::Reference<'a>)> {
     let base_id = git2::Oid::from_str(base_sha).context("Parsing base sha")?;
     let head_id = git2::Oid::from_str(head_sha).context("Parsing head sha")?;
@@ -21,7 +21,7 @@ pub fn fetch_and_get_branches<'a>(
 
     remote
         .fetch(
-            &[default_branch],
+            &[base_branch_name],
             Some(FetchOptions::new().prune(git2::FetchPrune::On)),
             None,
         )
@@ -34,12 +34,12 @@ pub fn fetch_and_get_branches<'a>(
         .reference_to_annotated_commit(&fetch_head)
         .context("Getting commit from FETCH_HEAD")?;
 
-    repo.resolve_reference_from_short_name(default_branch)?
+    repo.resolve_reference_from_short_name(base_branch_name)?
         .set_target(base_commit.id(), "Fast forwarding origin ref")
         .context("Setting default branch to FETCH_HEAD's commit")?;
 
     repo.set_head(
-        repo.resolve_reference_from_short_name(default_branch)?
+        repo.resolve_reference_from_short_name(base_branch_name)?
             .name()
             .unwrap(),
     )
@@ -49,16 +49,16 @@ pub fn fetch_and_get_branches<'a>(
         .find_commit(base_id)
         .context("Finding commit from base SHA")?;
 
-    repo.resolve_reference_from_short_name(default_branch)?
+    repo.resolve_reference_from_short_name(base_branch_name)?
         .set_target(commit.id(), "Setting default branch to the correct commit")?;
 
     let base_branch = repo
-        .resolve_reference_from_short_name(default_branch)
+        .resolve_reference_from_short_name(base_branch_name)
         .context("Getting the base reference")?;
 
     remote
         .fetch(
-            &[fetching_branch],
+            &[head_branch_name],
             Some(FetchOptions::new().prune(git2::FetchPrune::On)),
             None,
         )
@@ -96,7 +96,7 @@ pub fn fetch_and_get_branches<'a>(
     remote.disconnect().context("Disconnecting from remote")?;
 
     repo.set_head(
-        repo.resolve_reference_from_short_name(default_branch)?
+        repo.resolve_reference_from_short_name(base_branch_name)?
             .name()
             .unwrap(),
     )

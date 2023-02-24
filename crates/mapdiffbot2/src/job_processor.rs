@@ -34,7 +34,7 @@ fn render(
     base: &Branch,
     head: &Branch,
     (added_files, modified_files, removed_files): (&[&FileDiff], &[&FileDiff], &[&FileDiff]),
-    (repo, default_branch): (&git2::Repository, &str),
+    (repo, base_branch_name): (&git2::Repository, &str),
     (repo_dir, out_dir): (&Path, &Path),
     pull_request_number: u64,
     // feel like this is a bit of a hack but it works for now
@@ -42,10 +42,10 @@ fn render(
     trace!("Fetching and getting branches");
 
     let pull_branch = format!("mdb-{}-{}", base.sha, head.sha);
-    let fetching_branch = format!("pull/{pull_request_number}/head:{pull_branch}");
+    let head_branch = format!("pull/{pull_request_number}/head:{pull_branch}");
 
     let (base_branch, head_branch) =
-        fetch_and_get_branches(&base.sha, &head.sha, repo, &fetching_branch, default_branch)
+        fetch_and_get_branches(&base.sha, &head.sha, repo, &head_branch, base_branch_name)
             .context("Fetching and constructing diffs")?;
 
     let path = repo_dir.absolutize().context("Making repo path absolute")?;
@@ -316,11 +316,6 @@ pub fn do_job(job: Job) -> Result<CheckOutputs> {
         .connect(git2::Direction::Fetch)
         .context("Connecting to remote")?;
 
-    let default_branch = remote.default_branch()?;
-    let default_branch = default_branch
-        .as_str()
-        .ok_or_else(|| eyre::anyhow!("Default branch is not a valid string, what the fuck"))?;
-
     remote.disconnect().context("Disconnecting from remote")?;
 
     trace!("Rendering");
@@ -329,7 +324,7 @@ pub fn do_job(job: Job) -> Result<CheckOutputs> {
         base,
         head,
         (&added_files, &modified_files, &removed_files),
-        (&repository, default_branch),
+        (&repository, &job.base.r#ref),
         (&repo_dir, Path::new(output_directory)),
         job.pull_request,
     ) {
@@ -348,7 +343,7 @@ pub fn do_job(job: Job) -> Result<CheckOutputs> {
     };
     trace!("Cleaning repos");
 
-    clean_up_references(&repository, default_branch).context("Cleaning up references")?;
+    clean_up_references(&repository, &job.base.r#ref).context("Cleaning up references")?;
 
     res
 }
