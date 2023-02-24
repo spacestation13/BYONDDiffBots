@@ -13,7 +13,7 @@ pub type JobSender = Sender;
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub enum JobType {
-    GithubJob(Job),
+    GithubJob(Box<Job>),
     CleanupJob(String),
 }
 

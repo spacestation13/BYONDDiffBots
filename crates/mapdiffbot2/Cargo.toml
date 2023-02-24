@@ -7,8 +7,8 @@ license = "MIT"
 
 [dependencies]
 serde = { version = "1.0.152", features = ["derive"] }
-serde_json = { version = "1.0.92"}
-toml = "0.7.1"
+serde_json = { version = "1.0.93"}
+toml = "0.7.2"
 octocrab = "0.18.1"
 flume = "0.10.14"
 dmm-tools = { git = "https://github.com/SpaceManiac/SpacemanDMM/", features = ["png"] }
@@ -21,7 +21,7 @@ eyre = "0.6.8"
 stable-eyre = "0.2"
 rayon = "1.6.1"
 derive_builder = "0.12.0"
-once_cell = "1.17.0"
+once_cell = "1.17.1"
 image = "0.24.5"
 glob = "0.3.1"
 diffbot_lib = { path = "../diffbot_lib" }

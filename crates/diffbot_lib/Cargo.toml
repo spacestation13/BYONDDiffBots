@@ -6,7 +6,7 @@ license = "MIT"
 
 [dependencies]
 serde = { version = "1.0.152", features = ["derive"] }
-serde_json = "1.0.92"
+serde_json = "1.0.93"
 octocrab = "0.18.1"
 eyre = "0.6.8"
 derive_builder = "0.12.0"

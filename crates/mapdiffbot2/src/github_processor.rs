@@ -99,7 +99,7 @@ async fn process_pull(
         installation: InstallationId(installation.id),
     };
 
-    let job = serde_json::to_vec(&JobType::GithubJob(job))?;
+    let job = serde_json::to_vec(&JobType::GithubJob(Box::new(job)))?;
 
     job_sender.lock().await.send(job).await?;
 
