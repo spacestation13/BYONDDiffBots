@@ -10,12 +10,11 @@ pub struct Installation {
 pub struct Repository {
     pub url: String,
     pub id: u64,
-    pub name: String,
 }
 
 impl Repository {
     pub fn full_name(&self) -> String {
-        self.name.clone()
+        self.url.split('/').skip(4).collect::<Vec<&str>>().join("/")
     }
 
     pub fn name_tuple(&self) -> (String, String) {
