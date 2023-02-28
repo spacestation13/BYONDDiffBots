@@ -57,6 +57,7 @@ enum QueryData {
 
 #[derive(Deserialize, Debug)]
 struct QLError {
+    #[allow(unused)]
     message: String,
 }
 
