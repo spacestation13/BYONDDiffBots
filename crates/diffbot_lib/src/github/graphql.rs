@@ -51,8 +51,10 @@ use serde::Deserialize;
 
 #[derive(Deserialize)]
 enum QueryData {
-    Data { data: Data },
-    Error { errors: Vec<QLError> },
+    #[serde(rename(deserialize = "data"))]
+    Data(Data),
+    #[serde(rename(deserialize = "error"))]
+    Error(Vec<QLError>),
 }
 
 #[derive(Deserialize, Debug)]
@@ -130,8 +132,8 @@ query {{
             .await?;
 
         let data = match queried {
-            QueryData::Data { data } => data,
-            QueryData::Error { errors } => return Err(eyre::eyre!("GraphQL error: {:?}", errors)),
+            QueryData::Data(data) => data,
+            QueryData::Error(errors) => return Err(eyre::eyre!("GraphQL error: {:?}", errors)),
         };
 
         if data.repository.pull_request.files.edges.is_empty() {

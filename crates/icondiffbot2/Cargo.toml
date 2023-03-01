@@ -17,7 +17,7 @@ lazy_static = "1.4.0"
 reqwest = "0.11.14"
 diffbot_lib = { path = "../diffbot_lib" }
 eyre = "0.6.8"
-stable-eyre = "0.2"
+color-eyre = "0.6.2"
 ndarray = "0.15.6"
 rayon = "1.6.1"
 toml = "0.7.2"
