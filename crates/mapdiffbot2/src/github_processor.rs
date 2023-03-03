@@ -62,18 +62,25 @@ async fn process_pull(
         return Ok(());
     }
 
-    let files = get_pull_files(repo.name_tuple(), installation.id, &pull)
+    let files = match get_pull_files(repo.name_tuple(), installation.id, &pull)
         .await
-        .context("Getting files modified by PR")?
-        .into_iter()
-        .filter(|f| f.filename.ends_with(".dmm"))
-        .filter(|f| {
-            matches!(
-                f.status,
-                ChangeType::Added | ChangeType::Deleted | ChangeType::Modified
-            )
-        })
-        .collect::<Vec<_>>();
+        .context("Getting files modified by PR")
+    {
+        Ok(files) => files
+            .into_iter()
+            .filter(|f| f.filename.ends_with(".dmm"))
+            .filter(|f| {
+                matches!(
+                    f.status,
+                    ChangeType::Added | ChangeType::Deleted | ChangeType::Modified
+                )
+            })
+            .collect::<Vec<_>>(),
+        Err(err) => {
+            check_run.mark_failed(&format!("{:?}", err)).await?;
+            return Ok(());
+        }
+    };
 
     if files.is_empty() {
         let output = Output {
