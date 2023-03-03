@@ -18,7 +18,7 @@ impl Repository {
     }
 
     pub fn name_tuple(&self) -> (String, String) {
-        let mut iter = self.url.split('/').map(|a| a.to_string());
+        let mut iter = self.url.split('/').skip(4).take(2).map(|a| a.to_string());
         (iter.next().unwrap(), iter.next().unwrap())
     }
 }
