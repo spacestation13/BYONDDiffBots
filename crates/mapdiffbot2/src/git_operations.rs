@@ -113,8 +113,13 @@ pub fn fetch_and_get_branches<'a>(
     Ok((base_branch, head_branch))
 }
 
-pub fn clean_up_references(repo: &Repository, default: &str) -> Result<()> {
-    repo.set_head(default).context("Setting head")?;
+pub fn clean_up_references(repo: &Repository, branch: &str) -> Result<()> {
+    repo.set_head(
+        repo.resolve_reference_from_short_name(branch)?
+            .name()
+            .unwrap(),
+    )
+    .context("Setting head")?;
     repo.checkout_head(Some(
         CheckoutBuilder::new()
             .force()
