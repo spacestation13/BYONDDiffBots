@@ -109,7 +109,7 @@ const JOB_JOURNAL_LOCATION: &str = "jobs";
 
 #[actix_web::main]
 async fn main() -> eyre::Result<()> {
-    color_eyre::install().expect("Eyre handler installation failed!");
+    simple_eyre::install().expect("Eyre handler installation failed!");
     // init_global_subscriber();
 
     let config_path = Path::new(".").join("config.toml");

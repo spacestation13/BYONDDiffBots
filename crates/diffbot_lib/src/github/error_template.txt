@@ -5,7 +5,8 @@ The following stack trace may be useful:
     <summary>
     Stack trace
     </summary>
-
+```
 {stack_trace}
+```
 
 </details>
