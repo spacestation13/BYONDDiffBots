@@ -131,7 +131,7 @@ pub fn clean_up_references(repo: &Repository, branch: &str) -> Result<()> {
     let references = references
         .names()
         .filter_map(move |reference| {
-            (reference.as_ref().ok()?.contains("pull") && reference.as_ref().ok()? != &default)
+            (reference.as_ref().ok()?.contains("pull-"))
                 .then(move || reference.ok())
                 .flatten()
         })
