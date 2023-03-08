@@ -227,15 +227,11 @@ fn generate_finished_output<P: AsRef<Path>>(
                 });
             }
             Err(e) => {
-                let mut truncated_err = format!("{e:?}");
-                truncated_err.truncate(500);
+                let error = format!("{e:?}");
                 builder.add_text(&format!(
-                    include_str!("../templates/diff_template_mod.txt"),
-                    bounds = "Unknown",
+                    include_str!("../templates/diff_template_error.txt"),
                     filename = file.filename,
-                    image_before_link = truncated_err,
-                    image_after_link = "OLD MAP FAILED TO RENDER, CANNOT DIFF",
-                    image_diff_link = "OLD MAP FAILED TO RENDER, CANNOT DIFF"
+                    error = error,
                 ));
             }
         });
