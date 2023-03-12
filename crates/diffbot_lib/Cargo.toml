@@ -5,8 +5,8 @@ edition = "2021"
 license = "MIT"
 
 [dependencies]
-serde = { version = "1.0.152", features = ["derive"] }
-serde_json = "1.0.93"
+serde = { version = "1.0.155", features = ["derive"] }
+serde_json = "1.0.94"
 octocrab = "0.18.1"
 eyre = "0.6.8"
 derive_builder = "0.12.0"

@@ -34,8 +34,7 @@ pub fn fetch_and_get_branches<'a>(
         .reference_to_annotated_commit(&fetch_head)
         .context("Getting commit from FETCH_HEAD")?;
 
-    repo.resolve_reference_from_short_name(base_branch_name)?
-        .set_target(base_commit.id(), "Fast forwarding origin ref")
+    repo.branch(base_branch_name, base_commit, true)
         .context("Setting default branch to FETCH_HEAD's commit")?;
 
     repo.set_head(

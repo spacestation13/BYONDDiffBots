@@ -6,8 +6,8 @@ license = "MIT"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-serde = { version = "1.0.152", features = ["derive"] }
-serde_json = "1.0.93"
+serde = { version = "1.0.155", features = ["derive"] }
+serde_json = "1.0.94"
 octocrab = "0.18.1"
 dmm-tools = { git = "https://github.com/SpaceManiac/SpacemanDMM/", features = ["png", "gif"] }
 dreammaker = { git = "https://github.com/SpaceManiac/SpacemanDMM/" }
