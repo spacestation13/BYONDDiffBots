@@ -34,7 +34,7 @@ pub fn fetch_and_get_branches<'a>(
         .reference_to_annotated_commit(&fetch_head)
         .context("Getting commit from FETCH_HEAD")?;
 
-    repo.branch(base_branch_name, base_commit, true)
+    repo.branch_from_annotated_commit(base_branch_name, &base_commit, true)
         .context("Setting default branch to FETCH_HEAD's commit")?;
 
     repo.set_head(
@@ -70,7 +70,7 @@ pub fn fetch_and_get_branches<'a>(
     let head_name = format!("mdb-pull-{base_sha}-{head_sha}");
 
     let mut head_branch = repo
-        .branch(
+        .branch_from_annotated_commit(
             &head_name,
             &repo.reference_to_annotated_commit(&fetch_head)?,
             true,
