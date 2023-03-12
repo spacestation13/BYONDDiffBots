@@ -34,8 +34,21 @@ pub fn fetch_and_get_branches<'a>(
         .reference_to_annotated_commit(&fetch_head)
         .context("Getting commit from FETCH_HEAD")?;
 
-    repo.branch_from_annotated_commit(base_branch_name, &base_commit, true)
-        .context("Setting default branch to FETCH_HEAD's commit")?;
+    match repo
+        .find_branch(base_branch_name, git2::BranchType::Local)
+        .ok()
+        .map(|branch| branch.is_head())
+    {
+        Some(true) => {
+            repo.resolve_reference_from_short_name(base_branch_name)?
+                .set_target(base_commit.id(), "Fast forwarding current ref")
+                .context("Setting branch to FETCH_HEAD's commit")?;
+        }
+        None | Some(false) => {
+            repo.branch_from_annotated_commit(base_branch_name, &base_commit, true)
+                .context("Setting branch to FETCH_HEAD's commit")?;
+        }
+    }
 
     repo.set_head(
         repo.resolve_reference_from_short_name(base_branch_name)?
