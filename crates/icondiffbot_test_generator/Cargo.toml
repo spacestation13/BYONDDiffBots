@@ -7,6 +7,6 @@ license = "MIT"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-octocrab = "0.18.1"
-clap = { version = "4.1.9", features = ["derive"] }
-tokio = { version = "1.26.0", features = ["full"] }
+octocrab = "0.19.0"
+clap = { version = "4.2.0", features = ["derive"] }
+tokio = { version = "1.27.0", features = ["full"] }

@@ -6,10 +6,10 @@ license = "MIT"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-serde = { version = "1.0.156", features = ["derive"] }
-serde_json = { version = "1.0.94"}
+serde = { version = "1.0.159", features = ["derive"] }
+serde_json = { version = "1.0.95"}
 toml = "0.7.3"
-octocrab = "0.18.1"
+octocrab = "0.19.0"
 flume = "0.10.14"
 dmm-tools = { git = "https://github.com/SpaceManiac/SpacemanDMM/", features = ["png"] }
 dreammaker = { git = "https://github.com/SpaceManiac/SpacemanDMM/" }
@@ -22,16 +22,16 @@ simple-eyre = "0.3.1"
 rayon = "1.7.0"
 derive_builder = "0.12.0"
 once_cell = "1.17.1"
-image = "0.24.5"
+image = "0.24.6"
 glob = "0.3.1"
 diffbot_lib = { path = "../diffbot_lib" }
 git2 = "0.16.1"
 yaque = "0.6.4"
 walkdir = "2.3.3"
-delay_timer = "0.11.3"
+delay_timer = "0.11.4"
 hex = { version = "0.4.3", features = ["serde"] }
 
-gix = { version = "0.42.0", features = ["blocking-network-client", "blocking-http-transport-reqwest", "blocking-http-transport-reqwest-rust-tls"] }
+gix = { version = "0.43.0", features = ["blocking-network-client", "blocking-http-transport-reqwest", "blocking-http-transport-reqwest-rust-tls"] }
 
 actix-web = "4.3.1"
 actix-files = "0.6.2"
