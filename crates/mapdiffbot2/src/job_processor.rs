@@ -186,7 +186,7 @@ fn generate_finished_output<P: AsRef<Path>>(
 
     let mut builder = CheckOutputBuilder::new(
     "Map renderings",
-    "*Please file any issues [here](https://github.com/spacestation13/BYONDDiffBots/issues).*\n\nMaps with diff:",
+    "*Please file any issues [here](https://github.com/spacestation13/BYONDDiffBots/issues).*\n\n*Github may fail to render some images, appearing as cropped on large map changes. Please use the raw links in this case.*\n\nMaps with diff:",
     );
 
     let link_base = format!("{file_url}/{non_abs_directory}");
