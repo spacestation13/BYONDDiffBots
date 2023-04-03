@@ -1,4 +1,4 @@
-use diffbot_lib::log::trace;
+use diffbot_lib::log;
 use eyre::{Context, Result};
 use path_absolutize::Absolutize;
 use rayon::prelude::*;
@@ -39,7 +39,11 @@ fn render(
     pull_request_number: u64,
     // feel like this is a bit of a hack but it works for now
 ) -> Result<RenderedMaps> {
-    trace!("Fetching and getting branches");
+    log::trace!(
+        "Fetching and getting branches, base: {:?}, head: {:?}",
+        base,
+        head
+    );
 
     let pull_branch = format!("mdb-{}-{}", base.sha, head.sha);
     let head_branch = format!("pull/{pull_request_number}/head:{pull_branch}");
@@ -257,7 +261,13 @@ fn generate_finished_output<P: AsRef<Path>>(
 }
 
 pub fn do_job(job: Job) -> Result<CheckOutputs> {
-    trace!("Starting Job");
+    log::trace!(
+        "Starting Job on repo: {}, pr number: {}, base commit: {}, head commit: {}",
+        job.repo.full_name(),
+        job.pull_request,
+        job.base.sha,
+        job.head.sha
+    );
 
     let base = &job.base;
     let head = &job.head;
@@ -267,7 +277,7 @@ pub fn do_job(job: Job) -> Result<CheckOutputs> {
     let handle = actix_web::rt::Runtime::new()?;
 
     if !repo_dir.exists() {
-        trace!("Directory doesn't exist, creating dir");
+        log::trace!("Directory {:?} doesn't exist, creating dir", repo_dir);
         std::fs::create_dir_all(&repo_dir)?;
         handle.block_on(async {
                 let output = Output {
@@ -280,7 +290,6 @@ pub fn do_job(job: Job) -> Result<CheckOutputs> {
         clone_repo(&repo, &repo_dir).context("Cloning repo")?;
     }
 
-    trace!("Absolutizing dirs");
     let non_abs_directory = format!("images/{}/{}", job.repo.id, job.check_run.id());
     let output_directory = Path::new(&non_abs_directory)
         .absolutize()
@@ -290,7 +299,11 @@ pub fn do_job(job: Job) -> Result<CheckOutputs> {
         .to_str()
         .ok_or_else(|| eyre::anyhow!("Failed to create absolute path to image directory",))?;
 
-    trace!("Filtering on status");
+    log::trace!(
+        "Dirs absolutized from {:?} to {:?}",
+        non_abs_directory,
+        output_directory
+    );
 
     let filter_on_status = |status: ChangeType| {
         job.files
@@ -303,7 +316,6 @@ pub fn do_job(job: Job) -> Result<CheckOutputs> {
     let modified_files = filter_on_status(ChangeType::Modified);
     let removed_files = filter_on_status(ChangeType::Deleted);
 
-    trace!("Opening directory and fetching");
     let repository = git2::Repository::open(&repo_dir).context("Opening repository")?;
 
     let mut remote = repository.find_remote("origin")?;
@@ -314,8 +326,6 @@ pub fn do_job(job: Job) -> Result<CheckOutputs> {
 
     remote.disconnect().context("Disconnecting from remote")?;
 
-    trace!("Rendering");
-
     let res = match render(
         base,
         head,
@@ -324,20 +334,16 @@ pub fn do_job(job: Job) -> Result<CheckOutputs> {
         (&repo_dir, Path::new(output_directory)),
         job.pull_request,
     ) {
-        Ok(maps) => {
-            trace!("Generating output");
-            generate_finished_output(
-                &added_files,
-                &modified_files,
-                &removed_files,
-                &non_abs_directory,
-                maps,
-            )
-        }
+        Ok(maps) => generate_finished_output(
+            &added_files,
+            &modified_files,
+            &removed_files,
+            &non_abs_directory,
+            maps,
+        ),
 
         Err(err) => Err(err),
     };
-    trace!("Cleaning repos");
 
     clean_up_references(&repository, &job.base.r#ref).context("Cleaning up references")?;
 
