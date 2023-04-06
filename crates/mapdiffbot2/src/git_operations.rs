@@ -55,9 +55,10 @@ pub fn fetch_and_get_branches<'a>(
     )
     .context("Setting HEAD to base")?;
 
-    let commit = repo
-        .find_commit(base_id)
-        .context("Finding commit from base SHA")?;
+    let commit = match repo.find_commit(base_id).context("Finding base commit") {
+        Ok(commit) => commit,
+        Err(_) => repo.head()?.peel_to_commit()?,
+    };
 
     repo.resolve_reference_from_short_name(base_branch_name)?
         .set_target(commit.id(), "Setting default branch to the correct commit")?;
@@ -92,7 +93,10 @@ pub fn fetch_and_get_branches<'a>(
     repo.set_head(head_branch.name().unwrap())
         .context("Setting HEAD to head")?;
 
-    let head_commit = repo.find_commit(head_id).context("Finding head commit")?;
+    let head_commit = match repo.find_commit(head_id).context("Finding head commit") {
+        Ok(commit) => commit,
+        Err(_) => repo.head()?.peel_to_commit()?,
+    };
 
     head_branch.set_target(
         head_commit.id(),
