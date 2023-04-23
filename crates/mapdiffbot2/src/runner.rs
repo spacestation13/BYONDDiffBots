@@ -14,7 +14,7 @@ pub async fn handle_jobs<S: AsRef<str>>(name: S, mut job_receiver: yaque::Receiv
                 let job: Result<JobType, serde_json::Error> = serde_json::from_slice(&jobguard);
                 match job {
                     Ok(job) => match job {
-                        JobType::GithubJob(job) => job_handler(name.as_ref(), job).await,
+                        JobType::GithubJob(job) => job_handler(name.as_ref(), *job).await,
                         JobType::CleanupJob(_) => garbage_collect_all_repos().await,
                     },
                     Err(err) => log::error!("Failed to parse job from queue: {}", err),
@@ -102,7 +102,7 @@ async fn garbage_collect_all_repos() {
 
     let output = output.unwrap();
     if let Err(e) = output {
-        let fuckup = format!("{:?}", e);
+        let fuckup = format!("{e:?}");
         log::error!("GC errored: {}", fuckup);
     }
 }
@@ -156,7 +156,7 @@ async fn job_handler(name: &str, job: Job) {
 
     let output = output.unwrap();
     if let Err(e) = output {
-        let fuckup = format!("{:?}", e);
+        let fuckup = format!("{e:?}");
         log::error!("Other rendering error: {}", fuckup);
         let _ = check_run.mark_failed(&fuckup).await;
         return;

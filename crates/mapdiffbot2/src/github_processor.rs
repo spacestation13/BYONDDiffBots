@@ -62,18 +62,25 @@ async fn process_pull(
         return Ok(());
     }
 
-    let files = get_pull_files(repo.name_tuple(), installation.id, &pull)
+    let files = match get_pull_files(repo.name_tuple(), installation.id, &pull)
         .await
-        .context("Getting files modified by PR")?
-        .into_iter()
-        .filter(|f| f.filename.ends_with(".dmm"))
-        .filter(|f| {
-            matches!(
-                f.status,
-                ChangeType::Added | ChangeType::Deleted | ChangeType::Modified
-            )
-        })
-        .collect::<Vec<_>>();
+        .context("Getting files modified by PR")
+    {
+        Ok(files) => files
+            .into_iter()
+            .filter(|f| f.filename.ends_with(".dmm"))
+            .filter(|f| {
+                matches!(
+                    f.status,
+                    ChangeType::Added | ChangeType::Deleted | ChangeType::Modified
+                )
+            })
+            .collect::<Vec<_>>(),
+        Err(err) => {
+            check_run.mark_failed(&format!("{:?}", err)).await?;
+            return Ok(());
+        }
+    };
 
     if files.is_empty() {
         let output = Output {
@@ -99,37 +106,13 @@ async fn process_pull(
         installation: InstallationId(installation.id),
     };
 
-    let job = serde_json::to_vec(&JobType::GithubJob(job))?;
+    let job = serde_json::to_vec(&JobType::GithubJob(Box::new(job)))?;
 
     job_sender.lock().await.send(job).await?;
 
     log::trace!("Job sent to queue");
 
     Ok(())
-}
-
-use std::{future::Future, pin::Pin};
-
-#[derive(Debug)]
-pub struct GithubEvent(pub String);
-
-impl actix_web::FromRequest for GithubEvent {
-    type Error = std::io::Error;
-
-    type Future = Pin<Box<dyn Future<Output = Result<Self, Self::Error>>>>;
-
-    fn from_request(req: &actix_web::HttpRequest, _: &mut actix_web::dev::Payload) -> Self::Future {
-        let req = req.clone();
-        Box::pin(async move {
-            match req.headers().get("X-Github-Event") {
-                Some(event) => Ok(GithubEvent(event.to_str().unwrap().to_owned())),
-                None => Err(std::io::Error::new(
-                    std::io::ErrorKind::InvalidData,
-                    "Missing X-Github-Event header",
-                )),
-            }
-        })
-    }
 }
 
 async fn handle_pull_request(payload: String, job_sender: DataJobSender) -> Result<&'static str> {
@@ -144,7 +127,7 @@ async fn handle_pull_request(payload: String, job_sender: DataJobSender) -> Resu
         &payload.repository.full_name(),
         &payload.pull_request.head.sha,
         payload.installation.id,
-        None,
+        Some("MapDiffBot2"),
     )
     .await?;
 
@@ -162,13 +145,24 @@ async fn handle_pull_request(payload: String, job_sender: DataJobSender) -> Resu
 
 #[actix_web::post("/payload")]
 pub async fn process_github_payload(
-    event: GithubEvent,
+    event: diffbot_lib::github::github_api::GithubEvent,
     payload: String,
     job_sender: DataJobSender,
 ) -> actix_web::Result<&'static str> {
     if event.0 != "pull_request" {
         return Ok("Not a pull request event");
     }
+
+    let secret = {
+        let conf = &crate::CONFIG.get().unwrap();
+        conf.secret.as_ref()
+    };
+
+    diffbot_lib::verify::verify_signature(
+        secret.map(|a| a.as_str()),
+        event.1.as_deref(),
+        &payload,
+    )?;
 
     log::trace!("Payload received, processing");
 

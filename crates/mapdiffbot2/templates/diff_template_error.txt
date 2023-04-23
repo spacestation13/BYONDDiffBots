@@ -1,0 +1,8 @@
+<details>
+    <summary>
+    MODIFIED - {filename}
+    </summary>
+    ```
+    {error}
+    ```
+</details>

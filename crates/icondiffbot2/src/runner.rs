@@ -73,7 +73,7 @@ async fn job_handler(name: &str, job: Job) {
 
     let output = output.unwrap();
     if let Err(e) = output {
-        let fuckup = format!("{:?}", e);
+        let fuckup = format!("{e:?}");
         error!("Other rendering error: {}", fuckup);
         let _ = check_run.mark_failed(&fuckup).await;
         return;

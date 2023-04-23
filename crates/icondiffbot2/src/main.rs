@@ -55,6 +55,7 @@ pub struct Config {
     pub blacklist_contact: String,
     #[serde(default = "default_log_level")]
     pub logging: String,
+    pub secret: Option<String>,
 }
 
 fn default_log_level() -> String {
@@ -108,12 +109,12 @@ const JOB_JOURNAL_LOCATION: &str = "jobs";
 
 #[actix_web::main]
 async fn main() -> eyre::Result<()> {
-    stable_eyre::install().expect("Eyre handler installation failed!");
+    simple_eyre::install().expect("Eyre handler installation failed!");
     // init_global_subscriber();
 
     let config_path = Path::new(".").join("config.toml");
     let config =
-        init_config(&config_path).unwrap_or_else(|_| panic!("Failed to read {:?}", config_path));
+        init_config(&config_path).unwrap_or_else(|_| panic!("Failed to read {config_path:?}"));
 
     diffbot_lib::logger::init_logger(&config.logging).expect("Log init failed!");
 

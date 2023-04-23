@@ -26,6 +26,7 @@ impl Repository {
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct Branch {
     pub sha: String,
+    pub r#ref: String,
 }
 
 #[derive(Deserialize, Debug, Clone)]

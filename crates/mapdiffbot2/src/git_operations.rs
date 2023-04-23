@@ -7,8 +7,8 @@ pub fn fetch_and_get_branches<'a>(
     base_sha: &str,
     head_sha: &str,
     repo: &'a git2::Repository,
-    fetching_branch: &str,
-    default_branch: &str,
+    head_branch_name: &str,
+    base_branch_name: &str,
 ) -> Result<(git2::Reference<'a>, git2::Reference<'a>)> {
     let base_id = git2::Oid::from_str(base_sha).context("Parsing base sha")?;
     let head_id = git2::Oid::from_str(head_sha).context("Parsing head sha")?;
@@ -21,7 +21,7 @@ pub fn fetch_and_get_branches<'a>(
 
     remote
         .fetch(
-            &[default_branch],
+            &[base_branch_name],
             Some(FetchOptions::new().prune(git2::FetchPrune::On)),
             None,
         )
@@ -34,31 +34,42 @@ pub fn fetch_and_get_branches<'a>(
         .reference_to_annotated_commit(&fetch_head)
         .context("Getting commit from FETCH_HEAD")?;
 
-    repo.resolve_reference_from_short_name(default_branch)?
-        .set_target(base_commit.id(), "Fast forwarding origin ref")
-        .context("Setting default branch to FETCH_HEAD's commit")?;
+    if let Some(branch) = repo
+        .find_branch(base_branch_name, git2::BranchType::Local)
+        .ok()
+        .and_then(|branch| branch.is_head().then_some(branch))
+    {
+        branch
+            .into_reference()
+            .set_target(base_commit.id(), "Fast forwarding current ref")
+            .context("Setting base reference to FETCH_HEAD's commit")?;
+    } else {
+        repo.branch_from_annotated_commit(base_branch_name, &base_commit, true)
+            .context("Setting a new base branch to FETCH_HEAD's commit")?;
+    }
 
     repo.set_head(
-        repo.resolve_reference_from_short_name(default_branch)?
+        repo.resolve_reference_from_short_name(base_branch_name)?
             .name()
             .unwrap(),
     )
     .context("Setting HEAD to base")?;
 
-    let commit = repo
-        .find_commit(base_id)
-        .context("Finding commit from base SHA")?;
+    let commit = match repo.find_commit(base_id).context("Finding base commit") {
+        Ok(commit) => commit,
+        Err(_) => repo.head()?.peel_to_commit()?,
+    };
 
-    repo.resolve_reference_from_short_name(default_branch)?
+    repo.resolve_reference_from_short_name(base_branch_name)?
         .set_target(commit.id(), "Setting default branch to the correct commit")?;
 
     let base_branch = repo
-        .resolve_reference_from_short_name(default_branch)
+        .resolve_reference_from_short_name(base_branch_name)
         .context("Getting the base reference")?;
 
     remote
         .fetch(
-            &[fetching_branch],
+            &[head_branch_name],
             Some(FetchOptions::new().prune(git2::FetchPrune::On)),
             None,
         )
@@ -68,7 +79,7 @@ pub fn fetch_and_get_branches<'a>(
         .find_reference("FETCH_HEAD")
         .context("Getting FETCH_HEAD")?;
 
-    let head_name = format!("mdb-pull-{}-{}", base_sha, head_sha);
+    let head_name = format!("mdb-pull-{base_sha}-{head_sha}");
 
     let mut head_branch = repo
         .branch_from_annotated_commit(
@@ -82,7 +93,10 @@ pub fn fetch_and_get_branches<'a>(
     repo.set_head(head_branch.name().unwrap())
         .context("Setting HEAD to head")?;
 
-    let head_commit = repo.find_commit(head_id).context("Finding head commit")?;
+    let head_commit = match repo.find_commit(head_id).context("Finding head commit") {
+        Ok(commit) => commit,
+        Err(_) => repo.head()?.peel_to_commit()?,
+    };
 
     head_branch.set_target(
         head_commit.id(),
@@ -96,7 +110,7 @@ pub fn fetch_and_get_branches<'a>(
     remote.disconnect().context("Disconnecting from remote")?;
 
     repo.set_head(
-        repo.resolve_reference_from_short_name(default_branch)?
+        repo.resolve_reference_from_short_name(base_branch_name)?
             .name()
             .unwrap(),
     )
@@ -113,8 +127,13 @@ pub fn fetch_and_get_branches<'a>(
     Ok((base_branch, head_branch))
 }
 
-pub fn clean_up_references(repo: &Repository, default: &str) -> Result<()> {
-    repo.set_head(default).context("Setting head")?;
+pub fn clean_up_references(repo: &Repository, branch: &str) -> Result<()> {
+    repo.set_head(
+        repo.resolve_reference_from_short_name(branch)?
+            .name()
+            .unwrap(),
+    )
+    .context("Setting head")?;
     repo.checkout_head(Some(
         CheckoutBuilder::new()
             .force()
@@ -126,7 +145,7 @@ pub fn clean_up_references(repo: &Repository, default: &str) -> Result<()> {
     let references = references
         .names()
         .filter_map(move |reference| {
-            (reference.as_ref().ok()?.contains("pull") && reference.as_ref().ok()? != &default)
+            (reference.as_ref().ok()?.contains("pull-"))
                 .then(move || reference.ok())
                 .flatten()
         })

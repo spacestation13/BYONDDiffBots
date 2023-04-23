@@ -5,17 +5,22 @@ edition = "2021"
 license = "MIT"
 
 [dependencies]
-serde = { version = "1.0.151", features = ["derive"] }
-serde_json = "1.0.91"
-octocrab = "0.17.0"
+serde = { version = "1.0.159", features = ["derive"] }
+serde_json = "1.0.95"
+octocrab = "0.19.0"
 eyre = "0.6.8"
 derive_builder = "0.12.0"
-chrono = "0.4.23"
-reqwest = "0.11.13"
+chrono = "0.4.24"
+reqwest = "0.11.16"
 yaque = "0.6.4"
 futures-lite = "1.12.0"
 log = "0.4.17"
-simplelog = "0.12.0"
+simplelog = "0.12.1"
+sha2 = "0.10.6"
+hmac = "0.12.1"
+hex = "0.4.3"
+
+actix-web = "4.3.1"
 
 async-fs = "1.6.0"
 async-mutex = "1.4.0"

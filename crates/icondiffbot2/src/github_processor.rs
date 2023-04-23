@@ -1,5 +1,3 @@
-use std::{future::Future, pin::Pin};
-
 use diffbot_lib::{
     github::{
         github_api::CheckRun,
@@ -14,27 +12,6 @@ use octocrab::models::InstallationId;
 use diffbot_lib::github::github_types::FileDiff;
 
 use crate::DataJobSender;
-
-pub struct GithubEvent(pub String);
-
-impl actix_web::FromRequest for GithubEvent {
-    type Error = std::io::Error;
-
-    type Future = Pin<Box<dyn Future<Output = Result<Self, Self::Error>>>>;
-
-    fn from_request(req: &actix_web::HttpRequest, _: &mut actix_web::dev::Payload) -> Self::Future {
-        let req = req.clone();
-        Box::pin(async move {
-            match req.headers().get("X-Github-Event") {
-                Some(event) => Ok(GithubEvent(event.to_str().unwrap().to_owned())),
-                None => Err(std::io::Error::new(
-                    std::io::ErrorKind::InvalidData,
-                    "Missing X-Github-Event header",
-                )),
-            }
-        })
-    }
-}
 
 async fn handle_pull_request(
     payload: PullRequestEventPayload,
@@ -147,7 +124,7 @@ async fn handle_pull_request(
 
 #[actix_web::post("/payload")]
 pub async fn process_github_payload_actix(
-    event: GithubEvent,
+    event: diffbot_lib::github::github_api::GithubEvent,
     payload: String,
     job_sender: DataJobSender,
 ) -> actix_web::Result<&'static str> {
@@ -155,6 +132,17 @@ pub async fn process_github_payload_actix(
     if event.0 != "pull_request" {
         return Ok("Not a pull request event");
     }
+
+    let secret = {
+        let conf = &crate::CONFIG.get().unwrap();
+        conf.secret.as_ref()
+    };
+
+    diffbot_lib::verify::verify_signature(
+        secret.map(|v| v.as_str()),
+        event.1.as_deref(),
+        &payload,
+    )?;
 
     let payload: PullRequestEventPayload = serde_json::from_str(&payload)?;
 

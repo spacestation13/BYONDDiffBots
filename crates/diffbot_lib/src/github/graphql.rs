@@ -50,8 +50,17 @@ use serde::Deserialize;
 */
 
 #[derive(Deserialize)]
-struct QueryData {
-    data: Data,
+enum QueryData {
+    #[serde(rename(deserialize = "data"))]
+    Data(Data),
+    #[serde(rename(deserialize = "error"))]
+    Error(Vec<QLError>),
+}
+
+#[derive(Deserialize, Debug)]
+struct QLError {
+    #[allow(unused)]
+    message: String,
 }
 
 #[derive(Deserialize)]
@@ -103,7 +112,7 @@ pub async fn get_pull_files<I: Into<InstallationId>>(
         let queried: QueryData = crab
             .graphql(&format!(
                 "
-query {{ 
+query {{
   repository(owner:\"{}\", name:\"{}\") {{
     pullRequest(number:{}) {{
       files(first:100, after:\"{}\") {{
@@ -122,18 +131,21 @@ query {{
             ))
             .await?;
 
-        if queried.data.repository.pull_request.files.edges.is_empty() {
+        let data = match queried {
+            QueryData::Data(data) => data,
+            QueryData::Error(errors) => return Err(eyre::eyre!("GraphQL error: {:?}", errors)),
+        };
+
+        if data.repository.pull_request.files.edges.is_empty() {
             break;
         }
 
-        cursor = match queried.data.repository.pull_request.files.edges.last() {
+        cursor = match data.repository.pull_request.files.edges.last() {
             Some(edge) => edge.cursor.clone(),
             None => "".to_owned(),
         };
         ret.extend(
-            queried
-                .data
-                .repository
+            data.repository
                 .pull_request
                 .files
                 .edges
