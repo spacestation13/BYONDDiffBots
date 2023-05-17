@@ -10,6 +10,10 @@ gc_schedule = "0 0 4 * * *"
 # Logging level (Optional, defaults to info), Valid values are "info", "warn", "trace", "error", "debug"
 logging = "info"
 
+# Mysql db url, the bots will write down a table that contains necessary information,
+# for automated deletion (Optional)
+# db_url = ""
+
 # Webhook secret (Optional, payload verification w/ SHA is disabled if not set)
 # secret = "abcdef"
 
