@@ -1,5 +1,6 @@
 use diffbot_lib::log;
 use eyre::{Context, Result};
+use mysql::{params, prelude::Queryable};
 use octocrab::models::InstallationId;
 
 use crate::DataJobSender;
@@ -115,30 +116,87 @@ async fn process_pull(
     Ok(())
 }
 
-async fn handle_pull_request(payload: String, job_sender: DataJobSender) -> Result<&'static str> {
+async fn handle_pull_request(
+    payload: String,
+    job_sender: DataJobSender,
+    pool: actix_web::web::Data<Option<mysql::Pool>>,
+) -> Result<&'static str> {
     let payload: PullRequestEventPayload = serde_json::from_str(&payload)?;
-    if payload.action != "opened" && payload.action != "synchronize" {
-        return Ok("PR not opened or updated");
+
+    let pool = pool.get_ref();
+
+    match payload.action.as_str() {
+        "opened" | "synchronize" | "reopened" => {
+            log::trace!("Creating checkrun");
+
+            let check_run = CheckRun::create(
+                &payload.repository.full_name(),
+                &payload.pull_request.head.sha,
+                payload.installation.id,
+                Some("MapDiffBot2"),
+            )
+            .await?;
+
+            let (check_id, repo_id, pr_number) = (
+                check_run.id(),
+                payload.repository.id,
+                payload.pull_request.number,
+            );
+
+            process_pull(
+                payload.repository,
+                payload.pull_request,
+                check_run,
+                &payload.installation,
+                job_sender,
+            )
+            .await?;
+
+            if let Some(ref pool) = pool {
+                let mut conn = pool.get_conn()?;
+                conn.exec_drop(
+                    r"INSERT INTO jobs (
+                        check_id,
+                        repo_id,
+                        pr_number,
+                        merge_date
+                    )
+                    VALUES(
+                        :check_id,
+                        :repo_id,
+                        :pr_number,
+                        :merge_date
+                    )
+                    ",
+                    params! {
+                        "check_id" => check_id,
+                        "repo_id" => repo_id,
+                        "pr_number" => pr_number,
+                        "merge_date" => None::<time::PrimitiveDateTime>,
+                    },
+                )?;
+            }
+        }
+        "closed" => {
+            if let Some(ref pool) = pool {
+                let mut conn = pool.get_conn()?;
+
+                let now = time::OffsetDateTime::now_utc();
+                let now = time::PrimitiveDateTime::new(now.date(), now.time());
+                conn.exec_drop(
+                    r"UPDATE (jobs) SET merge_date=:date
+                    WHERE repo_id=:rp_id
+                    AND pr_number=:pr_num",
+                    params! {
+                        "date" => now,
+                        "rp_id" => payload.repository.id,
+                        "pr_num" => payload.pull_request.number,
+                    },
+                )?;
+            }
+        }
+        _ => return Ok("PR not opened or updated"),
     }
-
-    log::trace!("Creating checkrun");
-
-    let check_run = CheckRun::create(
-        &payload.repository.full_name(),
-        &payload.pull_request.head.sha,
-        payload.installation.id,
-        Some("MapDiffBot2"),
-    )
-    .await?;
-
-    process_pull(
-        payload.repository,
-        payload.pull_request,
-        check_run,
-        &payload.installation,
-        job_sender,
-    )
-    .await?;
 
     Ok("Check submitted")
 }
@@ -148,6 +206,7 @@ pub async fn process_github_payload(
     event: diffbot_lib::github::github_api::GithubEvent,
     payload: String,
     job_sender: DataJobSender,
+    pool: actix_web::web::Data<Option<mysql::Pool>>,
 ) -> actix_web::Result<&'static str> {
     if event.0 != "pull_request" {
         return Ok("Not a pull request event");
@@ -166,8 +225,10 @@ pub async fn process_github_payload(
 
     log::trace!("Payload received, processing");
 
-    handle_pull_request(payload, job_sender).await.map_err(|e| {
-        log::error!("Error handling event: {:?}", e);
-        actix_web::error::ErrorBadRequest(e)
-    })
+    handle_pull_request(payload, job_sender, pool)
+        .await
+        .map_err(|e| {
+            log::error!("Error handling event: {:?}", e);
+            actix_web::error::ErrorBadRequest(e)
+        })
 }

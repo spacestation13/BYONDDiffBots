@@ -5,6 +5,7 @@ mod sha;
 mod table_builder;
 
 use diffbot_lib::{async_fs, async_mutex::Mutex, job::types::JobSender};
+use mysql::prelude::Queryable;
 use octocrab::OctocrabBuilder;
 use once_cell::sync::OnceCell;
 use serde::Deserialize;
@@ -56,6 +57,7 @@ pub struct Config {
     #[serde(default = "default_log_level")]
     pub logging: String,
     pub secret: Option<String>,
+    pub db_url: Option<String>,
 }
 
 fn default_log_level() -> String {
@@ -120,22 +122,44 @@ async fn main() -> eyre::Result<()> {
 
     let key = read_key(&PathBuf::from(&config.github.private_key_path));
 
-    octocrab::initialise(OctocrabBuilder::new().app(
-        config.github.app_id.into(),
-        jsonwebtoken::EncodingKey::from_rsa_pem(&key).unwrap(),
-    ))
-    .expect("Octocrab failed to initialise");
+    octocrab::initialise(
+        OctocrabBuilder::new()
+            .app(
+                config.github.app_id.into(),
+                jsonwebtoken::EncodingKey::from_rsa_pem(&key).unwrap(),
+            )
+            .build()
+            .expect("fucked up octocrab"),
+    );
 
     async_fs::create_dir_all("./images").await.unwrap();
 
     let (job_sender, job_receiver) = yaque::channel(JOB_JOURNAL_LOCATION)
         .expect("Couldn't open an on-disk queue, check permissions or drive space?");
 
+    let pool = config
+        .db_url
+        .as_ref()
+        .map(|url| mysql::Pool::new(url.as_str()).unwrap());
+
+    if let Some(ref pool) = pool {
+        let mut conn = pool.get_conn()?;
+        conn.query_drop(
+            r"CREATE TABLE IF NOT EXISTS jobs (
+                check_id int not null
+                repo_id int not null
+                pr_number int not null
+                merge_date datetime
+        )",
+        )?;
+    }
+
     actix_web::rt::spawn(runner::handle_jobs("IconDiffBot2", job_receiver));
 
     let job_sender: DataJobSender = actix_web::web::Data::new(Mutex::new(job_sender));
 
     actix_web::HttpServer::new(move || {
+        let pool = actix_web::web::Data::new(pool.clone());
         use actix_web::web::{FormConfig, PayloadConfig};
         //absolutely rancid
         let (form_config, string_config) = config.web.limits.as_ref().map_or(
@@ -151,6 +175,7 @@ async fn main() -> eyre::Result<()> {
             .app_data(form_config)
             .app_data(string_config)
             .app_data(job_sender.clone())
+            .app_data(pool)
             .service(index)
             .service(github_processor::process_github_payload_actix)
             .service(actix_files::Files::new("/images", "./images"))

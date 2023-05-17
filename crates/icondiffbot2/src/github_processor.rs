@@ -11,28 +11,89 @@ use octocrab::models::InstallationId;
 
 use diffbot_lib::github::github_types::FileDiff;
 
+use mysql::{params, prelude::Queryable};
+
 use crate::DataJobSender;
 
 async fn handle_pull_request(
     payload: PullRequestEventPayload,
     job_sender: DataJobSender,
+    pool: actix_web::web::Data<Option<mysql::Pool>>,
 ) -> Result<()> {
+    let pool = pool.get_ref();
+
     match payload.action.as_str() {
-        "opened" => {}
-        #[cfg(debug_assertions)]
-        "reopened" => {}
-        "synchronize" => {}
-        _ => return Ok(()),
+        "opened" | "synchronize" | "reopened" => {
+            let check_run = CheckRun::create(
+                &payload.repository.full_name(),
+                &payload.pull_request.head.sha,
+                payload.installation.id,
+                Some("IconDiffBot2"),
+            )
+            .await?;
+
+            let (check_id, repo_id, pr_number) = (
+                check_run.id(),
+                payload.repository.id,
+                payload.pull_request.number,
+            );
+
+            handle_pull(payload, job_sender, check_run).await?;
+
+            if let Some(ref pool) = pool {
+                let mut conn = pool.get_conn()?;
+                conn.exec_drop(
+                    r"INSERT INTO jobs (
+                        check_id,
+                        repo_id,
+                        pr_number,
+                        merge_date
+                    )
+                    VALUES(
+                        :check_id,
+                        :repo_id,
+                        :pr_number,
+                        :merge_date
+                    )
+                    ",
+                    params! {
+                        "check_id" => check_id,
+                        "repo_id" => repo_id,
+                        "pr_number" => pr_number,
+                        "merge_date" => None::<time::PrimitiveDateTime>,
+                    },
+                )?;
+            }
+            Ok(())
+        }
+        "closed" => {
+            if let Some(ref pool) = pool {
+                let mut conn = pool.get_conn()?;
+
+                let now = time::OffsetDateTime::now_utc();
+                let now = time::PrimitiveDateTime::new(now.date(), now.time());
+                conn.exec_drop(
+                    r"UPDATE (jobs) SET merge_date=:date
+                    WHERE repo_id=:rp_id
+                    AND pr_number=:pr_num",
+                    params! {
+                        "date" => now,
+                        "rp_id" => payload.repository.id,
+                        "pr_num" => payload.pull_request.number,
+                    },
+                )?;
+            };
+            Ok(())
+        }
+        _ => Ok(()),
     }
+}
 
-    let check_run = CheckRun::create(
-        &payload.repository.full_name(),
-        &payload.pull_request.head.sha,
-        payload.installation.id,
-        Some("IconDiffBot2"),
-    )
-    .await?;
-
+async fn handle_pull(
+    payload: PullRequestEventPayload,
+    job_sender: DataJobSender,
+    check_run: CheckRun,
+) -> Result<()> {
     if payload
         .pull_request
         .title
@@ -127,6 +188,7 @@ pub async fn process_github_payload_actix(
     event: diffbot_lib::github::github_api::GithubEvent,
     payload: String,
     job_sender: DataJobSender,
+    pool: actix_web::web::Data<Option<mysql::Pool>>,
 ) -> actix_web::Result<&'static str> {
     // TODO: Handle reruns
     if event.0 != "pull_request" {
@@ -146,7 +208,7 @@ pub async fn process_github_payload_actix(
 
     let payload: PullRequestEventPayload = serde_json::from_str(&payload)?;
 
-    handle_pull_request(payload, job_sender)
+    handle_pull_request(payload, job_sender, pool)
         .await
         .map_err(actix_web::error::ErrorBadRequest)?;
 
