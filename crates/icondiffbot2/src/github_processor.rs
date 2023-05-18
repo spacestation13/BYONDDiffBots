@@ -73,7 +73,7 @@ async fn handle_pull_request(
                 let now = time::OffsetDateTime::now_utc();
                 let now = time::PrimitiveDateTime::new(now.date(), now.time());
                 conn.exec_drop(
-                    r"UPDATE (jobs) SET merge_date=:date
+                    r"UPDATE jobs SET merge_date=:date
                     WHERE repo_id=:rp_id
                     AND pr_number=:pr_num",
                     params! {
