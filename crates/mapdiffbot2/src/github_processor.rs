@@ -153,8 +153,14 @@ async fn handle_pull_request(
             .await?;
 
             if let Some(ref pool) = pool {
-                let mut conn = pool.get_conn()?;
-                conn.exec_drop(
+                let mut conn = match pool.get_conn() {
+                    Ok(conn) => conn,
+                    Err(e) => {
+                        log::error!("{:?}", e);
+                        return Ok("Getting mysql connection failed");
+                    }
+                };
+                if let Err(e) = conn.exec_drop(
                     r"INSERT INTO jobs (
                         check_id,
                         repo_id,
@@ -174,16 +180,24 @@ async fn handle_pull_request(
                         "pr_number" => pr_number,
                         "merge_date" => None::<time::PrimitiveDateTime>,
                     },
-                )?;
+                ) {
+                    log::error!("{:?}", e);
+                };
             }
         }
         "closed" => {
             if let Some(ref pool) = pool {
-                let mut conn = pool.get_conn()?;
+                let mut conn = match pool.get_conn() {
+                    Ok(conn) => conn,
+                    Err(e) => {
+                        log::error!("{:?}", e);
+                        return Ok("Getting mysql connection failed");
+                    }
+                };
 
                 let now = time::OffsetDateTime::now_utc();
                 let now = time::PrimitiveDateTime::new(now.date(), now.time());
-                conn.exec_drop(
+                if let Err(e) = conn.exec_drop(
                     r"UPDATE jobs SET merge_date=:date
                     WHERE repo_id=:rp_id
                     AND pr_number=:pr_num",
@@ -192,7 +206,9 @@ async fn handle_pull_request(
                         "rp_id" => payload.repository.id,
                         "pr_num" => payload.pull_request.number,
                     },
-                )?;
+                ) {
+                    log::error!("{:?}", e);
+                };
             }
         }
         _ => return Ok("PR not opened or updated"),

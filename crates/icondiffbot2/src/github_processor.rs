@@ -5,6 +5,7 @@ use diffbot_lib::{
         graphql::get_pull_files,
     },
     job::types::Job,
+    log,
 };
 use eyre::Result;
 use octocrab::models::InstallationId;
@@ -41,8 +42,15 @@ async fn handle_pull_request(
             handle_pull(payload, job_sender, check_run).await?;
 
             if let Some(ref pool) = pool {
-                let mut conn = pool.get_conn()?;
-                conn.exec_drop(
+                let mut conn = match pool.get_conn() {
+                    Ok(conn) => conn,
+                    Err(e) => {
+                        log::error!("{:?}", e);
+                        return Ok(());
+                    }
+                };
+
+                if let Err(e) = conn.exec_drop(
                     r"INSERT INTO jobs (
                         check_id,
                         repo_id,
@@ -62,17 +70,25 @@ async fn handle_pull_request(
                         "pr_number" => pr_number,
                         "merge_date" => None::<time::PrimitiveDateTime>,
                     },
-                )?;
+                ) {
+                    log::error!("{:?}", e);
+                };
             }
             Ok(())
         }
         "closed" => {
             if let Some(ref pool) = pool {
-                let mut conn = pool.get_conn()?;
+                let mut conn = match pool.get_conn() {
+                    Ok(conn) => conn,
+                    Err(e) => {
+                        log::error!("{:?}", e);
+                        return Ok(());
+                    }
+                };
 
                 let now = time::OffsetDateTime::now_utc();
                 let now = time::PrimitiveDateTime::new(now.date(), now.time());
-                conn.exec_drop(
+                if let Err(e) = conn.exec_drop(
                     r"UPDATE jobs SET merge_date=:date
                     WHERE repo_id=:rp_id
                     AND pr_number=:pr_num",
@@ -81,7 +97,9 @@ async fn handle_pull_request(
                         "rp_id" => payload.repository.id,
                         "pr_num" => payload.pull_request.number,
                     },
-                )?;
+                ) {
+                    log::error!("{:?}", e);
+                };
             };
             Ok(())
         }
