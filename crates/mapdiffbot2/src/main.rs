@@ -130,14 +130,14 @@ async fn main() -> eyre::Result<()> {
         let mut conn = pool.get_conn()?;
         conn.query_drop(
             r"CREATE TABLE IF NOT EXISTS `jobs` (
-                `check_id` INT(11) NOT NULL,
-                `repo_id` INT(11) NOT NULL,
+                `check_id` BIGINT(20) NOT NULL,
+                `repo_id` BIGINT(20) NOT NULL,
                 `pr_number` INT(11) NOT NULL,
                 `merge_date` DATETIME NULL DEFAULT NULL,
                 `processed` BIT(1) NOT NULL DEFAULT b'0',
                 PRIMARY KEY (`check_id`) USING BTREE,
-                INDEX `repo_id` (`repo_id`) USING BTREE,
-                INDEX `pr_number` (`pr_number`) USING BTREE
+                INDEX `merge_date` (`processed`) USING BTREE,
+                INDEX `processed` (`processed`) USING BTREE
             ) COLLATE='utf8mb4_general_ci' ENGINE=InnoDB;",
         )?;
     }
