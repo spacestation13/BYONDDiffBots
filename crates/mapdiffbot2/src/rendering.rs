@@ -111,10 +111,10 @@ pub fn get_diff_bounding_box(
 
     //this is a god awful way to expand bounds without it going out of bounds
 
-    rightmost = rightmost.saturating_add(2).clamp(1, max_x - 1);
-    topmost = topmost.saturating_add(2).clamp(1, max_y - 1);
-    leftmost = leftmost.saturating_sub(2).clamp(1, max_x - 1);
-    bottommost = bottommost.saturating_sub(2).clamp(1, max_y - 1);
+    rightmost = rightmost.saturating_add(2).clamp(1, (max_x - 1).max(1));
+    topmost = topmost.saturating_add(2).clamp(1, (max_y - 1).max(1));
+    leftmost = leftmost.saturating_sub(2).clamp(1, (max_x - 1).max(1));
+    bottommost = bottommost.saturating_sub(2).clamp(1, (max_y - 1).max(1));
 
     trace!(
         "After expansion max: (right, top):({}, {}), min: (left, bottom):({}, {})",
