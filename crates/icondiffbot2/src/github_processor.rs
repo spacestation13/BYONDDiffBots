@@ -12,14 +12,14 @@ use octocrab::models::InstallationId;
 
 use diffbot_lib::github::github_types::FileDiff;
 
-use mysql::{params, prelude::Queryable};
+use mysql_async::{params, prelude::Queryable};
 
 use crate::DataJobSender;
 
 async fn handle_pull_request(
     payload: PullRequestEventPayload,
     job_sender: DataJobSender,
-    pool: actix_web::web::Data<Option<mysql::Pool>>,
+    pool: actix_web::web::Data<Option<mysql_async::Pool>>,
 ) -> Result<()> {
     let pool = pool.get_ref();
 
@@ -42,7 +42,7 @@ async fn handle_pull_request(
             handle_pull(payload, job_sender, check_run).await?;
 
             if let Some(ref pool) = pool {
-                let mut conn = match pool.get_conn() {
+                let mut conn = match pool.get_conn().await {
                     Ok(conn) => conn,
                     Err(e) => {
                         log::error!("{:?}", e);
@@ -50,8 +50,9 @@ async fn handle_pull_request(
                     }
                 };
 
-                if let Err(e) = conn.exec_drop(
-                    r"INSERT INTO jobs (
+                if let Err(e) = conn
+                    .exec_drop(
+                        r"INSERT INTO jobs (
                         check_id,
                         repo_id,
                         pr_number,
@@ -64,13 +65,15 @@ async fn handle_pull_request(
                         :merge_date
                     )
                     ",
-                    params! {
-                        "check_id" => check_id,
-                        "repo_id" => repo_id,
-                        "pr_number" => pr_number,
-                        "merge_date" => None::<time::PrimitiveDateTime>,
-                    },
-                ) {
+                        params! {
+                            "check_id" => check_id,
+                            "repo_id" => repo_id,
+                            "pr_number" => pr_number,
+                            "merge_date" => None::<time::PrimitiveDateTime>,
+                        },
+                    )
+                    .await
+                {
                     log::error!("{:?}", e);
                 };
             }
@@ -78,7 +81,7 @@ async fn handle_pull_request(
         }
         "closed" => {
             if let Some(ref pool) = pool {
-                let mut conn = match pool.get_conn() {
+                let mut conn = match pool.get_conn().await {
                     Ok(conn) => conn,
                     Err(e) => {
                         log::error!("{:?}", e);
@@ -88,16 +91,19 @@ async fn handle_pull_request(
 
                 let now = time::OffsetDateTime::now_utc();
                 let now = time::PrimitiveDateTime::new(now.date(), now.time());
-                if let Err(e) = conn.exec_drop(
-                    r"UPDATE jobs SET merge_date=:date
+                if let Err(e) = conn
+                    .exec_drop(
+                        r"UPDATE jobs SET merge_date=:date
                     WHERE repo_id=:rp_id
                     AND pr_number=:pr_num",
-                    params! {
-                        "date" => now,
-                        "rp_id" => payload.repository.id,
-                        "pr_num" => payload.pull_request.number,
-                    },
-                ) {
+                        params! {
+                            "date" => now,
+                            "rp_id" => payload.repository.id,
+                            "pr_num" => payload.pull_request.number,
+                        },
+                    )
+                    .await
+                {
                     log::error!("{:?}", e);
                 };
             };
@@ -206,7 +212,7 @@ pub async fn process_github_payload_actix(
     event: diffbot_lib::github::github_api::GithubEvent,
     payload: String,
     job_sender: DataJobSender,
-    pool: actix_web::web::Data<Option<mysql::Pool>>,
+    pool: actix_web::web::Data<Option<mysql_async::Pool>>,
 ) -> actix_web::Result<&'static str> {
     // TODO: Handle reruns
     if event.0 != "pull_request" {

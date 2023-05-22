@@ -10,7 +10,7 @@ use std::io::Read;
 use std::path::PathBuf;
 
 use diffbot_lib::async_mutex::Mutex;
-use mysql::prelude::Queryable;
+use mysql_async::prelude::Queryable;
 use once_cell::sync::OnceCell;
 use serde::Deserialize;
 use std::sync::Arc;
@@ -124,10 +124,10 @@ async fn main() -> eyre::Result<()> {
     let pool = config
         .db_url
         .as_ref()
-        .map(|url| mysql::Pool::new(url.as_str()).unwrap());
+        .map(|url| mysql_async::Pool::new(url.as_str()));
 
     if let Some(ref pool) = pool {
-        let mut conn = pool.get_conn()?;
+        let mut conn = pool.get_conn().await?;
         conn.query_drop(
             r"CREATE TABLE IF NOT EXISTS `jobs` (
                 `check_id` BIGINT(20) NOT NULL,
@@ -139,7 +139,8 @@ async fn main() -> eyre::Result<()> {
                 INDEX `merge_date` (`processed`) USING BTREE,
                 INDEX `processed` (`processed`) USING BTREE
             ) COLLATE='utf8mb4_general_ci' ENGINE=InnoDB;",
-        )?;
+        )
+        .await?;
     }
 
     actix_web::rt::spawn(runner::handle_jobs("MapDiffBot2", job_receiver));

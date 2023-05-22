@@ -9,7 +9,7 @@ license = "MIT"
 serde = { version = "1.0.163", features = ["derive"] }
 serde_json = { version = "1.0.96"}
 toml = "0.7.3"
-octocrab = "0.22.0"
+octocrab = "0.23.0"
 flume = "0.10.14"
 dmm-tools = { git = "https://github.com/SpaceManiac/SpacemanDMM/", features = ["png"] }
 dreammaker = { git = "https://github.com/SpaceManiac/SpacemanDMM/" }
@@ -34,7 +34,7 @@ hex = { version = "0.4.3", features = ["serde"] }
 actix-web = "4.3.1"
 actix-files = "0.6.2"
 
-mysql = "23.0.1"
+mysql_async = "0.32.2"
 time = "0.3.21"
 
 [target.'cfg(not(target_env = "msvc"))'.dependencies]

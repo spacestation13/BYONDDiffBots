@@ -1,6 +1,6 @@
 use diffbot_lib::log;
 use eyre::{Context, Result};
-use mysql::{params, prelude::Queryable};
+use mysql_async::{params, prelude::Queryable};
 use octocrab::models::InstallationId;
 
 use crate::DataJobSender;
@@ -119,7 +119,7 @@ async fn process_pull(
 async fn handle_pull_request(
     payload: String,
     job_sender: DataJobSender,
-    pool: actix_web::web::Data<Option<mysql::Pool>>,
+    pool: actix_web::web::Data<Option<mysql_async::Pool>>,
 ) -> Result<&'static str> {
     let payload: PullRequestEventPayload = serde_json::from_str(&payload)?;
 
@@ -153,15 +153,16 @@ async fn handle_pull_request(
             .await?;
 
             if let Some(ref pool) = pool {
-                let mut conn = match pool.get_conn() {
+                let mut conn = match pool.get_conn().await {
                     Ok(conn) => conn,
                     Err(e) => {
                         log::error!("{:?}", e);
                         return Ok("Getting mysql connection failed");
                     }
                 };
-                if let Err(e) = conn.exec_drop(
-                    r"INSERT INTO jobs (
+                if let Err(e) = conn
+                    .exec_drop(
+                        r"INSERT INTO jobs (
                         check_id,
                         repo_id,
                         pr_number,
@@ -174,20 +175,22 @@ async fn handle_pull_request(
                         :merge_date
                     )
                     ",
-                    params! {
-                        "check_id" => check_id,
-                        "repo_id" => repo_id,
-                        "pr_number" => pr_number,
-                        "merge_date" => None::<time::PrimitiveDateTime>,
-                    },
-                ) {
+                        params! {
+                            "check_id" => check_id,
+                            "repo_id" => repo_id,
+                            "pr_number" => pr_number,
+                            "merge_date" => None::<time::PrimitiveDateTime>,
+                        },
+                    )
+                    .await
+                {
                     log::error!("{:?}", e);
                 };
             }
         }
         "closed" => {
             if let Some(ref pool) = pool {
-                let mut conn = match pool.get_conn() {
+                let mut conn = match pool.get_conn().await {
                     Ok(conn) => conn,
                     Err(e) => {
                         log::error!("{:?}", e);
@@ -197,16 +200,19 @@ async fn handle_pull_request(
 
                 let now = time::OffsetDateTime::now_utc();
                 let now = time::PrimitiveDateTime::new(now.date(), now.time());
-                if let Err(e) = conn.exec_drop(
-                    r"UPDATE jobs SET merge_date=:date
+                if let Err(e) = conn
+                    .exec_drop(
+                        r"UPDATE jobs SET merge_date=:date
                     WHERE repo_id=:rp_id
                     AND pr_number=:pr_num",
-                    params! {
-                        "date" => now,
-                        "rp_id" => payload.repository.id,
-                        "pr_num" => payload.pull_request.number,
-                    },
-                ) {
+                        params! {
+                            "date" => now,
+                            "rp_id" => payload.repository.id,
+                            "pr_num" => payload.pull_request.number,
+                        },
+                    )
+                    .await
+                {
                     log::error!("{:?}", e);
                 };
             }
@@ -222,7 +228,7 @@ pub async fn process_github_payload(
     event: diffbot_lib::github::github_api::GithubEvent,
     payload: String,
     job_sender: DataJobSender,
-    pool: actix_web::web::Data<Option<mysql::Pool>>,
+    pool: actix_web::web::Data<Option<mysql_async::Pool>>,
 ) -> actix_web::Result<&'static str> {
     if event.0 != "pull_request" {
         return Ok("Not a pull request event");
