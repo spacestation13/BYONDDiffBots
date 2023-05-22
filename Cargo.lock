@@ -1206,7 +1206,7 @@ dependencies = [
  "hex",
  "hmac",
  "log",
- "octocrab 0.23.0",
+ "octocrab",
  "reqwest",
  "serde",
  "serde_json",
@@ -1929,7 +1929,7 @@ dependencies = [
  "lazy_static",
  "mysql_async",
  "ndarray",
- "octocrab 0.23.0",
+ "octocrab",
  "once_cell",
  "rayon",
  "reqwest",
@@ -1948,7 +1948,7 @@ name = "icondiffbot_test_generator"
 version = "0.1.0"
 dependencies = [
  "clap",
- "octocrab 0.21.0",
+ "octocrab",
  "tokio",
 ]
 
@@ -2390,7 +2390,7 @@ dependencies = [
  "jsonwebtoken",
  "lazy_static",
  "mysql_async",
- "octocrab 0.23.0",
+ "octocrab",
  "once_cell",
  "path-absolutize",
  "rayon",
@@ -2724,43 +2724,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ea86265d3d3dcb6a27fc51bd29a4bf387fae9d2986b823079d4986af253eb439"
 dependencies = [
  "memchr",
-]
-
-[[package]]
-name = "octocrab"
-version = "0.21.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5db170d97e0e88e41faf8ef5277c850d8370c1ef759403c7004a43f2161ce357"
-dependencies = [
- "arc-swap",
- "async-trait",
- "base64 0.21.1",
- "bytes",
- "cfg-if",
- "chrono",
- "either",
- "futures",
- "futures-util",
- "http",
- "http-body",
- "hyper",
- "hyper-rustls",
- "hyper-timeout",
- "jsonwebtoken",
- "once_cell",
- "percent-encoding",
- "pin-project",
- "secrecy",
- "serde",
- "serde_json",
- "serde_path_to_error",
- "serde_urlencoded",
- "snafu",
- "tokio",
- "tower",
- "tower-http",
- "tracing",
- "url",
 ]
 
 [[package]]

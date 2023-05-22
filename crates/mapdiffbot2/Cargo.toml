@@ -8,7 +8,7 @@ license = "MIT"
 [dependencies]
 serde = { version = "1.0.163", features = ["derive"] }
 serde_json = { version = "1.0.96"}
-toml = "0.7.3"
+toml = "0.7.4"
 octocrab = "0.23.0"
 flume = "0.10.14"
 dmm-tools = { git = "https://github.com/SpaceManiac/SpacemanDMM/", features = ["png"] }
