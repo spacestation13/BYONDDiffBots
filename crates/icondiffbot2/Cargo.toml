@@ -6,12 +6,12 @@ license = "MIT"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-serde = { version = "1.0.163", features = ["derive"] }
-serde_json = "1.0.96"
-octocrab = "0.23.0"
-dmm-tools = { git = "https://github.com/SpaceManiac/SpacemanDMM/", features = ["png", "gif"] }
-dreammaker = { git = "https://github.com/SpaceManiac/SpacemanDMM/" }
-once_cell = "1.17.1"
+serde = { version = "1.0.164", features = ["derive"] }
+serde_json = "1.0.97"
+octocrab = "0.25.1"
+dmm-tools = { git = "https://github.com/jupyterkat/SpacemanDMM/", features = ["png", "gif"] }
+dreammaker = { git = "https://github.com/jupyterkat/SpacemanDMM/" }
+once_cell = "1.18.0"
 jsonwebtoken = "8.3.0"
 lazy_static = "1.4.0"
 reqwest = "0.11.18"
@@ -22,7 +22,7 @@ ndarray = "0.15.6"
 rayon = "1.7.0"
 toml = "0.7.4"
 ahash = "0.8.3"
-hashbrown = { version = "0.13.2", features = ["rayon"]}
+hashbrown = { version = "0.14.0", features = ["rayon"]}
 yaque = { git = "https://github.com/jupyterkat/yaque" }
 hex = { version = "0.4.3", features = ["serde"] }
 
@@ -30,7 +30,7 @@ actix-web = "4.3.1"
 actix-files = "0.6.2"
 
 mysql_async = "0.32.2"
-time = "0.3.21"
+time = "0.3.22"
 
 [target.'cfg(not(target_env = "msvc"))'.dependencies]
 tikv-jemallocator = "0.5.0"

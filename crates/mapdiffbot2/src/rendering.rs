@@ -189,8 +189,7 @@ pub fn get_map_diff_bounding_boxes(
     );
 
     for (base, head) in base_maps.into_iter().zip(head_maps.into_iter()) {
-        let (before, after) = match (base, head) {
-            (Err(e), Ok(_)) => Ok((Err(e), None)),
+        match (base, head) {
             (Ok(base), Ok(head)) => {
                 let diffs = (0..base.dim_z())
                     .map(|z| get_diff_bounding_box(&base, &head, z))
@@ -203,21 +202,19 @@ pub fn get_map_diff_bounding_boxes(
                     map: head,
                     bounding_boxes: diffs,
                 };
-                Ok((Ok(before), Some(after)))
+
+                befores.push(Ok(before));
+                afters.push(Some(after));
+                Ok(())
+            }
+            (Err(e), Ok(_)) => {
+                befores.push(Err(e));
+                afters.push(None);
+                Ok(())
             }
             (Ok(_), Err(e)) => Err(e),  //Fails on head parse fail
             (Err(_), Err(e)) => Err(e), //Fails on head parse fail
         }?; //Stop the entire thing if head parse fails
-        match before {
-            Ok(o) => {
-                befores.push(Ok(o));
-                afters.push(Some(after.unwrap()))
-            }
-            Err(e) => {
-                befores.push(Err(e));
-                afters.push(None);
-            }
-        }
     }
 
     Ok(MapsWithRegions { befores, afters })
