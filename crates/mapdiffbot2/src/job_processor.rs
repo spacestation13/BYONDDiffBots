@@ -25,8 +25,8 @@ use diffbot_lib::{
 };
 
 struct RenderedMaps {
-    added_maps: Vec<MapWithRegions>,
-    removed_maps: Vec<MapWithRegions>,
+    added_maps: Vec<(String, MapWithRegions)>,
+    removed_maps: Vec<(String, MapWithRegions)>,
     modified_maps: MapsWithRegions,
 }
 
@@ -39,7 +39,7 @@ fn render(
     pull_request_number: u64,
     // feel like this is a bit of a hack but it works for now
 ) -> Result<RenderedMaps> {
-    log::trace!(
+    log::debug!(
         "Fetching and getting branches, base: {:?}, head: {:?}",
         base,
         head
@@ -82,11 +82,15 @@ fn render(
             .context("Loading removed maps")?;
         render_map_regions(
             &base_context,
-            &maps.iter().collect::<Vec<_>>(),
+            maps.iter()
+                .map(|(k, v)| (k.as_str(), v))
+                .collect::<Vec<_>>()
+                .as_slice(),
             &base_render_passes,
             removed_directory,
             "removed.png",
             &removed_errors,
+            crate::rendering::MapType::Base,
         )
         .context("Rendering removed maps")?;
         Ok(maps)
@@ -102,11 +106,15 @@ fn render(
             load_maps_with_whole_map_regions(added_files, &path).context("Loading added maps")?;
         render_map_regions(
             &head_context,
-            &maps.iter().collect::<Vec<_>>(),
+            maps.iter()
+                .map(|(k, v)| (k.as_str(), v))
+                .collect::<Vec<_>>()
+                .as_slice(),
             &head_render_passes,
             added_directory,
             "added.png",
             &added_errors,
+            crate::rendering::MapType::Head,
         )
         .context("Rendering added maps")?;
         Ok(maps)
@@ -116,10 +124,27 @@ fn render(
     //do modified maps
     let base_maps = with_checkout(&base_branch, repo, || Ok(load_maps(modified_files, &path)))
         .context("Loading base maps")?;
-    let head_maps = with_checkout(&head_branch, repo, || Ok(load_maps(modified_files, &path)))
+    let mut head_maps = with_checkout(&head_branch, repo, || Ok(load_maps(modified_files, &path)))
         .context("Loading head maps")?;
 
-    let modified_maps = get_map_diff_bounding_boxes(base_maps, head_maps)?;
+    let modified_maps = base_maps
+        .into_iter()
+        .map(|(k, v)| {
+            (
+                k.clone(),
+                (
+                    v,
+                    head_maps.remove(&k).expect(
+                        "head maps has maps that isn't inside base maps on modified comparison",
+                    ),
+                ),
+            )
+        })
+        .collect::<indexmap::IndexMap<_, _, ahash::RandomState>>();
+
+    assert_eq!(head_maps.len(), 0);
+
+    let modified_maps = get_map_diff_bounding_boxes(modified_maps)?;
 
     let modified_directory = format!("{}/m", out_dir.display());
     let modified_directory = Path::new(&modified_directory);
@@ -130,15 +155,17 @@ fn render(
         render_map_regions(
             &base_context,
             modified_maps
-                .befores
                 .iter()
-                .filter_map(|res| res.as_ref().ok())
+                .filter_map(|(map_name, (before, _))| {
+                    Some((map_name.as_str(), before.as_ref().ok()?))
+                })
                 .collect::<Vec<_>>()
                 .as_slice(),
             &head_render_passes,
             modified_directory,
             "before.png",
             &modified_before_errors,
+            crate::rendering::MapType::Base,
         )
         .context("Rendering modified before maps")?;
         Ok(())
@@ -148,15 +175,15 @@ fn render(
         render_map_regions(
             &head_context,
             modified_maps
-                .afters
                 .iter()
-                .filter_map(|opt| opt.as_ref())
+                .filter_map(|(map_name, (_, after))| Some((map_name.as_str(), after.as_ref()?)))
                 .collect::<Vec<_>>()
                 .as_slice(),
             &head_render_passes,
             modified_directory,
             "after.png",
             &modified_after_errors,
+            crate::rendering::MapType::Head,
         )
         .context("Rendering modified after maps")?;
         Ok(())
@@ -174,9 +201,6 @@ fn render(
 }
 
 fn generate_finished_output<P: AsRef<Path>>(
-    added_files: &[&FileDiff],
-    modified_files: &[&FileDiff],
-    removed_files: &[&FileDiff],
     file_directory: &P,
     maps: RenderedMaps,
 ) -> Result<CheckOutputs> {
@@ -192,76 +216,117 @@ fn generate_finished_output<P: AsRef<Path>>(
     let link_base = format!("{file_url}/{non_abs_directory}");
 
     // Those are CPU bound but parallelizing would require builder to be thread safe and it's probably not worth the overhead
-    added_files
-        .iter()
-        .zip(maps.added_maps.iter())
-        .enumerate()
-        .for_each(|(file_index, (file, map))| {
-            map.iter_levels().for_each(|(level, _)| {
-                let link = format!("{link_base}/a/{file_index}/{level}-added.png");
-                let name = format!("{}:{}", file.filename, level + 1);
+    maps.added_maps.iter().for_each(|(file, map)| {
+        let file_index = file.clone().replace('/', "_").replace(".dmm", "");
+        map.iter_levels().for_each(|(level, _)| {
+            let link = format!("{link_base}/a/{file_index}/{level}-added.png");
+            let name = format!("{} (Z-level: {})", file, level + 1);
 
-                builder.add_text(&format!(
-                    include_str!("../templates/diff_template_add.txt"),
-                    filename = name,
-                    image_link = link
-                ));
-            });
+            builder.add_text(&format!(
+                include_str!("../templates/diff_template_add.txt"),
+                filename = name,
+                image_link = link
+            ));
         });
+    });
 
-    modified_files
+    maps.removed_maps.iter().for_each(|(file, map)| {
+        let file_index = file.clone().replace('/', "_").replace(".dmm", "");
+        map.iter_levels().for_each(|(level, _)| {
+            let link = format!("{link_base}/r/{file_index}/{level}-removed.png");
+            let name = format!("{} (Z-level: {})", file, level + 1);
+
+            builder.add_text(&format!(
+                include_str!("../templates/diff_template_remove.txt"),
+                filename = name,
+                image_link = link
+            ));
+        });
+    });
+
+    const Z_DELETED_TEXT: &str = "Z-LEVEL DELETED";
+    const Z_ADDED_TEXT: &str = "Z-LEVEL ADDED";
+    const ROW_DESC: &str = "If the image doesn't load, use the raw link above";
+
+    maps.modified_maps
         .iter()
-        .zip(maps.modified_maps.befores.iter())
-        .enumerate()
-        .for_each(|(file_index, (file, map))| match map {
+        .for_each(|(file, (before, _))| match before {
             Ok(map) => {
+                let file_index = file.clone().replace('/', "_").replace(".dmm", "");
                 map.iter_levels().for_each(|(level, region)| {
                     let link = format!("{link_base}/m/{file_index}/{level}");
-                    let name = format!("{}:{}", file.filename, level + 1);
+                    let name = format!("{} (Z-level: {})", file, level + 1);
+                    let (dim_x, dim_y, _) = map.map.dim_xyz();
+                    let fmt_dim = format!("({}, {}, {})", dim_x, dim_y, level + 1);
 
-                    #[allow(clippy::format_in_format_args)]
-                    builder.add_text(&format!(
-                        include_str!("../templates/diff_template_mod.txt"),
-                        bounds = region.to_string(),
-                        filename = name,
-                        image_before_link = format!("{link}-before.png"),
-                        image_after_link = format!("{link}-after.png"),
-                        image_diff_link = format!("{link}-diff.png")
-                    ));
+                    let (link_before, link_after, link_diff) = (
+                        format!("{link}-before.png"),
+                        format!("{link}-after.png"),
+                        format!("{link}-diff.png"),
+                    );
+
+                    match region {
+                        crate::rendering::BoundType::None => (),
+                        crate::rendering::BoundType::OnlyHead => {
+                            #[allow(clippy::format_in_format_args)]
+                            builder.add_text(&format!(
+                                include_str!("../templates/diff_template_mod.txt"),
+                                bounds = fmt_dim,
+                                filename = name,
+                                image_before_link = "Unavailable",
+                                image_after_link = format!("[New]({link_after})"),
+                                image_diff_link = "Unavailable",
+                                old_row = Z_ADDED_TEXT,
+                                new_row = format!("![{ROW_DESC}]({link_after})"),
+                                diff_row = Z_ADDED_TEXT
+                            ));
+                        }
+                        crate::rendering::BoundType::OnlyBase => {
+                            #[allow(clippy::format_in_format_args)]
+                            builder.add_text(&format!(
+                                include_str!("../templates/diff_template_mod.txt"),
+                                bounds = fmt_dim,
+                                filename = name,
+                                image_before_link = "Unavailable",
+                                image_after_link = "Unavailable",
+                                image_diff_link = "Unavailable",
+                                old_row = Z_DELETED_TEXT,
+                                new_row = Z_DELETED_TEXT,
+                                diff_row = Z_DELETED_TEXT
+                            ));
+                        }
+                        crate::rendering::BoundType::Both(bounds) => {
+                            #[allow(clippy::format_in_format_args)]
+                            builder.add_text(&format!(
+                                include_str!("../templates/diff_template_mod.txt"),
+                                bounds = bounds.to_string(),
+                                filename = name,
+                                image_before_link = format!("[Old]({link_before})"),
+                                image_after_link = format!("[New]({link_after})"),
+                                image_diff_link = format!("[Diff]({link_diff})"),
+                                old_row = format!("![{ROW_DESC}]({link_before})"),
+                                new_row = format!("![{ROW_DESC}]({link_after})"),
+                                diff_row = format!("![{ROW_DESC}]({link_diff})")
+                            ));
+                        }
+                    }
                 });
             }
             Err(e) => {
                 let error = format!("{e:?}");
                 builder.add_text(&format!(
                     include_str!("../templates/diff_template_error.txt"),
-                    filename = file.filename,
+                    filename = file,
                     error = error,
                 ));
             }
-        });
-
-    removed_files
-        .iter()
-        .zip(maps.removed_maps.iter())
-        .enumerate()
-        .for_each(|(file_index, (file, map))| {
-            map.iter_levels().for_each(|(level, _)| {
-                let link = format!("{link_base}/r/{file_index}/{level}-removed.png");
-                let name = format!("{}:{}", file.filename, level + 1);
-
-                builder.add_text(&format!(
-                    include_str!("../templates/diff_template_remove.txt"),
-                    filename = name,
-                    image_link = link
-                ));
-            });
         });
 
     Ok(builder.build())
 }
 
 pub fn do_job(job: Job) -> Result<CheckOutputs> {
-    log::trace!(
+    log::debug!(
         "Starting Job on repo: {}, pr number: {}, base commit: {}, head commit: {}",
         job.repo.full_name(),
         job.pull_request,
@@ -277,7 +342,7 @@ pub fn do_job(job: Job) -> Result<CheckOutputs> {
     let handle = actix_web::rt::Runtime::new()?;
 
     if !repo_dir.exists() {
-        log::trace!("Directory {:?} doesn't exist, creating dir", repo_dir);
+        log::debug!("Directory {:?} doesn't exist, creating dir", repo_dir);
         std::fs::create_dir_all(&repo_dir)?;
         handle.block_on(async {
                 let output = Output {
@@ -299,7 +364,7 @@ pub fn do_job(job: Job) -> Result<CheckOutputs> {
         .to_str()
         .ok_or_else(|| eyre::anyhow!("Failed to create absolute path to image directory",))?;
 
-    log::trace!(
+    log::debug!(
         "Dirs absolutized from {:?} to {:?}",
         non_abs_directory,
         output_directory
@@ -334,13 +399,7 @@ pub fn do_job(job: Job) -> Result<CheckOutputs> {
         (&repo_dir, Path::new(output_directory)),
         job.pull_request,
     ) {
-        Ok(maps) => generate_finished_output(
-            &added_files,
-            &modified_files,
-            &removed_files,
-            &non_abs_directory,
-            maps,
-        ),
+        Ok(maps) => generate_finished_output(&non_abs_directory, maps),
 
         Err(err) => Err(err),
     };

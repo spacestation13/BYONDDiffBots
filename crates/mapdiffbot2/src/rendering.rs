@@ -2,13 +2,16 @@ use std::{cmp::min, collections::HashSet, path::Path, sync::RwLock};
 
 extern crate dreammaker;
 
-use ahash::RandomState;
+use diffbot_lib::log;
+
 use diffbot_lib::github::github_types::FileDiff;
-use diffbot_lib::log::{error, info, trace};
 use dmm_tools::{dmi::Image, dmm, minimap, render_passes::RenderPass, IconCache};
 use eyre::{Context, Result};
 use image::{io::Reader, GenericImageView, ImageBuffer, Pixel};
 use rayon::prelude::*;
+
+use ahash::RandomState;
+use indexmap::IndexMap;
 
 #[derive(Debug, Clone)]
 pub struct BoundingBox {
@@ -59,16 +62,17 @@ pub fn get_diff_bounding_box(
     let left_dims = base_map.dim_xyz();
     let right_dims = head_map.dim_xyz();
     if left_dims != right_dims {
-        info!(
+        log::info!(
             "Maps have different sizes: {:?} {:?}",
-            left_dims, right_dims
+            left_dims,
+            right_dims
         );
     }
 
     let max_y = min(left_dims.1, right_dims.1);
     let max_x = min(left_dims.0, right_dims.0);
 
-    trace!("max_y: {}, max_x: {}", max_y, max_x);
+    log::debug!("max_y: {}, max_x: {}", max_y, max_x);
 
     let mut rightmost = 0usize;
     let mut leftmost = max_x;
@@ -101,7 +105,7 @@ pub fn get_diff_bounding_box(
         return None;
     }
 
-    trace!(
+    log::debug!(
         "Before expansion max: (right, top):({}, {}), min: (left, bottom):({}, {})",
         rightmost,
         topmost,
@@ -116,7 +120,7 @@ pub fn get_diff_bounding_box(
     leftmost = leftmost.saturating_sub(2).clamp(1, (max_x - 1).max(1));
     bottommost = bottommost.saturating_sub(2).clamp(1, (max_y - 1).max(1));
 
-    trace!(
+    log::debug!(
         "After expansion max: (right, top):({}, {}), min: (left, bottom):({}, {})",
         rightmost,
         topmost,
@@ -127,14 +131,20 @@ pub fn get_diff_bounding_box(
     Some(BoundingBox::new(leftmost, bottommost, rightmost, topmost))
 }
 
-pub fn load_maps(files: &[&FileDiff], path: &std::path::Path) -> Vec<Result<dmm::Map>> {
+pub fn load_maps(
+    files: &[&FileDiff],
+    path: &std::path::Path,
+) -> IndexMap<String, Result<dmm::Map>, RandomState> {
     files
         .iter()
         .map(|file| {
             let actual_path = path.join(Path::new(&file.filename));
-            dmm::Map::from_file(&actual_path)
-                .map_err(|e| eyre::anyhow!(e))
-                .context(format!("Map name: {}", &file.filename))
+            (
+                file.filename.clone(),
+                dmm::Map::from_file(&actual_path)
+                    .map_err(|e| eyre::anyhow!(e))
+                    .context(format!("Map name: {}", &file.filename)),
+            )
         })
         .collect()
 }
@@ -142,7 +152,7 @@ pub fn load_maps(files: &[&FileDiff], path: &std::path::Path) -> Vec<Result<dmm:
 pub fn load_maps_with_whole_map_regions(
     files: &[&FileDiff],
     path: &std::path::Path,
-) -> Result<Vec<MapWithRegions>> {
+) -> Result<Vec<(String, MapWithRegions)>> {
     files
         .iter()
         .map(|file| {
@@ -150,49 +160,76 @@ pub fn load_maps_with_whole_map_regions(
             let map = dmm::Map::from_file(&actual_path)?;
             let bbox = BoundingBox::for_full_map(&map);
             let zs = map.dim_z();
-            Ok(MapWithRegions {
-                map,
-                bounding_boxes: std::iter::repeat(Some(bbox)).take(zs).collect(),
-            })
+            Ok((
+                file.filename.clone(),
+                MapWithRegions {
+                    map,
+                    bounding_boxes: std::iter::repeat(BoundType::Both(bbox)).take(zs).collect(),
+                },
+            ))
         })
         .collect()
+}
+
+#[derive(Clone)]
+pub enum BoundType {
+    OnlyHead,
+    OnlyBase,
+    Both(BoundingBox),
+    None,
 }
 
 pub struct MapWithRegions {
     pub map: dmm::Map,
     /// For each z-level, if there's a Some, render the given region
-    pub bounding_boxes: Vec<Option<BoundingBox>>,
+    pub bounding_boxes: Vec<BoundType>,
 }
-
 // pub fn iter_levels<'a>(&'a self) -> impl Iterator<Item=(i32, ZLevel<'a>)> + 'a {
 impl MapWithRegions {
-    pub fn iter_levels(&self) -> impl Iterator<Item = (usize, &BoundingBox)> {
+    pub fn iter_levels(&self) -> impl Iterator<Item = (usize, &BoundType)> {
         self.bounding_boxes
             .iter()
             .enumerate()
-            .filter_map(|(z, bbox)| bbox.as_ref().map(|bbox| (z, bbox)))
+            .filter_map(|(z, bbox)| {
+                if matches!(bbox, BoundType::None) {
+                    None
+                } else {
+                    Some((z, bbox))
+                }
+            })
     }
 }
-
+/*
 pub struct MapsWithRegions {
     pub befores: Vec<Result<MapWithRegions>>,
     pub afters: Vec<Option<MapWithRegions>>,
 }
+*/
+
+pub type MapsWithRegions =
+    IndexMap<String, (Result<MapWithRegions>, Option<MapWithRegions>), RandomState>;
 
 pub fn get_map_diff_bounding_boxes(
-    base_maps: Vec<Result<dmm::Map>>,
-    head_maps: Vec<Result<dmm::Map>>,
+    modified_maps: IndexMap<String, (Result<dmm::Map>, Result<dmm::Map>), RandomState>,
 ) -> Result<MapsWithRegions> {
-    let (mut befores, mut afters) = (
-        Vec::with_capacity(base_maps.len()),
-        Vec::with_capacity(head_maps.len()),
-    );
+    use itertools::{EitherOrBoth, Itertools};
 
-    for (base, head) in base_maps.into_iter().zip(head_maps.into_iter()) {
+    let mut returned_maps =
+        IndexMap::with_capacity_and_hasher(modified_maps.len(), ahash::RandomState::default());
+
+    for (map_name, (base, head)) in modified_maps.into_iter() {
         match (base, head) {
             (Ok(base), Ok(head)) => {
                 let diffs = (0..base.dim_z())
-                    .map(|z| get_diff_bounding_box(&base, &head, z))
+                    .zip_longest(0..head.dim_z())
+                    .map(|either| match either {
+                        EitherOrBoth::Both(z, _) => match get_diff_bounding_box(&base, &head, z) {
+                            Some(boxed) => BoundType::Both(boxed),
+                            None => BoundType::None,
+                        },
+                        EitherOrBoth::Left(_base_only) => BoundType::OnlyBase,
+                        EitherOrBoth::Right(_head_only) => BoundType::OnlyHead,
+                    })
                     .collect::<Vec<_>>();
                 let before = MapWithRegions {
                     map: base,
@@ -202,22 +239,18 @@ pub fn get_map_diff_bounding_boxes(
                     map: head,
                     bounding_boxes: diffs,
                 };
-
-                befores.push(Ok(before));
-                afters.push(Some(after));
+                returned_maps.insert(map_name, (Ok(before), Some(after)));
                 Ok(())
             }
-            (Err(e), Ok(_)) => {
-                befores.push(Err(e));
-                afters.push(None);
+            (Err(e), _) => {
+                returned_maps.insert(map_name, (Err(e), None));
                 Ok(())
             }
-            (Ok(_), Err(e)) => Err(e),  //Fails on head parse fail
-            (Err(_), Err(e)) => Err(e), //Fails on head parse fail
+            (_, Err(e)) => Err(e), //Fails on head parse fail
         }?; //Stop the entire thing if head parse fails
     }
 
-    Ok(MapsWithRegions { befores, afters })
+    Ok(returned_maps)
 }
 
 pub struct RenderingContext {
@@ -285,38 +318,66 @@ pub fn render_map(
         .map_err(|_| eyre::anyhow!("An error occured during map rendering"))
 }
 
+#[derive(Clone, Copy)]
+pub enum MapType {
+    Head,
+    Base,
+}
+
 pub fn render_map_regions(
     context: &RenderingContext,
-    maps: &[&MapWithRegions],
+    maps: &[(&str, &MapWithRegions)],
     render_passes: &[Box<dyn RenderPass>],
     output_dir: &Path,
     filename: &str,
     errors: &RenderingErrors,
+    map_type: MapType,
 ) -> Result<()> {
     let objtree = &context.obj_tree;
     let icon_cache = &context.icon_cache;
     let _: Result<()> = maps
         .par_iter()
-        .enumerate()
-        .map(|(idx, map)| {
+        .map(|(map_name, map)| {
             for z_level in 0..map.map.dim_z() {
-                if let Some(bounds) = map
-                    .bounding_boxes
-                    .get(z_level)
-                    .expect("No bounding box generated for z-level")
-                {
-                    let image = render_map(
-                        objtree,
-                        icon_cache,
-                        &map.map,
-                        z_level,
-                        bounds,
-                        errors,
-                        render_passes,
-                    )
-                    .with_context(|| format!("Rendering map {idx}"))?;
-
-                    let directory = output_dir.join(Path::new(&idx.to_string()));
+                let image = match (
+                    map_type,
+                    map.bounding_boxes
+                        .get(z_level)
+                        .expect("No bounding box generated for z-level"),
+                ) {
+                    (_, BoundType::Both(bounds)) => Some(
+                        render_map(
+                            objtree,
+                            icon_cache,
+                            &map.map,
+                            z_level,
+                            bounds,
+                            errors,
+                            render_passes,
+                        )
+                        .with_context(|| format!("Rendering map {map_name}"))?,
+                    ),
+                    (MapType::Head, BoundType::OnlyHead) => {
+                        let bounds = BoundingBox::for_full_map(&map.map);
+                        Some(
+                            render_map(
+                                objtree,
+                                icon_cache,
+                                &map.map,
+                                z_level,
+                                &bounds,
+                                errors,
+                                render_passes,
+                            )
+                            .with_context(|| format!("Rendering map {map_name}"))?,
+                        )
+                    }
+                    (_, _) => None,
+                };
+                if let Some(image) = image {
+                    let directory = output_dir.join(Path::new(
+                        &map_name.to_string().replace('/', "_").replace(".dmm", ""),
+                    ));
 
                     std::fs::create_dir_all(&directory).context("Creating directories")?;
                     image
@@ -325,7 +386,7 @@ pub fn render_map_regions(
                                 .join(Path::new(&format!("{z_level}-{filename}")))
                                 .as_ref(),
                         )
-                        .with_context(|| format!("Saving image {idx}"))?;
+                        .with_context(|| format!("Saving image {map_name}"))?;
                 }
             }
             Ok(())
@@ -362,6 +423,6 @@ pub fn render_diffs_for_directory<P: AsRef<Path>>(directory: P) {
         })
         .filter_map(|r: Result<()>| r.err())
         .for_each(|e| {
-            error!("Diff rendering error: {}", e);
+            log::error!("Diff rendering error: {}", e);
         });
 }

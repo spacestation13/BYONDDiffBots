@@ -90,9 +90,9 @@ async fn garbage_collect_all_repos() {
 
     if let Err(e) = output {
         let fuckup = match e.try_into_panic() {
-            Ok(panic) => match panic.downcast_ref::<&str>() {
-                Some(s) => s.to_string(),
-                None => "*crickets*".to_owned(),
+            Ok(panic) => match panic.downcast::<String>() {
+                Ok(s) => *s,
+                Err(_) => "*crickets*".to_string(),
             },
             Err(e) => e.to_string(),
         };
@@ -143,9 +143,9 @@ async fn job_handler(name: &str, job: Job) {
 
     if let Err(e) = output {
         let fuckup = match e.try_into_panic() {
-            Ok(panic) => match panic.downcast_ref::<&str>() {
-                Some(s) => s.to_string(),
-                None => "*crickets*".to_owned(),
+            Ok(panic) => match panic.downcast::<String>() {
+                Ok(s) => *s,
+                Err(_) => "*crickets*".to_string(),
             },
             Err(e) => e.to_string(),
         };

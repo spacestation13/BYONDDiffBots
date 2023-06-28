@@ -7,7 +7,7 @@ license = "MIT"
 
 [dependencies]
 serde = { version = "1.0.164", features = ["derive"] }
-serde_json = "1.0.97"
+serde_json = "1.0.99"
 octocrab = "0.25.1"
 dmm-tools = { git = "https://github.com/jupyterkat/SpacemanDMM/", features = ["png", "gif"] }
 dreammaker = { git = "https://github.com/jupyterkat/SpacemanDMM/" }
@@ -20,7 +20,7 @@ eyre = "0.6.8"
 simple-eyre = "0.3.1"
 ndarray = "0.15.6"
 rayon = "1.7.0"
-toml = "0.7.4"
+toml = "0.7.5"
 ahash = "0.8.3"
 hashbrown = { version = "0.14.0", features = ["rayon"]}
 yaque = { git = "https://github.com/jupyterkat/yaque" }

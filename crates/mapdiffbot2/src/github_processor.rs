@@ -22,7 +22,7 @@ async fn process_pull(
     installation: &Installation,
     job_sender: DataJobSender,
 ) -> Result<()> {
-    log::trace!("Processing pull request");
+    log::debug!("Processing pull request");
 
     if pull
         .title
@@ -111,7 +111,7 @@ async fn process_pull(
 
     job_sender.lock().await.send(job).await?;
 
-    log::trace!("Job sent to queue");
+    log::debug!("Job sent to queue");
 
     Ok(())
 }
@@ -127,7 +127,7 @@ async fn handle_pull_request(
 
     match payload.action.as_str() {
         "opened" | "synchronize" | "reopened" => {
-            log::trace!("Creating checkrun");
+            log::debug!("Creating checkrun");
 
             let check_run = CheckRun::create(
                 &payload.repository.full_name(),
@@ -245,7 +245,7 @@ pub async fn process_github_payload(
         &payload,
     )?;
 
-    log::trace!("Payload received, processing");
+    log::debug!("Payload received, processing");
 
     handle_pull_request(payload, job_sender, pool)
         .await
