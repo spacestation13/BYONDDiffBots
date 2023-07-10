@@ -2392,6 +2392,7 @@ dependencies = [
  "actix-files",
  "actix-web",
  "ahash 0.8.3",
+ "bytemuck",
  "delay_timer",
  "derive_builder",
  "diffbot_lib",

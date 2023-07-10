@@ -7,7 +7,7 @@ use diffbot_lib::log;
 use diffbot_lib::github::github_types::FileDiff;
 use dmm_tools::{dmi::Image, dmm, minimap, render_passes::RenderPass, IconCache};
 use eyre::{Context, Result};
-use image::{io::Reader, GenericImageView, ImageBuffer, Pixel};
+use image::{io::Reader, GenericImageView, ImageBuffer, ImageEncoder, Pixel};
 use rayon::prelude::*;
 
 use ahash::RandomState;
@@ -199,15 +199,10 @@ impl MapWithRegions {
             })
     }
 }
-/*
-pub struct MapsWithRegions {
-    pub befores: Vec<Result<MapWithRegions>>,
-    pub afters: Vec<Option<MapWithRegions>>,
-}
-*/
 
-pub type MapsWithRegions =
-    IndexMap<String, (Result<MapWithRegions>, Option<MapWithRegions>), RandomState>;
+pub type MapsWithRegions = IndexMap<String, (RegionsBefore, RegionsAfter), RandomState>;
+pub type RegionsAfter = Option<MapWithRegions>;
+pub type RegionsBefore = Result<MapWithRegions>;
 
 pub fn get_map_diff_bounding_boxes(
     modified_maps: IndexMap<String, (Result<dmm::Map>, Result<dmm::Map>), RandomState>,
@@ -380,13 +375,23 @@ pub fn render_map_regions(
                     ));
 
                     std::fs::create_dir_all(&directory).context("Creating directories")?;
-                    image
-                        .to_file(
-                            directory
-                                .join(Path::new(&format!("{z_level}-{filename}")))
-                                .as_ref(),
+                    let encoder = image::codecs::png::PngEncoder::new_with_quality(
+                        std::fs::File::create(
+                            directory.join(Path::new(&format!("{z_level}-{filename}"))),
                         )
-                        .with_context(|| format!("Saving image {map_name}"))?;
+                        .context("Creating image file")?,
+                        image::codecs::png::CompressionType::Best,
+                        image::codecs::png::FilterType::NoFilter,
+                    );
+
+                    encoder
+                        .write_image(
+                            bytemuck::cast_slice(image.data.as_slice().unwrap()),
+                            image.width,
+                            image.height,
+                            image::ColorType::Rgb8,
+                        )
+                        .context("Encoding to file")?;
                 }
             }
             Ok(())

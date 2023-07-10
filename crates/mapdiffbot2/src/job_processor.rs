@@ -142,7 +142,12 @@ fn render(
         })
         .collect::<indexmap::IndexMap<_, _, ahash::RandomState>>();
 
-    assert_eq!(head_maps.len(), 0);
+    if !head_maps.is_empty() {
+        return Err(eyre::eyre!(
+            "Did not account for the following maps in head_maps (this shouldn't happen): {:?}",
+            head_maps.keys().collect::<Vec<_>>()
+        ));
+    }
 
     let modified_maps = get_map_diff_bounding_boxes(modified_maps)?;
 
@@ -400,7 +405,6 @@ pub fn do_job(job: Job) -> Result<CheckOutputs> {
         job.pull_request,
     ) {
         Ok(maps) => generate_finished_output(&non_abs_directory, maps),
-
         Err(err) => Err(err),
     };
 
