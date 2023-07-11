@@ -375,9 +375,11 @@ pub fn render_map_regions(
                 match (image, blob_client.as_ref()) {
                     (Some(image), Some(blob_client)) => {
                         use object_store::ObjectStore;
-                        let directory = output_dir.join(Path::new(
-                            &map_name.to_string().replace('/', "_").replace(".dmm", ""),
-                        ));
+                        let directory = output_dir
+                            .join(Path::new(
+                                &map_name.to_string().replace('/', "_").replace(".dmm", ""),
+                            ))
+                            .join(Path::new(&format!("{z_level}-{filename}")));
                         let mut png = vec![];
                         let encoder = image::codecs::png::PngEncoder::new_with_quality(
                             png.as_mut_slice(),
