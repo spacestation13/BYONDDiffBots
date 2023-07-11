@@ -34,3 +34,8 @@ file_hosting_url = "http://example.com:1234/images"
 forms = 131072
 string = 131072
 
+# Azure storage (Optional) (This will make the bot write to an azure storage blob and not local files)
+# [azure_blobs]
+# storage_account= "storageaccountname"
+# storage_access_key= "accesskey"
+# storage_container = "containername"

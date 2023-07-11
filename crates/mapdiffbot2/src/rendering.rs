@@ -13,6 +13,8 @@ use rayon::prelude::*;
 use ahash::RandomState;
 use indexmap::IndexMap;
 
+use super::Azure;
+
 #[derive(Debug, Clone)]
 pub struct BoundingBox {
     left: usize,
@@ -298,7 +300,7 @@ pub fn render_map(
     errors: &RwLock<HashSet<String, RandomState>>,
     render_passes: &[Box<dyn RenderPass>],
 ) -> Result<Image> {
-    let bump = Default::default();
+    let arena = Default::default();
     let minimap_context = minimap::Context {
         objtree,
         map,
@@ -307,7 +309,7 @@ pub fn render_map(
         max: (bounds.right, bounds.top),
         render_passes,
         errors,
-        bump: &bump,
+        arena: &arena,
     };
     minimap::generate(minimap_context, icon_cache)
         .map_err(|_| eyre::anyhow!("An error occured during map rendering"))
@@ -323,7 +325,7 @@ pub fn render_map_regions(
     context: &RenderingContext,
     maps: &[(&str, &MapWithRegions)],
     render_passes: &[Box<dyn RenderPass>],
-    output_dir: &Path,
+    (output_dir, blob_client): (&Path, Azure),
     filename: &str,
     errors: &RenderingErrors,
     map_type: MapType,
@@ -369,29 +371,64 @@ pub fn render_map_regions(
                     }
                     (_, _) => None,
                 };
-                if let Some(image) = image {
-                    let directory = output_dir.join(Path::new(
-                        &map_name.to_string().replace('/', "_").replace(".dmm", ""),
-                    ));
 
-                    std::fs::create_dir_all(&directory).context("Creating directories")?;
-                    let encoder = image::codecs::png::PngEncoder::new_with_quality(
-                        std::fs::File::create(
-                            directory.join(Path::new(&format!("{z_level}-{filename}"))),
-                        )
-                        .context("Creating image file")?,
-                        image::codecs::png::CompressionType::Best,
-                        image::codecs::png::FilterType::NoFilter,
-                    );
+                match (image, blob_client.as_ref()) {
+                    (Some(image), Some(blob_client)) => {
+                        use object_store::ObjectStore;
+                        let directory = output_dir.join(Path::new(
+                            &map_name.to_string().replace('/', "_").replace(".dmm", ""),
+                        ));
+                        let mut png = vec![];
+                        let encoder = image::codecs::png::PngEncoder::new_with_quality(
+                            png.as_mut_slice(),
+                            image::codecs::png::CompressionType::Best,
+                            image::codecs::png::FilterType::NoFilter,
+                        );
+                        encoder
+                            .write_image(
+                                bytemuck::cast_slice(image.data.as_slice().unwrap()),
+                                image.width,
+                                image.height,
+                                image::ColorType::Rgb8,
+                            )
+                            .context("Encoding to vec")?;
 
-                    encoder
-                        .write_image(
-                            bytemuck::cast_slice(image.data.as_slice().unwrap()),
-                            image.width,
-                            image.height,
-                            image::ColorType::Rgb8,
-                        )
-                        .context("Encoding to file")?;
+                        let path =
+                            object_store::path::Path::from_filesystem_path(directory.as_path())?;
+
+                        let handle = actix_web::rt::Runtime::new()?;
+
+                        let blob_client = blob_client.clone();
+
+                        handle
+                            .block_on(blob_client.put(&path, png.into()))
+                            .context("Uploading to blob storage")?;
+                    }
+                    (Some(image), None) => {
+                        let directory = output_dir.join(Path::new(
+                            &map_name.to_string().replace('/', "_").replace(".dmm", ""),
+                        ));
+
+                        std::fs::create_dir_all(&directory).context("Creating directories")?;
+                        let encoder = image::codecs::png::PngEncoder::new_with_quality(
+                            std::fs::File::create(
+                                directory.join(Path::new(&format!("{z_level}-{filename}"))),
+                            )
+                            .context("Creating image file")?,
+                            image::codecs::png::CompressionType::Best,
+                            image::codecs::png::FilterType::NoFilter,
+                        );
+
+                        encoder
+                            .write_image(
+                                bytemuck::cast_slice(image.data.as_slice().unwrap()),
+                                image.width,
+                                image.height,
+                                image::ColorType::Rgb8,
+                            )
+                            .context("Encoding to file")?;
+                    }
+                    (_, _) => (),
                 }
             }
             Ok(())

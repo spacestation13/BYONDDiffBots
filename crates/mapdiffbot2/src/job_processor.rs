@@ -24,6 +24,8 @@ use diffbot_lib::{
     job::types::Job,
 };
 
+use super::Azure;
+
 struct RenderedMaps {
     added_maps: Vec<(String, MapWithRegions)>,
     removed_maps: Vec<(String, MapWithRegions)>,
@@ -35,7 +37,7 @@ fn render(
     head: &Branch,
     (added_files, modified_files, removed_files): (&[&FileDiff], &[&FileDiff], &[&FileDiff]),
     (repo, base_branch_name): (&git2::Repository, &str),
-    (repo_dir, out_dir): (&Path, &Path),
+    (repo_dir, out_dir, blob_client): (&Path, &Path, Azure),
     pull_request_number: u64,
     // feel like this is a bit of a hack but it works for now
 ) -> Result<RenderedMaps> {
@@ -73,8 +75,10 @@ fn render(
     );
 
     //do removed maps
-    let removed_directory = format!("{}/r", out_dir.display());
-    let removed_directory = Path::new(&removed_directory);
+    let mut removed_directory = out_dir.to_path_buf();
+    removed_directory.push("r");
+    let removed_directory = removed_directory.as_path();
+
     let removed_errors = Default::default();
 
     let removed_maps = with_checkout(&base_branch, repo, || {
@@ -87,7 +91,7 @@ fn render(
                 .collect::<Vec<_>>()
                 .as_slice(),
             &base_render_passes,
-            removed_directory,
+            (removed_directory, blob_client.clone()),
             "removed.png",
             &removed_errors,
             crate::rendering::MapType::Base,
@@ -97,8 +101,10 @@ fn render(
     })?;
 
     //do added maps
-    let added_directory = format!("{}/a", out_dir.display());
-    let added_directory = Path::new(&added_directory);
+    let mut added_directory = out_dir.to_path_buf();
+    added_directory.push("a");
+    let added_directory = added_directory.as_path();
+
     let added_errors = Default::default();
 
     let added_maps = with_checkout(&head_branch, repo, || {
@@ -111,7 +117,7 @@ fn render(
                 .collect::<Vec<_>>()
                 .as_slice(),
             &head_render_passes,
-            added_directory,
+            (added_directory, blob_client.clone()),
             "added.png",
             &added_errors,
             crate::rendering::MapType::Head,
@@ -151,8 +157,10 @@ fn render(
 
     let modified_maps = get_map_diff_bounding_boxes(modified_maps)?;
 
-    let modified_directory = format!("{}/m", out_dir.display());
-    let modified_directory = Path::new(&modified_directory);
+    let mut modified_directory = out_dir.to_path_buf();
+    modified_directory.push("m");
+    let modified_directory = modified_directory.as_path();
+
     let modified_before_errors = Default::default();
     let modified_after_errors = Default::default();
 
@@ -167,7 +175,7 @@ fn render(
                 .collect::<Vec<_>>()
                 .as_slice(),
             &head_render_passes,
-            modified_directory,
+            (modified_directory, blob_client.clone()),
             "before.png",
             &modified_before_errors,
             crate::rendering::MapType::Base,
@@ -185,7 +193,7 @@ fn render(
                 .collect::<Vec<_>>()
                 .as_slice(),
             &head_render_passes,
-            modified_directory,
+            (modified_directory, blob_client.clone()),
             "after.png",
             &modified_after_errors,
             crate::rendering::MapType::Head,
@@ -210,7 +218,15 @@ fn generate_finished_output<P: AsRef<Path>>(
     maps: RenderedMaps,
 ) -> Result<CheckOutputs> {
     let conf = CONFIG.get().unwrap();
-    let file_url = &conf.web.file_hosting_url;
+    let file_url = if conf.azure_blobs.is_some() {
+        format!(
+            "https://{}.blob.core.windows.net/{}",
+            conf.azure_blobs.as_ref().unwrap().storage_account,
+            conf.azure_blobs.as_ref().unwrap().storage_container
+        )
+    } else {
+        conf.web.file_hosting_url.to_string()
+    };
     let non_abs_directory = file_directory.as_ref().to_string_lossy();
 
     let mut builder = CheckOutputBuilder::new(
@@ -330,7 +346,7 @@ fn generate_finished_output<P: AsRef<Path>>(
     Ok(builder.build())
 }
 
-pub fn do_job(job: Job) -> Result<CheckOutputs> {
+pub fn do_job(job: Job, blob_client: Azure) -> Result<CheckOutputs> {
     log::debug!(
         "Starting Job on repo: {}, pr number: {}, base commit: {}, head commit: {}",
         job.repo.full_name(),
@@ -396,12 +412,18 @@ pub fn do_job(job: Job) -> Result<CheckOutputs> {
 
     remote.disconnect().context("Disconnecting from remote")?;
 
+    let output_directory = if blob_client.is_some() {
+        Path::new(&non_abs_directory)
+    } else {
+        Path::new(output_directory)
+    };
+
     let res = match render(
         base,
         head,
         (&added_files, &modified_files, &removed_files),
         (&repository, &job.base.r#ref),
-        (&repo_dir, Path::new(output_directory)),
+        (&repo_dir, output_directory, blob_client.clone()),
         job.pull_request,
     ) {
         Ok(maps) => generate_finished_output(&non_abs_directory, maps),

@@ -1,29 +1,22 @@
-use simplelog::*;
+use log::Level;
 
-fn get_log_level(log_level: &str) -> LevelFilter {
+fn get_log_level(log_level: &str) -> Level {
     match log_level {
-        "trace" => LevelFilter::Trace,
-        "debug" => LevelFilter::Debug,
-        "info" => LevelFilter::Info,
-        "warn" => LevelFilter::Warn,
-        "error" => LevelFilter::Error,
-        _ => LevelFilter::Off,
+        "trace" => Level::Trace,
+        "debug" => Level::Debug,
+        "info" => Level::Info,
+        "warn" => Level::Warn,
+        "error" => Level::Error,
+        _ => Level::Error,
     }
 }
 
 pub fn init_logger(log_level: &str) -> eyre::Result<()> {
-    let level = get_log_level(log_level);
-
-    TermLogger::init(
-        level,
-        Config::default(),
-        TerminalMode::Stdout,
-        ColorChoice::Always,
-    )?;
+    simple_logger::init_with_level(get_log_level(log_level))?;
 
     Ok(())
 }
-
+/*
 pub fn init_file_logger(log_level: &str, filename: &str) -> eyre::Result<()> {
     let level = get_log_level(log_level);
 
@@ -39,3 +32,4 @@ pub fn init_file_logger(log_level: &str, filename: &str) -> eyre::Result<()> {
 
     Ok(())
 }
+*/

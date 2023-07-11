@@ -6,7 +6,13 @@ use diffbot_lib::job::types::{Job, JobType};
 
 use diffbot_lib::log;
 
-pub async fn handle_jobs<S: AsRef<str>>(name: S, mut job_receiver: yaque::Receiver) {
+use super::Azure;
+
+pub async fn handle_jobs<S: AsRef<str>>(
+    name: S,
+    mut job_receiver: yaque::Receiver,
+    blob_client: Azure,
+) {
     loop {
         match job_receiver.recv().await {
             Ok(jobguard) => {
@@ -14,7 +20,9 @@ pub async fn handle_jobs<S: AsRef<str>>(name: S, mut job_receiver: yaque::Receiv
                 let job: Result<JobType, serde_json::Error> = serde_json::from_slice(&jobguard);
                 match job {
                     Ok(job) => match job {
-                        JobType::GithubJob(job) => job_handler(name.as_ref(), *job).await,
+                        JobType::GithubJob(job) => {
+                            job_handler(name.as_ref(), *job, blob_client.clone()).await
+                        }
                         JobType::CleanupJob(_) => garbage_collect_all_repos().await,
                     },
                     Err(err) => log::error!("Failed to parse job from queue: {}", err),
@@ -107,7 +115,7 @@ async fn garbage_collect_all_repos() {
     }
 }
 
-async fn job_handler(name: &str, job: Job) {
+async fn job_handler(name: &str, job: Job, blob_client: Azure) {
     let (repo, pull_request, check_run) =
         (job.repo.clone(), job.pull_request, job.check_run.clone());
     log::info!(
@@ -121,7 +129,7 @@ async fn job_handler(name: &str, job: Job) {
 
     let output = actix_web::rt::time::timeout(
         Duration::from_secs(3600),
-        actix_web::rt::task::spawn_blocking(move || do_job(job)),
+        actix_web::rt::task::spawn_blocking(move || do_job(job, blob_client)),
     )
     .await;
 
