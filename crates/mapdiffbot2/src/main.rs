@@ -154,8 +154,8 @@ async fn main() -> eyre::Result<()> {
         .await?;
     }
 
-    let blob_client = match config.azure_blobs {
-        Some(ref azure) => Some(std::sync::Arc::new(
+    let blob_client = config.azure_blobs.as_ref().map(|azure| {
+        std::sync::Arc::new(
             object_store::azure::MicrosoftAzureBuilder::new()
                 .with_account(azure.storage_account.clone())
                 .with_access_key(azure.storage_access_key.clone())
@@ -163,9 +163,8 @@ async fn main() -> eyre::Result<()> {
                 .with_client_options(object_store::ClientOptions::new().with_http2_only())
                 .build()
                 .expect("Trying to connect to azure"),
-        )),
-        None => None,
-    };
+        )
+    });
 
     actix_web::rt::spawn(runner::handle_jobs(
         "MapDiffBot2",

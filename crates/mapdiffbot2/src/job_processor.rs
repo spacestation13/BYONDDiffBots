@@ -423,7 +423,7 @@ pub fn do_job(job: Job, blob_client: Azure) -> Result<CheckOutputs> {
         head,
         (&added_files, &modified_files, &removed_files),
         (&repository, &job.base.r#ref),
-        (&repo_dir, output_directory, blob_client.clone()),
+        (&repo_dir, output_directory, blob_client),
         job.pull_request,
     ) {
         Ok(maps) => generate_finished_output(&non_abs_directory, maps),
