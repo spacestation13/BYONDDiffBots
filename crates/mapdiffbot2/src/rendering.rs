@@ -5,9 +5,9 @@ extern crate dreammaker;
 use diffbot_lib::log;
 
 use diffbot_lib::github::github_types::FileDiff;
-use dmm_tools::{dmi::Image, dmm, minimap, render_passes::RenderPass, IconCache};
+use dmm_tools::{dmm, minimap, render_passes::RenderPass, IconCache};
 use eyre::{Context, Result};
-use image::{io::Reader, GenericImageView, ImageBuffer, ImageEncoder, Pixel};
+use image::{io::Reader, EncodableLayout, GenericImageView, ImageEncoder, Pixel};
 use rayon::prelude::*;
 
 use ahash::RandomState;
@@ -299,7 +299,7 @@ pub fn render_map(
     bounds: &BoundingBox,
     errors: &RwLock<HashSet<String, RandomState>>,
     render_passes: &[Box<dyn RenderPass>],
-) -> Result<Image> {
+) -> Result<image::RgbaImage> {
     let arena = Default::default();
     let minimap_context = minimap::Context {
         objtree,
@@ -372,39 +372,52 @@ pub fn render_map_regions(
                     (_, _) => None,
                 };
 
+                log::debug!(
+                    "maprender: {map_name} : {}, azure: {}, path: {}",
+                    image.is_some(),
+                    blob_client.is_some(),
+                    output_dir.display(),
+                );
+
                 match (image, blob_client.as_ref()) {
                     (Some(image), Some(blob_client)) => {
                         use object_store::ObjectStore;
+
                         let directory = output_dir
                             .join(Path::new(
                                 &map_name.to_string().replace('/', "_").replace(".dmm", ""),
                             ))
                             .join(Path::new(&format!("{z_level}-{filename}")));
-                        let mut png = vec![];
+
+                        let mut buf = vec![];
+
                         let encoder = image::codecs::png::PngEncoder::new_with_quality(
-                            png.as_mut_slice(),
+                            &mut buf,
                             image::codecs::png::CompressionType::Best,
-                            image::codecs::png::FilterType::NoFilter,
+                            image::codecs::png::FilterType::Adaptive,
                         );
+
                         encoder
                             .write_image(
-                                bytemuck::cast_slice(image.data.as_slice().unwrap()),
-                                image.width,
-                                image.height,
+                                image.as_bytes(),
+                                image.width(),
+                                image.height(),
                                 image::ColorType::Rgb8,
                             )
-                            .context("Encoding to vec")?;
+                            .context("Encoding to buffer")?;
 
-                        let path =
-                            object_store::path::Path::from_filesystem_path(directory.as_path())?;
+                        let path = object_store::path::Path::from_iter(
+                            directory.iter().map(|ostr| ostr.to_str().unwrap()),
+                        );
 
                         let handle = actix_web::rt::Runtime::new()?;
 
                         let blob_client = blob_client.clone();
 
                         handle
-                            .block_on(blob_client.put(&path, png.into()))
+                            .block_on(blob_client.put(&path, buf.into()))
                             .context("Uploading to blob storage")?;
+                        log::debug!("Sent to azure: {map_name}");
                     }
                     (Some(image), None) => {
                         let directory = output_dir.join(Path::new(
@@ -418,14 +431,14 @@ pub fn render_map_regions(
                             )
                             .context("Creating image file")?,
                             image::codecs::png::CompressionType::Best,
-                            image::codecs::png::FilterType::NoFilter,
+                            image::codecs::png::FilterType::Adaptive,
                         );
 
                         encoder
                             .write_image(
-                                bytemuck::cast_slice(image.data.as_slice().unwrap()),
-                                image.width,
-                                image.height,
+                                image.as_bytes(),
+                                image.width(),
+                                image.height(),
                                 image::ColorType::Rgb8,
                             )
                             .context("Encoding to file")?;
@@ -452,7 +465,7 @@ pub fn render_diffs_for_directory<P: AsRef<Path>>(directory: P) {
             let before = Reader::open(&entry)?.decode()?;
             let after = Reader::open(replaced_entry)?.decode()?;
 
-            ImageBuffer::from_fn(after.width(), after.height(), |x, y| {
+            let diff_image = image::RgbaImage::from_fn(after.width(), after.height(), |x, y| {
                 let before_pixel = before.get_pixel(x, y);
                 let after_pixel = after.get_pixel(x, y);
                 if before_pixel == after_pixel {
@@ -460,8 +473,23 @@ pub fn render_diffs_for_directory<P: AsRef<Path>>(directory: P) {
                 } else {
                     image::Rgba([255, 0, 0, 255])
                 }
-            })
-            .save(fuck.replace("-before.png", "-diff.png"))?;
+            });
+
+            let encoder = image::codecs::png::PngEncoder::new_with_quality(
+                std::fs::File::create(fuck.replace("-before.png", "-diff.png"))
+                    .context("Creating image file")?,
+                image::codecs::png::CompressionType::Best,
+                image::codecs::png::FilterType::Adaptive,
+            );
+
+            encoder
+                .write_image(
+                    diff_image.as_bytes(),
+                    diff_image.width(),
+                    diff_image.height(),
+                    image::ColorType::Rgb8,
+                )
+                .context("Encoding to file")?;
 
             Ok(())
         })

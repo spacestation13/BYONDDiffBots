@@ -683,7 +683,7 @@ dependencies = [
 [[package]]
 name = "builtins-proc-macro"
 version = "0.0.0"
-source = "git+https://github.com/jupyterkat/SpacemanDMM/#b6d531f148cad56ef02c175f08e12442d9040e07"
+source = "git+https://github.com/jupyterkat/SpacemanDMM/#6f8e11b06c493112da89346c66a207d736b5069f"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -1065,12 +1065,12 @@ dependencies = [
 
 [[package]]
 name = "darling"
-version = "0.20.1"
+version = "0.20.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0558d22a7b463ed0241e993f76f09f30b126687447751a8638587b864e4b3944"
+checksum = "0209d94da627ab5605dcccf08bb18afa5009cfbef48d8a8b7d7bdbc79be25c5e"
 dependencies = [
- "darling_core 0.20.1",
- "darling_macro 0.20.1",
+ "darling_core 0.20.3",
+ "darling_macro 0.20.3",
 ]
 
 [[package]]
@@ -1089,9 +1089,9 @@ dependencies = [
 
 [[package]]
 name = "darling_core"
-version = "0.20.1"
+version = "0.20.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ab8bfa2e259f8ee1ce5e97824a3c55ec4404a0d772ca7fa96bf19f0752a046eb"
+checksum = "177e3443818124b357d8e76f53be906d60937f0d3a90773a664fa63fa253e621"
 dependencies = [
  "fnv",
  "ident_case",
@@ -1114,11 +1114,11 @@ dependencies = [
 
 [[package]]
 name = "darling_macro"
-version = "0.20.1"
+version = "0.20.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "29a358ff9f12ec09c3e61fef9b5a9902623a695a46a917b07f269bff1445611a"
+checksum = "836a9bbc7ad63342d6d6e7b815ccab164bc77a2d95d84bc3117a8c0d5c98e2d5"
 dependencies = [
- "darling_core 0.20.1",
+ "darling_core 0.20.3",
  "quote",
  "syn 2.0.25",
 ]
@@ -1250,19 +1250,20 @@ dependencies = [
 [[package]]
 name = "dmm-tools"
 version = "0.1.0"
-source = "git+https://github.com/jupyterkat/SpacemanDMM/#b6d531f148cad56ef02c175f08e12442d9040e07"
+source = "git+https://github.com/jupyterkat/SpacemanDMM/#6f8e11b06c493112da89346c66a207d736b5069f"
 dependencies = [
  "ahash 0.8.3",
  "bytemuck",
  "dreammaker",
  "either",
- "gif",
+ "eyre",
+ "image",
  "indexmap 2.0.0",
  "inflate",
- "lodepng",
  "ndarray",
  "png",
  "rand",
+ "tinydmi",
  "typed-arena",
 ]
 
@@ -1275,21 +1276,23 @@ checksum = "fea41bba32d969b513997752735605054bc0dfa92b4c56bf1189f2e174be7a10"
 [[package]]
 name = "dreammaker"
 version = "0.1.0"
-source = "git+https://github.com/jupyterkat/SpacemanDMM/#b6d531f148cad56ef02c175f08e12442d9040e07"
+source = "git+https://github.com/jupyterkat/SpacemanDMM/#6f8e11b06c493112da89346c66a207d736b5069f"
 dependencies = [
  "ahash 0.8.3",
  "bitflags 2.3.3",
  "builtins-proc-macro",
  "color_space",
  "derivative",
+ "eyre",
  "indexmap 2.0.0",
  "interval-tree",
- "lodepng",
  "ordered-float",
  "phf",
+ "png",
  "serde",
  "serde_derive",
  "termcolor",
+ "tinydmi",
  "toml 0.7.6",
 ]
 
@@ -1365,15 +1368,6 @@ checksum = "4c2b6b5a29c02cdc822728b7d7b8ae1bab3e3b05d44522770ddd49722eeac7eb"
 dependencies = [
  "indenter",
  "once_cell",
-]
-
-[[package]]
-name = "fallible_collections"
-version = "0.4.9"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a88c69768c0a15262df21899142bc6df9b9b823546d4b4b9a7bc2d6c448ec6fd"
-dependencies = [
- "hashbrown 0.13.2",
 ]
 
 [[package]]
@@ -2061,7 +2055,7 @@ dependencies = [
 [[package]]
 name = "interval-tree"
 version = "0.8.0"
-source = "git+https://github.com/jupyterkat/SpacemanDMM/#b6d531f148cad56ef02c175f08e12442d9040e07"
+source = "git+https://github.com/jupyterkat/SpacemanDMM/#6f8e11b06c493112da89346c66a207d736b5069f"
 
 [[package]]
 name = "io-lifetimes"
@@ -2087,7 +2081,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cb0889898416213fab133e1d33a0e5858a48177452750691bde3666d0fdbaf8b"
 dependencies = [
  "hermit-abi",
- "rustix 0.38.3",
+ "rustix 0.38.4",
  "windows-sys 0.48.0",
 ]
 
@@ -2370,19 +2364,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "lodepng"
-version = "3.7.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f0ad39f75bbaa4b10bb6f2316543632a8046a5bcf9c785488d79720b21f044f8"
-dependencies = [
- "crc32fast",
- "fallible_collections",
- "flate2",
- "libc",
- "rgb",
-]
-
-[[package]]
 name = "log"
 version = "0.4.19"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2520,7 +2501,7 @@ version = "0.30.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "56b0d8a0db9bf6d2213e11f2c701cb91387b0614361625ab7b9743b41aa4938f"
 dependencies = [
- "darling 0.20.1",
+ "darling 0.20.3",
  "heck",
  "num-bigint",
  "proc-macro-crate 1.3.1",
@@ -3288,9 +3269,9 @@ dependencies = [
 
 [[package]]
 name = "regex-automata"
-version = "0.3.2"
+version = "0.3.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "83d3daa6976cffb758ec878f108ba0e062a45b2d6ca3a2cca965338855476caf"
+checksum = "39354c10dd07468c2e73926b23bb9c2caca74c5501e38a35da70406f1d923310"
 dependencies = [
  "aho-corasick",
  "memchr",
@@ -3354,15 +3335,6 @@ dependencies = [
  "web-sys",
  "webpki-roots",
  "winreg",
-]
-
-[[package]]
-name = "rgb"
-version = "0.8.36"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "20ec2d3e3fc7a92ced357df9cebd5a10b6fb2aa1ee797bf7e9ce2f17dffc8f59"
-dependencies = [
- "bytemuck",
 ]
 
 [[package]]
@@ -3478,9 +3450,9 @@ dependencies = [
 
 [[package]]
 name = "rustix"
-version = "0.38.3"
+version = "0.38.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ac5ffa1efe7548069688cd7028f32591853cd7b5b756d41bcffd2353e4fc75b4"
+checksum = "0a962918ea88d644592894bc6dc55acc6c0956488adcebbfb6e273506b7fd6e5"
 dependencies = [
  "bitflags 2.3.3",
  "errno",
@@ -3659,9 +3631,9 @@ dependencies = [
 
 [[package]]
 name = "serde_json"
-version = "1.0.100"
+version = "1.0.102"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0f1e14e89be7aa4c4b78bdbdc9eb5bf8517829a600ae8eaa39a6e1d960b5185c"
+checksum = "b5062a995d481b2308b6064e9af76011f2921c35f97b0468811ed9f6cd91dfed"
 dependencies = [
  "itoa",
  "ryu",
@@ -4070,6 +4042,16 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "96ba15a897f3c86766b757e5ac7221554c6750054d74d5b28844fce5fb36a6c4"
 dependencies = [
  "time-core",
+]
+
+[[package]]
+name = "tinydmi"
+version = "0.1.0"
+source = "git+https://github.com/jupyterkat/SpacemanDMM/#6f8e11b06c493112da89346c66a207d736b5069f"
+dependencies = [
+ "ahash 0.8.3",
+ "eyre",
+ "nom",
 ]
 
 [[package]]

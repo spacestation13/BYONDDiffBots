@@ -75,8 +75,7 @@ fn render(
     );
 
     //do removed maps
-    let mut removed_directory = out_dir.to_path_buf();
-    removed_directory.push("r");
+    let removed_directory = out_dir.to_path_buf().join("r");
     let removed_directory = removed_directory.as_path();
 
     let removed_errors = Default::default();
@@ -101,8 +100,7 @@ fn render(
     })?;
 
     //do added maps
-    let mut added_directory = out_dir.to_path_buf();
-    added_directory.push("a");
+    let added_directory = out_dir.to_path_buf().join("a");
     let added_directory = added_directory.as_path();
 
     let added_errors = Default::default();
@@ -157,8 +155,7 @@ fn render(
 
     let modified_maps = get_map_diff_bounding_boxes(modified_maps)?;
 
-    let mut modified_directory = out_dir.to_path_buf();
-    modified_directory.push("m");
+    let modified_directory = out_dir.to_path_buf().join("m");
     let modified_directory = modified_directory.as_path();
 
     let modified_before_errors = Default::default();
@@ -227,7 +224,11 @@ fn generate_finished_output<P: AsRef<Path>>(
     } else {
         conf.web.file_hosting_url.to_string()
     };
-    let non_abs_directory = file_directory.as_ref().to_string_lossy();
+    let non_abs_directory = file_directory
+        .as_ref()
+        .to_string_lossy()
+        .to_string()
+        .replace('\\', "/");
 
     let mut builder = CheckOutputBuilder::new(
     "Map renderings",
@@ -376,14 +377,17 @@ pub fn do_job(job: Job, blob_client: Azure) -> Result<CheckOutputs> {
         clone_repo(&repo, &repo_dir).context("Cloning repo")?;
     }
 
-    let non_abs_directory = format!("images/{}/{}", job.repo.id, job.check_run.id());
-    let output_directory = Path::new(&non_abs_directory)
+    let non_abs_directory: PathBuf = [
+        "images".to_string(),
+        job.repo.id.to_string(),
+        job.check_run.id().to_string(),
+    ]
+    .iter()
+    .collect();
+    let output_directory = non_abs_directory
+        .as_path()
         .absolutize()
         .context("Absolutizing images path")?;
-    let output_directory = output_directory
-        .as_ref()
-        .to_str()
-        .ok_or_else(|| eyre::anyhow!("Failed to create absolute path to image directory",))?;
 
     log::debug!(
         "Dirs absolutized from {:?} to {:?}",
@@ -415,7 +419,7 @@ pub fn do_job(job: Job, blob_client: Azure) -> Result<CheckOutputs> {
     let output_directory = if blob_client.is_some() {
         Path::new(&non_abs_directory)
     } else {
-        Path::new(output_directory)
+        output_directory.as_ref()
     };
 
     let res = match render(

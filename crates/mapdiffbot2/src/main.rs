@@ -15,6 +15,8 @@ use once_cell::sync::OnceCell;
 use serde::Deserialize;
 use std::sync::Arc;
 
+use diffbot_lib::log;
+
 #[cfg(not(target_env = "msvc"))]
 #[global_allocator]
 static GLOBAL: tikv_jemallocator::Jemalloc = tikv_jemallocator::Jemalloc;
@@ -165,6 +167,7 @@ async fn main() -> eyre::Result<()> {
                 .expect("Trying to connect to azure"),
         )
     });
+    log::debug!("Blob client is present: {}", blob_client.is_some());
 
     actix_web::rt::spawn(runner::handle_jobs(
         "MapDiffBot2",
