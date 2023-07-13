@@ -332,9 +332,9 @@ pub fn render_map_regions(
 ) -> Result<()> {
     let objtree = &context.obj_tree;
     let icon_cache = &context.icon_cache;
-    let _: Result<()> = maps
+    let results = maps
         .par_iter()
-        .map(|(map_name, map)| {
+        .map(|(map_name, map)| -> Result<()> {
             for z_level in 0..map.map.dim_z() {
                 let image = match (
                     map_type,
@@ -448,7 +448,15 @@ pub fn render_map_regions(
             }
             Ok(())
         })
-        .collect();
+        .collect::<Vec<_>>();
+    results.iter().for_each(|res| {
+        if let Err(e) = res {
+            log::error!("{:?}", e) //errors please
+        }
+    });
+    for thing in results {
+        thing?; //henlo?????
+    }
     Ok(())
 }
 
