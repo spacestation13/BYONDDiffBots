@@ -683,7 +683,7 @@ dependencies = [
 [[package]]
 name = "builtins-proc-macro"
 version = "0.0.0"
-source = "git+https://github.com/jupyterkat/SpacemanDMM/#6f8e11b06c493112da89346c66a207d736b5069f"
+source = "git+https://github.com/jupyterkat/SpacemanDMM/?branch=legacy#b6d531f148cad56ef02c175f08e12442d9040e07"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -1250,20 +1250,19 @@ dependencies = [
 [[package]]
 name = "dmm-tools"
 version = "0.1.0"
-source = "git+https://github.com/jupyterkat/SpacemanDMM/#6f8e11b06c493112da89346c66a207d736b5069f"
+source = "git+https://github.com/jupyterkat/SpacemanDMM/?branch=legacy#b6d531f148cad56ef02c175f08e12442d9040e07"
 dependencies = [
  "ahash 0.8.3",
  "bytemuck",
  "dreammaker",
  "either",
- "eyre",
- "image",
+ "gif",
  "indexmap 2.0.0",
  "inflate",
+ "lodepng",
  "ndarray",
  "png",
  "rand",
- "tinydmi",
  "typed-arena",
 ]
 
@@ -1276,23 +1275,21 @@ checksum = "fea41bba32d969b513997752735605054bc0dfa92b4c56bf1189f2e174be7a10"
 [[package]]
 name = "dreammaker"
 version = "0.1.0"
-source = "git+https://github.com/jupyterkat/SpacemanDMM/#6f8e11b06c493112da89346c66a207d736b5069f"
+source = "git+https://github.com/jupyterkat/SpacemanDMM/?branch=legacy#b6d531f148cad56ef02c175f08e12442d9040e07"
 dependencies = [
  "ahash 0.8.3",
  "bitflags 2.3.3",
  "builtins-proc-macro",
  "color_space",
  "derivative",
- "eyre",
  "indexmap 2.0.0",
  "interval-tree",
+ "lodepng",
  "ordered-float",
  "phf",
- "png",
  "serde",
  "serde_derive",
  "termcolor",
- "tinydmi",
  "toml 0.7.6",
 ]
 
@@ -1368,6 +1365,15 @@ checksum = "4c2b6b5a29c02cdc822728b7d7b8ae1bab3e3b05d44522770ddd49722eeac7eb"
 dependencies = [
  "indenter",
  "once_cell",
+]
+
+[[package]]
+name = "fallible_collections"
+version = "0.4.9"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a88c69768c0a15262df21899142bc6df9b9b823546d4b4b9a7bc2d6c448ec6fd"
+dependencies = [
+ "hashbrown 0.13.2",
 ]
 
 [[package]]
@@ -1925,6 +1931,7 @@ dependencies = [
  "eyre",
  "hashbrown 0.14.0",
  "hex",
+ "itertools 0.11.0",
  "jsonwebtoken",
  "lazy_static",
  "mysql_async",
@@ -2055,7 +2062,7 @@ dependencies = [
 [[package]]
 name = "interval-tree"
 version = "0.8.0"
-source = "git+https://github.com/jupyterkat/SpacemanDMM/#6f8e11b06c493112da89346c66a207d736b5069f"
+source = "git+https://github.com/jupyterkat/SpacemanDMM/?branch=legacy#b6d531f148cad56ef02c175f08e12442d9040e07"
 
 [[package]]
 name = "io-lifetimes"
@@ -2364,6 +2371,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "lodepng"
+version = "3.7.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f0ad39f75bbaa4b10bb6f2316543632a8046a5bcf9c785488d79720b21f044f8"
+dependencies = [
+ "crc32fast",
+ "fallible_collections",
+ "flate2",
+ "libc",
+ "rgb",
+]
+
+[[package]]
 name = "log"
 version = "0.4.19"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2419,8 +2439,10 @@ dependencies = [
  "serde",
  "serde_json",
  "simple-eyre",
+ "tempfile",
  "tikv-jemallocator",
  "time 0.3.23",
+ "tokio",
  "toml 0.7.6",
  "walkdir",
  "yaque",
@@ -3338,6 +3360,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "rgb"
+version = "0.8.36"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "20ec2d3e3fc7a92ced357df9cebd5a10b6fb2aa1ee797bf7e9ce2f17dffc8f59"
+dependencies = [
+ "bytemuck",
+]
+
+[[package]]
 name = "ring"
 version = "0.16.20"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4042,16 +4073,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "96ba15a897f3c86766b757e5ac7221554c6750054d74d5b28844fce5fb36a6c4"
 dependencies = [
  "time-core",
-]
-
-[[package]]
-name = "tinydmi"
-version = "0.1.0"
-source = "git+https://github.com/jupyterkat/SpacemanDMM/#6f8e11b06c493112da89346c66a207d736b5069f"
-dependencies = [
- "ahash 0.8.3",
- "eyre",
- "nom",
 ]
 
 [[package]]

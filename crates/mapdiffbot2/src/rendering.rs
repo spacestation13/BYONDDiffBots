@@ -5,9 +5,9 @@ extern crate dreammaker;
 use diffbot_lib::log;
 
 use diffbot_lib::github::github_types::FileDiff;
-use dmm_tools::{dmm, minimap, render_passes::RenderPass, IconCache};
+use dmm_tools::{dmi::Image, dmm, minimap, render_passes::RenderPass, IconCache};
 use eyre::{Context, Result};
-use image::{io::Reader, EncodableLayout, GenericImageView, ImageEncoder, Pixel};
+use image::{io::Reader, ImageBuffer};
 use rayon::prelude::*;
 
 use ahash::RandomState;
@@ -299,7 +299,7 @@ pub fn render_map(
     bounds: &BoundingBox,
     errors: &RwLock<HashSet<String, RandomState>>,
     render_passes: &[Box<dyn RenderPass>],
-) -> Result<image::RgbaImage> {
+) -> Result<Image> {
     let arena = Default::default();
     let minimap_context = minimap::Context {
         objtree,
@@ -389,22 +389,7 @@ pub fn render_map_regions(
                             ))
                             .join(Path::new(&format!("{z_level}-{filename}")));
 
-                        let mut buf = vec![];
-
-                        let encoder = image::codecs::png::PngEncoder::new_with_quality(
-                            &mut buf,
-                            image::codecs::png::CompressionType::Best,
-                            image::codecs::png::FilterType::Adaptive,
-                        );
-
-                        encoder
-                            .write_image(
-                                image.as_bytes(),
-                                image.width(),
-                                image.height(),
-                                image::ColorType::Rgb8,
-                            )
-                            .context("Encoding to buffer")?;
+                        let bytes = image.to_bytes()?;
 
                         let path = object_store::path::Path::from_iter(
                             directory.iter().map(|ostr| ostr.to_str().unwrap()),
@@ -414,9 +399,19 @@ pub fn render_map_regions(
 
                         let blob_client = blob_client.clone();
 
-                        handle
-                            .block_on(blob_client.put(&path, buf.into()))
-                            .context("Uploading to blob storage")?;
+                        handle.block_on(async move {
+                            use tokio::io::AsyncWriteExt;
+                            let (_, mut multipart) =
+                                blob_client.put_multipart(&path).await.unwrap();
+                            //for thing in bytes.chunks(1_000_000).map(|item| item.to_vec()) {
+                            //blob_client.put(&path, thing.into()).await.unwrap();
+                            //multipart.write(thing.as_slice()).await;
+                            multipart.write_all(bytes.as_slice()).await.unwrap();
+                            multipart.flush().await.unwrap();
+                            multipart.shutdown().await.unwrap();
+
+                            //}
+                        });
                         log::debug!("Sent to azure: {map_name}");
                     }
                     (Some(image), None) => {
@@ -425,23 +420,9 @@ pub fn render_map_regions(
                         ));
 
                         std::fs::create_dir_all(&directory).context("Creating directories")?;
-                        let encoder = image::codecs::png::PngEncoder::new_with_quality(
-                            std::fs::File::create(
-                                directory.join(Path::new(&format!("{z_level}-{filename}"))),
-                            )
-                            .context("Creating image file")?,
-                            image::codecs::png::CompressionType::Best,
-                            image::codecs::png::FilterType::Adaptive,
-                        );
-
-                        encoder
-                            .write_image(
-                                image.as_bytes(),
-                                image.width(),
-                                image.height(),
-                                image::ColorType::Rgb8,
-                            )
-                            .context("Encoding to file")?;
+                        image.to_file(
+                            &directory.join(Path::new(&format!("{z_level}-{filename}"))),
+                        )?;
                     }
                     (_, _) => (),
                 }
@@ -471,9 +452,16 @@ pub fn render_diffs_for_directory<P: AsRef<Path>>(directory: P) {
             let fuck = entry.to_string_lossy();
             let replaced_entry = fuck.replace("-before.png", "-after.png");
             let before = Reader::open(&entry)?.decode()?;
+            let before = before
+                .as_rgba8()
+                .ok_or_else(|| eyre::eyre!("Image is not rgba8!"))?;
             let after = Reader::open(replaced_entry)?.decode()?;
+            let after = after
+                .as_rgba8()
+                .ok_or_else(|| eyre::eyre!("Image is not rgba8!"))?;
 
-            let diff_image = image::RgbaImage::from_fn(after.width(), after.height(), |x, y| {
+            ImageBuffer::from_fn(after.width(), after.height(), |x, y| {
+                use image::Pixel;
                 let before_pixel = before.get_pixel(x, y);
                 let after_pixel = after.get_pixel(x, y);
                 if before_pixel == after_pixel {
@@ -481,23 +469,8 @@ pub fn render_diffs_for_directory<P: AsRef<Path>>(directory: P) {
                 } else {
                     image::Rgba([255, 0, 0, 255])
                 }
-            });
-
-            let encoder = image::codecs::png::PngEncoder::new_with_quality(
-                std::fs::File::create(fuck.replace("-before.png", "-diff.png"))
-                    .context("Creating image file")?,
-                image::codecs::png::CompressionType::Best,
-                image::codecs::png::FilterType::Adaptive,
-            );
-
-            encoder
-                .write_image(
-                    diff_image.as_bytes(),
-                    diff_image.width(),
-                    diff_image.height(),
-                    image::ColorType::Rgb8,
-                )
-                .context("Encoding to file")?;
+            })
+            .save(fuck.replace("-before.png", "-diff.png"))?;
 
             Ok(())
         })
