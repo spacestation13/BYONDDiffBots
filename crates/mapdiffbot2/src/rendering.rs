@@ -478,6 +478,7 @@ fn write_to_azure<P: AsRef<Path>>(
     client: std::sync::Arc<MicrosoftAzure>,
     image: &image::RgbaImage,
 ) -> Result<()> {
+    use object_store::ObjectStore;
     let mut buffer = vec![];
 
     encode_image(&mut buffer, image)?;
@@ -490,14 +491,7 @@ fn write_to_azure<P: AsRef<Path>>(
 
     let blob_client = client.clone();
 
-    handle.block_on(async move {
-        use object_store::ObjectStore;
-        use tokio::io::AsyncWriteExt;
-        let (_, mut multipart) = blob_client.put_multipart(&path).await.unwrap();
-        multipart.write_all(buffer.as_slice()).await.unwrap();
-        multipart.flush().await.unwrap();
-        multipart.shutdown().await.unwrap();
-    });
+    handle.block_on(blob_client.put(&path, buffer.into()))?;
     Ok(())
 }
 
