@@ -124,8 +124,7 @@ fn render(
         )
         .context("Rendering added maps")?;
         Ok(maps)
-    })
-    .context("Rendering modified after and added maps")?;
+    })?;
 
     //do modified maps
     let base_maps = with_checkout(&base_branch, repo, || Ok(load_maps(modified_files, &path)))

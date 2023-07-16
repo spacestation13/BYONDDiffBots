@@ -380,7 +380,7 @@ pub fn render_map_regions(
                 };
 
                 log::debug!(
-                    "maprender: {map_name} : {}, azure: {}, path: {}",
+                    "maprender: {map_name}, image: {}, azure: {}, path: {}",
                     image.is_some(),
                     blob_client.is_some(),
                     output_dir.display(),
@@ -391,6 +391,8 @@ pub fn render_map_regions(
                     ))
                     .join(Path::new(&format!("{z_level}-{filename}")));
 
+                log::debug!("file at: {directory:?}");
+
                 match (image, blob_client.as_ref()) {
                     (Some(image), Some(blob_client)) => {
                         write_to_azure(&directory, blob_client.clone(), &image)?;
@@ -398,7 +400,6 @@ pub fn render_map_regions(
                     }
                     (Some(image), None) => {
                         write_to_file(&directory, &image)?;
-
                         log::debug!("Wrote to file: {map_name} {directory:?}");
                     }
                     (_, _) => (),
@@ -502,7 +503,11 @@ fn compress_image(image: image::RgbaImage) -> Result<Vec<u8>> {
 }
 
 fn write_to_file<P: AsRef<Path>>(path: P, image: &image::RgbaImage) -> Result<()> {
-    std::fs::create_dir_all(&path)?;
+    std::fs::create_dir_all(
+        path.as_ref()
+            .parent()
+            .ok_or_else(|| eyre::eyre!("Path has no parent!"))?,
+    )?;
 
     let mut file = std::io::BufWriter::new(std::fs::File::create(path)?);
 
