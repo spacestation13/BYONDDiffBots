@@ -94,6 +94,7 @@ fn render(
             "removed.png",
             &removed_errors,
             crate::rendering::MapType::Base,
+            false,
         )
         .context("Rendering removed maps")?;
         Ok(maps)
@@ -119,6 +120,7 @@ fn render(
             "added.png",
             &added_errors,
             crate::rendering::MapType::Head,
+            false,
         )
         .context("Rendering added maps")?;
         Ok(maps)
@@ -176,6 +178,7 @@ fn render(
             "before.png",
             &modified_before_errors,
             crate::rendering::MapType::Base,
+            true,
         )
         .context("Rendering modified before maps")?;
         Ok(())
@@ -194,6 +197,7 @@ fn render(
             "after.png",
             &modified_after_errors,
             crate::rendering::MapType::Head,
+            true,
         )
         .context("Rendering modified after maps")?;
         Ok(())

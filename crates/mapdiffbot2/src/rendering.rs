@@ -1,13 +1,19 @@
-use std::{cmp::min, collections::HashSet, path::Path, sync::RwLock};
+use std::{
+    cmp::min,
+    collections::HashSet,
+    path::{Path, PathBuf},
+    sync::RwLock,
+};
 
 extern crate dreammaker;
 
 use diffbot_lib::log;
 
 use diffbot_lib::github::github_types::FileDiff;
-use dmm_tools::{dmi::Image, dmm, minimap, render_passes::RenderPass, IconCache};
+use dmm_tools::{dmm, minimap, render_passes::RenderPass, IconCache};
 use eyre::{Context, Result};
-use image::{io::Reader, ImageBuffer};
+use image::{io::Reader, EncodableLayout, ImageBuffer, ImageEncoder};
+use object_store::azure::MicrosoftAzure;
 use rayon::prelude::*;
 
 use ahash::RandomState;
@@ -299,7 +305,7 @@ pub fn render_map(
     bounds: &BoundingBox,
     errors: &RwLock<HashSet<String, RandomState>>,
     render_passes: &[Box<dyn RenderPass>],
-) -> Result<Image> {
+) -> Result<image::RgbaImage> {
     let arena = Default::default();
     let minimap_context = minimap::Context {
         objtree,
@@ -329,6 +335,7 @@ pub fn render_map_regions(
     filename: &str,
     errors: &RenderingErrors,
     map_type: MapType,
+    compress_and_return: bool,
 ) -> Result<()> {
     let objtree = &context.obj_tree;
     let icon_cache = &context.icon_cache;
@@ -378,51 +385,21 @@ pub fn render_map_regions(
                     blob_client.is_some(),
                     output_dir.display(),
                 );
+                let directory = output_dir
+                    .join(Path::new(
+                        &map_name.to_string().replace('/', "_").replace(".dmm", ""),
+                    ))
+                    .join(Path::new(&format!("{z_level}-{filename}")));
 
                 match (image, blob_client.as_ref()) {
                     (Some(image), Some(blob_client)) => {
-                        use object_store::ObjectStore;
-
-                        let directory = output_dir
-                            .join(Path::new(
-                                &map_name.to_string().replace('/', "_").replace(".dmm", ""),
-                            ))
-                            .join(Path::new(&format!("{z_level}-{filename}")));
-
-                        let bytes = image.to_bytes()?;
-
-                        let path = object_store::path::Path::from_iter(
-                            directory.iter().map(|ostr| ostr.to_str().unwrap()),
-                        );
-
-                        let handle = actix_web::rt::Runtime::new()?;
-
-                        let blob_client = blob_client.clone();
-
-                        handle.block_on(async move {
-                            use tokio::io::AsyncWriteExt;
-                            let (_, mut multipart) =
-                                blob_client.put_multipart(&path).await.unwrap();
-                            //for thing in bytes.chunks(1_000_000).map(|item| item.to_vec()) {
-                            //blob_client.put(&path, thing.into()).await.unwrap();
-                            //multipart.write(thing.as_slice()).await;
-                            multipart.write_all(bytes.as_slice()).await.unwrap();
-                            multipart.flush().await.unwrap();
-                            multipart.shutdown().await.unwrap();
-
-                            //}
-                        });
-                        log::debug!("Sent to azure: {map_name}");
+                        write_to_azure(&directory, blob_client.clone(), &image)?;
+                        log::debug!("Sent to azure: {map_name} {directory:?}");
                     }
                     (Some(image), None) => {
-                        let directory = output_dir.join(Path::new(
-                            &map_name.to_string().replace('/', "_").replace(".dmm", ""),
-                        ));
+                        write_to_file(&directory, &image)?;
 
-                        std::fs::create_dir_all(&directory).context("Creating directories")?;
-                        image.to_file(
-                            &directory.join(Path::new(&format!("{z_level}-{filename}"))),
-                        )?;
+                        log::debug!("Wrote to file: {map_name} {directory:?}");
                     }
                     (_, _) => (),
                 }
@@ -449,8 +426,14 @@ pub fn render_diffs_for_directory<P: AsRef<Path>>(directory: P) {
         .filter_map(|f| f.ok())
         .par_bridge()
         .map(|entry| {
-            let fuck = entry.to_string_lossy();
-            let replaced_entry = fuck.replace("-before.png", "-after.png");
+            let mut replaced_entry = entry.clone();
+            let filename = replaced_entry
+                .file_name()
+                .unwrap()
+                .to_string_lossy()
+                .replace("-before.png", "-after.png");
+            replaced_entry.set_file_name(filename);
+
             let before = Reader::open(&entry)?.decode()?;
             let before = before
                 .as_rgba8()
@@ -460,7 +443,7 @@ pub fn render_diffs_for_directory<P: AsRef<Path>>(directory: P) {
                 .as_rgba8()
                 .ok_or_else(|| eyre::eyre!("Image is not rgba8!"))?;
 
-            ImageBuffer::from_fn(after.width(), after.height(), |x, y| {
+            let image = ImageBuffer::from_fn(after.width(), after.height(), |x, y| {
                 use image::Pixel;
                 let before_pixel = before.get_pixel(x, y);
                 let after_pixel = after.get_pixel(x, y);
@@ -469,8 +452,18 @@ pub fn render_diffs_for_directory<P: AsRef<Path>>(directory: P) {
                 } else {
                     image::Rgba([255, 0, 0, 255])
                 }
-            })
-            .save(fuck.replace("-before.png", "-diff.png"))?;
+            });
+            let mut path = entry.clone();
+            let filename = path
+                .file_name()
+                .unwrap()
+                .to_string_lossy()
+                .replace("-before.png", "-diff.png");
+            path.set_file_name(filename);
+
+            log::debug!("diffrender: {entry:?}, path: {}", path.display());
+
+            write_to_file(path, &image)?;
 
             Ok(())
         })
@@ -478,4 +471,62 @@ pub fn render_diffs_for_directory<P: AsRef<Path>>(directory: P) {
         .for_each(|e| {
             log::error!("Diff rendering error: {}", e);
         });
+}
+
+fn write_to_azure<P: AsRef<Path>>(
+    path: P,
+    client: std::sync::Arc<MicrosoftAzure>,
+    image: &image::RgbaImage,
+) -> Result<()> {
+    let mut buffer = vec![];
+
+    encode_image(&mut buffer, image)?;
+
+    let path = object_store::path::Path::from_iter(
+        path.as_ref().iter().map(|ostr| ostr.to_str().unwrap()),
+    );
+
+    let handle = actix_web::rt::Runtime::new()?;
+
+    let blob_client = client.clone();
+
+    handle.block_on(async move {
+        use object_store::ObjectStore;
+        use tokio::io::AsyncWriteExt;
+        let (_, mut multipart) = blob_client.put_multipart(&path).await.unwrap();
+        multipart.write_all(buffer.as_slice()).await.unwrap();
+        multipart.flush().await.unwrap();
+        multipart.shutdown().await.unwrap();
+    });
+    Ok(())
+}
+
+fn compress_image(image: image::RgbaImage) -> Result<Vec<u8>> {
+    let mut vec = vec![];
+    encode_image(&mut vec, &image)?;
+    Ok(vec)
+}
+
+fn write_to_file<P: AsRef<Path>>(path: P, image: &image::RgbaImage) -> Result<()> {
+    std::fs::create_dir_all(&path)?;
+
+    let mut file = std::io::BufWriter::new(std::fs::File::create(path)?);
+
+    encode_image(&mut file, image)?;
+
+    Ok(())
+}
+fn encode_image<W: std::io::Write>(write_to: &mut W, image: &image::RgbaImage) -> Result<()> {
+    let encoder = image::codecs::png::PngEncoder::new_with_quality(
+        write_to,
+        image::codecs::png::CompressionType::Best,
+        image::codecs::png::FilterType::Adaptive,
+    );
+    encoder.write_image(
+        image.as_bytes(),
+        image.width(),
+        image.height(),
+        image::ColorType::Rgba8,
+    )?;
+    Ok(())
 }

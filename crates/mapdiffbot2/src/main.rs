@@ -162,7 +162,11 @@ async fn main() -> eyre::Result<()> {
                 .with_account(azure.storage_account.clone())
                 .with_access_key(azure.storage_access_key.clone())
                 .with_container_name(azure.storage_container.clone())
-                .with_client_options(object_store::ClientOptions::new().with_http1_only())
+                .with_client_options(
+                    object_store::ClientOptions::new()
+                        .with_http1_only()
+                        .with_content_type_for_suffix("png", "image/png"),
+                )
                 .build()
                 .expect("Trying to connect to azure"),
         )

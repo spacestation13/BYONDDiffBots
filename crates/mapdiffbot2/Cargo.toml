@@ -11,8 +11,8 @@ serde_json = { version = "1.0.100"}
 toml = "0.7.6"
 octocrab = "0.25.1"
 flume = "0.10.14"
-dmm-tools = { git = "https://github.com/jupyterkat/SpacemanDMM/", branch = "legacy", features = ["png", "gif"] }
-dreammaker = { git = "https://github.com/jupyterkat/SpacemanDMM/", branch = "legacy" }
+dmm-tools = { git = "https://github.com/jupyterkat/SpacemanDMM/" }
+dreammaker = { git = "https://github.com/jupyterkat/SpacemanDMM/" }
 ahash = "0.8.3"
 path-absolutize = "3.1.0"
 jsonwebtoken = "8.3.0"

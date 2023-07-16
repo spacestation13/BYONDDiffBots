@@ -691,6 +691,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "builtins-proc-macro"
+version = "0.0.0"
+source = "git+https://github.com/jupyterkat/SpacemanDMM/#2806afc8a3ec444dd78c1e42865361817562c529"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn 2.0.25",
+]
+
+[[package]]
 name = "bumpalo"
 version = "3.13.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1254,7 +1264,7 @@ source = "git+https://github.com/jupyterkat/SpacemanDMM/?branch=legacy#b6d531f14
 dependencies = [
  "ahash 0.8.3",
  "bytemuck",
- "dreammaker",
+ "dreammaker 0.1.0 (git+https://github.com/jupyterkat/SpacemanDMM/?branch=legacy)",
  "either",
  "gif",
  "indexmap 2.0.0",
@@ -1263,6 +1273,26 @@ dependencies = [
  "ndarray",
  "png",
  "rand",
+ "typed-arena",
+]
+
+[[package]]
+name = "dmm-tools"
+version = "0.1.0"
+source = "git+https://github.com/jupyterkat/SpacemanDMM/#2806afc8a3ec444dd78c1e42865361817562c529"
+dependencies = [
+ "ahash 0.8.3",
+ "bytemuck",
+ "dreammaker 0.1.0 (git+https://github.com/jupyterkat/SpacemanDMM/)",
+ "either",
+ "eyre",
+ "image",
+ "indexmap 2.0.0",
+ "inflate",
+ "ndarray",
+ "png",
+ "rand",
+ "tinydmi",
  "typed-arena",
 ]
 
@@ -1279,17 +1309,40 @@ source = "git+https://github.com/jupyterkat/SpacemanDMM/?branch=legacy#b6d531f14
 dependencies = [
  "ahash 0.8.3",
  "bitflags 2.3.3",
- "builtins-proc-macro",
+ "builtins-proc-macro 0.0.0 (git+https://github.com/jupyterkat/SpacemanDMM/?branch=legacy)",
  "color_space",
  "derivative",
  "indexmap 2.0.0",
- "interval-tree",
+ "interval-tree 0.8.0 (git+https://github.com/jupyterkat/SpacemanDMM/?branch=legacy)",
  "lodepng",
  "ordered-float",
  "phf",
  "serde",
  "serde_derive",
  "termcolor",
+ "toml 0.7.6",
+]
+
+[[package]]
+name = "dreammaker"
+version = "0.1.0"
+source = "git+https://github.com/jupyterkat/SpacemanDMM/#2806afc8a3ec444dd78c1e42865361817562c529"
+dependencies = [
+ "ahash 0.8.3",
+ "bitflags 2.3.3",
+ "builtins-proc-macro 0.0.0 (git+https://github.com/jupyterkat/SpacemanDMM/)",
+ "color_space",
+ "derivative",
+ "eyre",
+ "indexmap 2.0.0",
+ "interval-tree 0.8.0 (git+https://github.com/jupyterkat/SpacemanDMM/)",
+ "ordered-float",
+ "phf",
+ "png",
+ "serde",
+ "serde_derive",
+ "termcolor",
+ "tinydmi",
  "toml 0.7.6",
 ]
 
@@ -1926,8 +1979,8 @@ dependencies = [
  "actix-web",
  "ahash 0.8.3",
  "diffbot_lib",
- "dmm-tools",
- "dreammaker",
+ "dmm-tools 0.1.0 (git+https://github.com/jupyterkat/SpacemanDMM/?branch=legacy)",
+ "dreammaker 0.1.0 (git+https://github.com/jupyterkat/SpacemanDMM/?branch=legacy)",
  "eyre",
  "hashbrown 0.14.0",
  "hex",
@@ -2063,6 +2116,11 @@ dependencies = [
 name = "interval-tree"
 version = "0.8.0"
 source = "git+https://github.com/jupyterkat/SpacemanDMM/?branch=legacy#b6d531f148cad56ef02c175f08e12442d9040e07"
+
+[[package]]
+name = "interval-tree"
+version = "0.8.0"
+source = "git+https://github.com/jupyterkat/SpacemanDMM/#2806afc8a3ec444dd78c1e42865361817562c529"
 
 [[package]]
 name = "io-lifetimes"
@@ -2418,8 +2476,8 @@ dependencies = [
  "delay_timer",
  "derive_builder",
  "diffbot_lib",
- "dmm-tools",
- "dreammaker",
+ "dmm-tools 0.1.0 (git+https://github.com/jupyterkat/SpacemanDMM/)",
+ "dreammaker 0.1.0 (git+https://github.com/jupyterkat/SpacemanDMM/)",
  "eyre",
  "flume",
  "git2",
@@ -4073,6 +4131,17 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "96ba15a897f3c86766b757e5ac7221554c6750054d74d5b28844fce5fb36a6c4"
 dependencies = [
  "time-core",
+]
+
+[[package]]
+name = "tinydmi"
+version = "0.1.0"
+source = "git+https://github.com/jupyterkat/SpacemanDMM/#2806afc8a3ec444dd78c1e42865361817562c529"
+dependencies = [
+ "ahash 0.8.3",
+ "eyre",
+ "indexmap 2.0.0",
+ "nom",
 ]
 
 [[package]]
