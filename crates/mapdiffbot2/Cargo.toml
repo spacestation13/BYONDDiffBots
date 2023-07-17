@@ -7,24 +7,20 @@ license = "MIT"
 
 [dependencies]
 serde = { version = "1.0.171", features = ["derive"] }
-serde_json = { version = "1.0.100"}
+serde_json = { version = "1.0.103"}
 toml = "0.7.6"
-octocrab = "0.25.1"
-flume = "0.10.14"
+octocrab = "0.26.0"
 dmm-tools = { git = "https://github.com/jupyterkat/SpacemanDMM/" }
 dreammaker = { git = "https://github.com/jupyterkat/SpacemanDMM/" }
 ahash = "0.8.3"
 path-absolutize = "3.1.0"
 jsonwebtoken = "8.3.0"
-lazy_static = "1.4.0"
 eyre = "0.6.8"
 simple-eyre = "0.3.1"
 rayon = "1.7.0"
 derive_builder = "0.12.0"
 once_cell = "1.18.0"
 image = "0.24.6"
-bytemuck = "1.13.1"
-glob = "0.3.1"
 diffbot_lib = { path = "../diffbot_lib" }
 git2 = "0.17.2"
 yaque = { git = "https://github.com/jupyterkat/yaque" }
@@ -33,12 +29,10 @@ delay_timer = "0.11.4"
 hex = { version = "0.4.3", features = ["serde"] }
 itertools = "0.11.0"
 indexmap = { version = "2.0.0", features = ["rayon"] }
-hashbrown = "0.14.0"
 
 actix-web = "4.3.1"
 actix-files = "0.6.2"
 
-tempfile = "3.6.0"
 object_store = { version = "0.6.1", features = ["azure"] }
 tokio = { version = "1.29.1", features = ["io-util"]}
 
