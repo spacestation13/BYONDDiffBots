@@ -1,7 +1,6 @@
 use diffbot_lib::log;
 use eyre::{Context, Result};
 use path_absolutize::Absolutize;
-use rayon::prelude::*;
 use std::path::Path;
 use std::path::PathBuf;
 
@@ -10,9 +9,8 @@ use super::git_operations::{
 };
 
 use crate::rendering::{
-    get_map_diff_bounding_boxes, load_maps, load_maps_with_whole_map_regions,
-    render_diffs_for_directory, render_map_regions, MapWithRegions, MapsWithRegions,
-    RenderingContext,
+    get_map_diff_bounding_boxes, load_maps, load_maps_with_whole_map_regions, render_diffs,
+    render_map_regions, MapWithRegions, MapsWithRegions, RenderingContext,
 };
 
 use crate::CONFIG;
@@ -94,7 +92,6 @@ fn render(
             "removed.png",
             &removed_errors,
             crate::rendering::MapType::Base,
-            false,
         )
         .context("Rendering removed maps")?;
         Ok(maps)
@@ -120,7 +117,6 @@ fn render(
             "added.png",
             &added_errors,
             crate::rendering::MapType::Head,
-            false,
         )
         .context("Rendering added maps")?;
         Ok(maps)
@@ -162,7 +158,7 @@ fn render(
     let modified_before_errors = Default::default();
     let modified_after_errors = Default::default();
 
-    with_checkout(&base_branch, repo, || {
+    let before = with_checkout(&base_branch, repo, || {
         render_map_regions(
             &base_context,
             modified_maps
@@ -177,13 +173,11 @@ fn render(
             "before.png",
             &modified_before_errors,
             crate::rendering::MapType::Base,
-            true,
         )
-        .context("Rendering modified before maps")?;
-        Ok(())
+        .context("Rendering modified before maps")
     })?;
 
-    with_checkout(&head_branch, repo, || {
+    let after = with_checkout(&head_branch, repo, || {
         render_map_regions(
             &head_context,
             modified_maps
@@ -196,15 +190,11 @@ fn render(
             "after.png",
             &modified_after_errors,
             crate::rendering::MapType::Head,
-            true,
         )
-        .context("Rendering modified after maps")?;
-        Ok(())
+        .context("Rendering modified after maps")
     })?;
 
-    (0..modified_files.len()).into_par_iter().for_each(|i| {
-        render_diffs_for_directory(modified_directory.join(i.to_string()));
-    });
+    render_diffs(before, after, blob_client.clone());
 
     Ok(RenderedMaps {
         added_maps,

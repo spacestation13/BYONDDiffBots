@@ -14,7 +14,7 @@ use diffbot_lib::github::github_types::FileDiff;
 use dmm_tools::{dmm, minimap, render_passes::RenderPass, IconCache};
 use dreammaker::objtree::ObjectTree;
 use eyre::{Context, Result};
-use image::{io::Reader, EncodableLayout, ImageBuffer, ImageEncoder};
+use image::{EncodableLayout, ImageBuffer, ImageEncoder};
 use object_store::azure::MicrosoftAzure;
 use rayon::prelude::*;
 
@@ -329,6 +329,8 @@ pub enum MapType {
     Base,
 }
 
+pub type RenderedMaps = IndexMap<PathBuf, Vec<u8>, ahash::RandomState>;
+
 pub fn render_map_regions(
     context: &RenderingContext,
     maps: &[(&str, &MapWithRegions)],
@@ -337,13 +339,12 @@ pub fn render_map_regions(
     filename: &str,
     errors: &RenderingErrors,
     map_type: MapType,
-    compress_and_return: bool,
-) -> Result<Vec<(PathBuf, Vec<u8>)>> {
+) -> Result<RenderedMaps> {
     let objtree = &context.obj_tree;
     let icon_cache = &context.icon_cache;
     let results = maps
         .par_iter()
-        .map(|(map_name, map)| -> Result<Vec<(PathBuf, Vec<u8>)>> {
+        .map(|(map_name, map)| -> Result<RenderedMaps> {
             render_map_region(
                 map_name,
                 map,
@@ -353,17 +354,18 @@ pub fn render_map_regions(
             )
         })
         .collect::<Vec<_>>();
+
     results.iter().for_each(|res| {
         if let Err(e) = res {
-            log::error!("{:?}", e) //errors please
+            log::error!("{e:?}") //errors please
         }
     });
 
     Ok(results
         .into_iter()
-        .map(|thing| thing.unwrap())
+        .filter_map(|thing| thing.ok())
         .flatten()
-        .collect::<Vec<_>>())
+        .collect::<RenderedMaps>())
 }
 
 fn render_map_region(
@@ -377,8 +379,8 @@ fn render_map_region(
         &[Box<dyn RenderPass>],
     ),
     (output_dir, blob_client, filename): (&Path, Azure, &str),
-) -> Result<Vec<(PathBuf, Vec<u8>)>> {
-    let mut return_vec = vec![];
+) -> Result<RenderedMaps> {
+    let mut return_map: RenderedMaps = Default::default();
     for z_level in 0..map.map.dim_z() {
         let image = match (
             map_type,
@@ -434,74 +436,68 @@ fn render_map_region(
             (Some(image), Some(blob_client)) => {
                 let compressed_image = compress_image(image)?;
                 write_to_azure(&directory, blob_client.clone(), compressed_image.as_slice())?;
-                return_vec.push((directory.to_path_buf(), compressed_image));
+                return_map.insert(directory.to_path_buf(), compressed_image);
                 log::debug!("Sent to azure: {map_name} {directory:?}");
             }
             (Some(image), None) => {
                 let compressed_image = compress_image(image)?;
                 write_to_file(&directory, compressed_image.as_slice())?;
-                return_vec.push((directory.to_path_buf(), compressed_image));
+                return_map.insert(directory.to_path_buf(), compressed_image);
                 log::debug!("Wrote to file: {map_name} {directory:?}");
             }
             (_, _) => (),
         }
     }
-    Ok(return_vec)
+    Ok(return_map)
 }
 
-pub fn render_diffs_for_directory<P: AsRef<Path>>(directory: P) {
-    let directory = directory.as_ref();
-
-    glob::glob(directory.join("*-before.png").to_str().unwrap())
-        .expect("Failed to read glob pattern")
-        .filter_map(|f| f.ok())
-        .par_bridge()
-        .map(|entry| {
-            let mut replaced_entry = entry.clone();
-            let filename = replaced_entry
-                .file_name()
-                .unwrap()
-                .to_string_lossy()
-                .replace("-before.png", "-after.png");
-            replaced_entry.set_file_name(filename);
-
-            let before = Reader::open(&entry)?.decode()?;
-            let before = before
-                .as_rgba8()
-                .ok_or_else(|| eyre::eyre!("Image is not rgba8!"))?;
-            let after = Reader::open(replaced_entry)?.decode()?;
-            let after = after
-                .as_rgba8()
-                .ok_or_else(|| eyre::eyre!("Image is not rgba8!"))?;
-
-            let image = ImageBuffer::from_fn(after.width(), after.height(), |x, y| {
-                use image::Pixel;
-                let before_pixel = before.get_pixel(x, y);
-                let after_pixel = after.get_pixel(x, y);
-                if before_pixel == after_pixel {
-                    after_pixel.map_without_alpha(|c| c.saturating_add((255 - c) / 3))
-                } else {
-                    image::Rgba([255, 0, 0, 255])
-                }
-            });
-            let mut path = entry.clone();
-            let filename = path
-                .file_name()
-                .unwrap()
-                .to_string_lossy()
-                .replace("-before.png", "-diff.png");
-            path.set_file_name(filename);
-
-            log::debug!("diffrender: {entry:?}, path: {}", path.display());
-
-            write_to_file(path, &image)?;
-
-            Ok(())
+pub fn render_diffs(before: RenderedMaps, after: RenderedMaps, blob_client: Azure) {
+    let res = before
+        .par_iter()
+        .filter_map(|before| {
+            let after_path = replace_name_pathbuf(before.0, "-before.png", "-after.png");
+            let after = after.get_key_value(&after_path)?;
+            Some((before, after))
         })
-        .filter_map(|r: Result<()>| r.err())
-        .for_each(|e| {
-            log::error!("Diff rendering error: {}", e);
-        });
+        .map(
+            |((before_path, before_image), (_, after_image))| -> Result<()> {
+                let (before_image, after_image) =
+                    (decode_image(before_image)?, decode_image(after_image)?);
+
+                let image =
+                    ImageBuffer::from_fn(after_image.width(), after_image.height(), |x, y| {
+                        use image::Pixel;
+                        let before_pixel = before_image.get_pixel(x, y);
+                        let after_pixel = after_image.get_pixel(x, y);
+                        if before_pixel == after_pixel {
+                            after_pixel.map_without_alpha(|c| c.saturating_add((255 - c) / 3))
+                        } else {
+                            image::Rgba([255, 0, 0, 255])
+                        }
+                    });
+
+                let final_path = replace_name_pathbuf(before_path, "-before.png", "-diff.png");
+
+                let image = compress_image(image)?;
+
+                if let Some(client) = blob_client.clone() {
+                    write_to_azure(&final_path, client, image.as_slice())?;
+                    log::debug!("Sent to azure: {final_path:?}");
+                } else {
+                    write_to_file(&final_path, image.as_slice())?;
+                    log::debug!("Sent to azure: {final_path:?}");
+                }
+
+                Ok(())
+            },
+        )
+        .collect::<Vec<_>>();
+
+    res.into_iter().for_each(|res| {
+        if let Err(e) = res {
+            log::error!("{e:?}");
+        }
+    });
 }
 
 fn write_to_azure<P: AsRef<Path>>(
@@ -555,4 +551,26 @@ fn encode_image<W: std::io::Write>(write_to: &mut W, image: &image::RgbaImage) -
         image::ColorType::Rgba8,
     )?;
     Ok(())
+}
+
+fn decode_image(bytes: &[u8]) -> Result<image::RgbaImage> {
+    let image = image::io::Reader::new(std::io::Cursor::new(bytes))
+        .with_guessed_format()?
+        .decode()?;
+    let image = match image {
+        image::DynamicImage::ImageRgba8(image) => image,
+        _ => return Err(eyre::eyre!("Image is not rgba8 smh smh smh")),
+    };
+    Ok(image)
+}
+
+fn replace_name_pathbuf<P: AsRef<Path>>(buf: P, from: &str, to: &str) -> PathBuf {
+    let mut return_path = buf.as_ref().to_path_buf();
+    let filename = return_path
+        .file_name()
+        .unwrap()
+        .to_string_lossy()
+        .replace(from, to);
+    return_path.set_file_name(filename);
+    return_path
 }

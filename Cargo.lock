@@ -2482,6 +2482,7 @@ dependencies = [
  "flume",
  "git2",
  "glob",
+ "hashbrown 0.14.0",
  "hex",
  "image",
  "indexmap 2.0.0",
