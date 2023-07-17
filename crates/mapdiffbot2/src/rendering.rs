@@ -1,6 +1,7 @@
 use std::{
     cmp::min,
     collections::HashSet,
+    io::Write,
     path::{Path, PathBuf},
     sync::RwLock,
 };
@@ -11,6 +12,7 @@ use diffbot_lib::log;
 
 use diffbot_lib::github::github_types::FileDiff;
 use dmm_tools::{dmm, minimap, render_passes::RenderPass, IconCache};
+use dreammaker::objtree::ObjectTree;
 use eyre::{Context, Result};
 use image::{io::Reader, EncodableLayout, ImageBuffer, ImageEncoder};
 use object_store::azure::MicrosoftAzure;
@@ -336,76 +338,19 @@ pub fn render_map_regions(
     errors: &RenderingErrors,
     map_type: MapType,
     compress_and_return: bool,
-) -> Result<()> {
+) -> Result<Vec<(PathBuf, Vec<u8>)>> {
     let objtree = &context.obj_tree;
     let icon_cache = &context.icon_cache;
     let results = maps
         .par_iter()
-        .map(|(map_name, map)| -> Result<()> {
-            for z_level in 0..map.map.dim_z() {
-                let image = match (
-                    map_type,
-                    map.bounding_boxes
-                        .get(z_level)
-                        .expect("No bounding box generated for z-level"),
-                ) {
-                    (_, BoundType::Both(bounds)) => Some(
-                        render_map(
-                            objtree,
-                            icon_cache,
-                            &map.map,
-                            z_level,
-                            bounds,
-                            errors,
-                            render_passes,
-                        )
-                        .with_context(|| format!("Rendering map {map_name}"))?,
-                    ),
-                    (MapType::Head, BoundType::OnlyHead) => {
-                        let bounds = BoundingBox::for_full_map(&map.map);
-                        Some(
-                            render_map(
-                                objtree,
-                                icon_cache,
-                                &map.map,
-                                z_level,
-                                &bounds,
-                                errors,
-                                render_passes,
-                            )
-                            .with_context(|| format!("Rendering map {map_name}"))?,
-                        )
-                    }
-                    (_, _) => None,
-                };
-
-                log::debug!(
-                    "maprender: {map_name}, image: {}, azure: {}, path: {}",
-                    image.is_some(),
-                    blob_client.is_some(),
-                    output_dir.display(),
-                );
-                let directory = output_dir
-                    .join(Path::new(
-                        &map_name.to_string().replace('/', "_").replace(".dmm", ""),
-                    ))
-                    .join(Path::new(&format!("{z_level}-{filename}")));
-
-                log::debug!("file at: {directory:?}");
-
-                match (image, blob_client.as_ref()) {
-                    (Some(image), Some(blob_client)) => {
-                        write_to_azure(&directory, blob_client.clone(), &image)?;
-                        log::debug!("Sent to azure: {map_name} {directory:?}");
-                    }
-                    (Some(image), None) => {
-                        write_to_file(&directory, &image)?;
-                        log::debug!("Wrote to file: {map_name} {directory:?}");
-                    }
-                    (_, _) => (),
-                }
-            }
-            Ok(())
+        .map(|(map_name, map)| -> Result<Vec<(PathBuf, Vec<u8>)>> {
+            render_map_region(
+                map_name,
+                map,
+                map_type,
+                (objtree, icon_cache, errors, render_passes),
+                (output_dir, blob_client.clone(), filename),
+            )
         })
         .collect::<Vec<_>>();
     results.iter().for_each(|res| {
@@ -413,10 +358,95 @@ pub fn render_map_regions(
             log::error!("{:?}", e) //errors please
         }
     });
-    for thing in results {
-        thing?; //henlo?????
+
+    Ok(results
+        .into_iter()
+        .map(|thing| thing.unwrap())
+        .flatten()
+        .collect::<Vec<_>>())
+}
+
+fn render_map_region(
+    map_name: &str,
+    map: &MapWithRegions,
+    map_type: MapType,
+    (objtree, icon_cache, errors, render_passes): (
+        &ObjectTree,
+        &IconCache,
+        &RenderingErrors,
+        &[Box<dyn RenderPass>],
+    ),
+    (output_dir, blob_client, filename): (&Path, Azure, &str),
+) -> Result<Vec<(PathBuf, Vec<u8>)>> {
+    let mut return_vec = vec![];
+    for z_level in 0..map.map.dim_z() {
+        let image = match (
+            map_type,
+            map.bounding_boxes
+                .get(z_level)
+                .expect("No bounding box generated for z-level"),
+        ) {
+            (_, BoundType::Both(bounds)) => Some(
+                render_map(
+                    objtree,
+                    icon_cache,
+                    &map.map,
+                    z_level,
+                    bounds,
+                    errors,
+                    render_passes,
+                )
+                .with_context(|| format!("Rendering map {map_name}"))?,
+            ),
+            (MapType::Head, BoundType::OnlyHead) => {
+                let bounds = BoundingBox::for_full_map(&map.map);
+                Some(
+                    render_map(
+                        objtree,
+                        icon_cache,
+                        &map.map,
+                        z_level,
+                        &bounds,
+                        errors,
+                        render_passes,
+                    )
+                    .with_context(|| format!("Rendering map {map_name}"))?,
+                )
+            }
+            (_, _) => None,
+        };
+
+        log::debug!(
+            "maprender: {map_name}, image: {}, azure: {}, path: {}",
+            image.is_some(),
+            blob_client.is_some(),
+            output_dir.display(),
+        );
+        let directory = output_dir
+            .join(Path::new(
+                &map_name.to_string().replace('/', "_").replace(".dmm", ""),
+            ))
+            .join(Path::new(&format!("{z_level}-{filename}")));
+
+        log::debug!("file at: {directory:?}");
+
+        match (image, blob_client.as_ref()) {
+            (Some(image), Some(blob_client)) => {
+                let compressed_image = compress_image(image)?;
+                write_to_azure(&directory, blob_client.clone(), compressed_image.as_slice())?;
+                return_vec.push((directory.to_path_buf(), compressed_image));
+                log::debug!("Sent to azure: {map_name} {directory:?}");
+            }
+            (Some(image), None) => {
+                let compressed_image = compress_image(image)?;
+                write_to_file(&directory, compressed_image.as_slice())?;
+                return_vec.push((directory.to_path_buf(), compressed_image));
+                log::debug!("Wrote to file: {map_name} {directory:?}");
+            }
+            (_, _) => (),
+        }
     }
-    Ok(())
+    Ok(return_vec)
 }
 
 pub fn render_diffs_for_directory<P: AsRef<Path>>(directory: P) {
@@ -477,12 +507,9 @@ pub fn render_diffs_for_directory<P: AsRef<Path>>(directory: P) {
 fn write_to_azure<P: AsRef<Path>>(
     path: P,
     client: std::sync::Arc<MicrosoftAzure>,
-    image: &image::RgbaImage,
+    compressed_image: &[u8],
 ) -> Result<()> {
     use object_store::ObjectStore;
-    let mut buffer = vec![];
-
-    encode_image(&mut buffer, image)?;
 
     let path = object_store::path::Path::from_iter(
         path.as_ref().iter().map(|ostr| ostr.to_str().unwrap()),
@@ -492,7 +519,7 @@ fn write_to_azure<P: AsRef<Path>>(
 
     let blob_client = client.clone();
 
-    handle.block_on(blob_client.put(&path, buffer.into()))?;
+    handle.block_on(blob_client.put(&path, compressed_image.to_owned().into()))?;
     Ok(())
 }
 
@@ -502,7 +529,7 @@ fn compress_image(image: image::RgbaImage) -> Result<Vec<u8>> {
     Ok(vec)
 }
 
-fn write_to_file<P: AsRef<Path>>(path: P, image: &image::RgbaImage) -> Result<()> {
+fn write_to_file<P: AsRef<Path>>(path: P, compressed_image: &[u8]) -> Result<()> {
     std::fs::create_dir_all(
         path.as_ref()
             .parent()
@@ -511,7 +538,7 @@ fn write_to_file<P: AsRef<Path>>(path: P, image: &image::RgbaImage) -> Result<()
 
     let mut file = std::io::BufWriter::new(std::fs::File::create(path)?);
 
-    encode_image(&mut file, image)?;
+    file.write_all(compressed_image)?;
 
     Ok(())
 }
