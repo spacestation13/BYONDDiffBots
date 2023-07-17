@@ -485,7 +485,7 @@ pub fn render_diffs(before: RenderedMaps, after: RenderedMaps, blob_client: Azur
                     log::debug!("Sent to azure: {final_path:?}");
                 } else {
                     write_to_file(&final_path, image.as_slice())?;
-                    log::debug!("Sent to azure: {final_path:?}");
+                    log::debug!("Written to file: {final_path:?}");
                 }
 
                 Ok(())
