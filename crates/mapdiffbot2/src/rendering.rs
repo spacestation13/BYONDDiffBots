@@ -331,19 +331,21 @@ pub enum MapType {
 
 pub type RenderedMaps = IndexMap<PathBuf, Vec<u8>, ahash::RandomState>;
 
-pub fn render_map_regions(
+pub fn render_map_regions<'a, 'b, M>(
     context: &RenderingContext,
-    maps: &[(&str, &MapWithRegions)],
+    maps: M, //&[(&str, &MapWithRegions)],
     render_passes: &[Box<dyn RenderPass>],
     (output_dir, blob_client): (&Path, Azure),
     filename: &str,
     errors: &RenderingErrors,
     map_type: MapType,
-) -> Result<RenderedMaps> {
+) -> Result<RenderedMaps>
+where
+    M: ParallelIterator<Item = (&'a str, &'b MapWithRegions)>,
+{
     let objtree = &context.obj_tree;
     let icon_cache = &context.icon_cache;
     let results = maps
-        .par_iter()
         .map(|(map_name, map)| -> Result<RenderedMaps> {
             render_map_region(
                 map_name,

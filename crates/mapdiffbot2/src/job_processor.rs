@@ -24,6 +24,8 @@ use diffbot_lib::{
 
 use super::Azure;
 
+use rayon::prelude::*;
+
 struct RenderedMaps {
     added_maps: Vec<(String, MapWithRegions)>,
     removed_maps: Vec<(String, MapWithRegions)>,
@@ -83,10 +85,7 @@ fn render(
             .context("Loading removed maps")?;
         render_map_regions(
             &base_context,
-            maps.iter()
-                .map(|(k, v)| (k.as_str(), v))
-                .collect::<Vec<_>>()
-                .as_slice(),
+            maps.par_iter().map(|(k, v)| (k.as_str(), v)),
             &base_render_passes,
             (removed_directory, blob_client.clone()),
             "removed.png",
@@ -108,10 +107,7 @@ fn render(
             load_maps_with_whole_map_regions(added_files, &path).context("Loading added maps")?;
         render_map_regions(
             &head_context,
-            maps.iter()
-                .map(|(k, v)| (k.as_str(), v))
-                .collect::<Vec<_>>()
-                .as_slice(),
+            maps.par_iter().map(|(k, v)| (k.as_str(), v)),
             &head_render_passes,
             (added_directory, blob_client.clone()),
             "added.png",
@@ -162,12 +158,10 @@ fn render(
         render_map_regions(
             &base_context,
             modified_maps
-                .iter()
+                .par_iter()
                 .filter_map(|(map_name, (before, _))| {
                     Some((map_name.as_str(), before.as_ref().ok()?))
-                })
-                .collect::<Vec<_>>()
-                .as_slice(),
+                }),
             &head_render_passes,
             (modified_directory, blob_client.clone()),
             "before.png",
@@ -181,10 +175,8 @@ fn render(
         render_map_regions(
             &head_context,
             modified_maps
-                .iter()
-                .filter_map(|(map_name, (_, after))| Some((map_name.as_str(), after.as_ref()?)))
-                .collect::<Vec<_>>()
-                .as_slice(),
+                .par_iter()
+                .filter_map(|(map_name, (_, after))| Some((map_name.as_str(), after.as_ref()?))),
             &head_render_passes,
             (modified_directory, blob_client.clone()),
             "after.png",
