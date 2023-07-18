@@ -126,7 +126,7 @@ async fn handle_pull_request(
     let pool = pool.get_ref();
 
     match payload.action.as_str() {
-        "opened" | "synchronize" | "reopened" => {
+        "opened" | "synchronize" => {
             log::debug!("Creating checkrun");
 
             let check_run = CheckRun::create(

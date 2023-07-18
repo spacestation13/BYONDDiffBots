@@ -24,7 +24,7 @@ async fn handle_pull_request(
     let pool = pool.get_ref();
 
     match payload.action.as_str() {
-        "opened" | "synchronize" | "reopened" => {
+        "opened" | "synchronize" => {
             let check_run = CheckRun::create(
                 &payload.repository.full_name(),
                 &payload.pull_request.head.sha,
