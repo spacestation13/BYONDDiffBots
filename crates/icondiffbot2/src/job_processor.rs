@@ -7,7 +7,6 @@ use diffbot_lib::log::error;
 use diffbot_lib::{github::github_types::CheckOutputs, job::types::Job};
 use dmm_tools::dmi::render::{IconRenderer, RenderType};
 use dmm_tools::dmi::State;
-use dreammaker::dmi::StateIndex;
 use eyre::{Context, Result};
 use hashbrown::HashSet;
 use rayon::prelude::*;
@@ -70,7 +69,7 @@ fn render(
                                 env!("CARGO_MANIFEST_DIR"),
                                 "/templates/diff_line.txt"
                             )),
-                            state_name = state_name,
+                            state_name = format!("{}:{}", state_name.0, state_name.1),
                             old = "",
                             new = url,
                             change_text = "Created",
@@ -91,7 +90,7 @@ fn render(
                                 env!("CARGO_MANIFEST_DIR"),
                                 "/templates/diff_line.txt"
                             )),
-                            state_name = state_name,
+                            state_name = format!("{}:{}", state_name.0, state_name.1),
                             old = url,
                             new = "",
                             change_text = "Deleted",
@@ -101,10 +100,22 @@ fn render(
             ))
         }
         (Some(before), Some(after)) => {
-            let before_states: HashSet<&StateIndex, ahash::RandomState> =
-                before.icon.metadata.state_names.keys().collect();
-            let after_states: HashSet<&StateIndex, ahash::RandomState> =
-                after.icon.metadata.state_names.keys().collect();
+            let before_states: HashSet<(usize, &str), ahash::RandomState> = before
+                .icon
+                .metadata
+                .states
+                .values()
+                .flatten()
+                .map(|(idx, item)| (*idx, item.name.as_str()))
+                .collect();
+            let after_states: HashSet<(usize, &str), ahash::RandomState> = after
+                .icon
+                .metadata
+                .states
+                .values()
+                .flatten()
+                .map(|(idx, item)| (*idx, item.name.as_str()))
+                .collect();
 
             let prefix = format!("{}/{}", job.installation, job.pull_request);
 
@@ -118,16 +129,16 @@ fn render(
                         let (name, url) = render_state(
                             &prefix,
                             &before,
-                            before.icon.metadata.get_icon_state(state).unwrap(),
+                            before.icon.metadata.get_icon_state(state.1).unwrap(),
                             &before_renderer,
                         )
-                        .with_context(|| format!("Failed to render before-state {state}"))?;
+                        .with_context(|| format!("Failed to render before-state {state:?}"))?;
                         Ok(format!(
                             include_str!(concat!(
                                 env!("CARGO_MANIFEST_DIR"),
                                 "/templates/diff_line.txt"
                             )),
-                            state_name = name,
+                            state_name = format!("{}:{}", name.0, name.1),
                             old = url,
                             new = "",
                             change_text = "Deleted",
@@ -136,16 +147,16 @@ fn render(
                         let (name, url) = render_state(
                             &prefix,
                             &after,
-                            after.icon.metadata.get_icon_state(state).unwrap(),
+                            after.icon.metadata.get_icon_state(state.1).unwrap(),
                             &after_renderer,
                         )
-                        .with_context(|| format!("Failed to render after-state {state}"))?;
+                        .with_context(|| format!("Failed to render after-state {state:?}"))?;
                         Ok(format!(
                             include_str!(concat!(
                                 env!("CARGO_MANIFEST_DIR"),
                                 "/templates/diff_line.txt"
                             )),
-                            state_name = name,
+                            state_name = format!("{}:{}", name.0, name.1),
                             old = "",
                             new = url,
                             change_text = "Created",
@@ -163,7 +174,7 @@ fn render(
             table.par_extend(
                 before_states
                     .par_intersection(&after_states)
-                    .map(|state| {
+                    .map(|(_, state)| {
                         let before_state = before.icon.metadata.get_icon_state(state).unwrap();
                         let after_state = after.icon.metadata.get_icon_state(state).unwrap();
 
@@ -227,9 +238,9 @@ fn render(
 fn render_state<'a, S: AsRef<str> + std::fmt::Debug>(
     prefix: S,
     target: &IconFileWithName,
-    state: &State,
+    (index, state): (usize, &State),
     renderer: &IconRenderer<'a>,
-) -> Result<(StateIndex, String)> {
+) -> Result<((usize, String), String)> {
     let directory = Path::new(".").join("images").join(prefix.as_ref());
     // Always remember to mkdir -p your paths
     std::fs::create_dir_all(&directory)
@@ -239,7 +250,7 @@ fn render_state<'a, S: AsRef<str> + std::fmt::Debug>(
     target.sha.hash(&mut hasher);
     target.full_name.hash(&mut hasher);
     target.hash.hash(&mut hasher);
-    state.duplicate_index.hash(&mut hasher);
+    index.hash(&mut hasher);
     state.name.hash(&mut hasher);
     let filename = hasher.finish().to_string();
 
@@ -274,26 +285,27 @@ fn render_state<'a, S: AsRef<str> + std::fmt::Debug>(
         format!("Failed to flush BufWriter to disk for state {state:?} at {path:?}")
     })?;
 
-    Ok((state.get_state_name_index(), url))
+    Ok(((index, state.name.clone()), url))
 }
 
 #[tracing::instrument]
-fn full_render(job: &Job, target: &IconFileWithName) -> Result<Vec<(StateIndex, String)>> {
+fn full_render(job: &Job, target: &IconFileWithName) -> Result<Vec<((usize, String), String)>> {
     let icon = &target.icon;
 
     let renderer = IconRenderer::new(icon);
 
     let prefix = format!("{}/{}", job.installation, job.pull_request);
 
-    let vec: Vec<(StateIndex, String)> = icon
+    let vec: Vec<((usize, String), String)> = icon
         .metadata
         .states
-        .par_iter()
-        .map(|state| {
-            render_state(&prefix, target, state, &renderer)
+        .par_values()
+        .flatten()
+        .map(|(idx, state)| {
+            render_state(&prefix, target, (*idx, state), &renderer)
                 .with_context(|| format!("Failed to render state {}", state.name))
         })
-        .filter_map(|r: Result<(StateIndex, String), eyre::Error>| {
+        .filter_map(|r: Result<((usize, String), String), eyre::Error>| {
             r.map_err(|e| {
                 error!("Error encountered during parse: {}", e);
             })
