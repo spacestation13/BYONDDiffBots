@@ -43,7 +43,7 @@ async fn garbage_collect_all_repos() {
     log::info!("Garbage collection starting!");
 
     let output = actix_web::rt::time::timeout(
-        Duration::from_secs(3600),
+        Duration::from_secs(10800),
         //tfw no try blocks
         actix_web::rt::task::spawn_blocking(move || -> Result<()> {
             let path = PathBuf::from("./repos");
@@ -128,7 +128,7 @@ async fn job_handler(name: &str, job: Job, blob_client: Azure) {
     let _ = check_run.mark_started().await;
 
     let output = actix_web::rt::time::timeout(
-        Duration::from_secs(3600),
+        Duration::from_secs(7200),
         actix_web::rt::task::spawn_blocking(move || do_job(job, blob_client)),
     )
     .await;

@@ -37,7 +37,7 @@ async fn job_handler(name: &str, job: Job) {
     let _ = check_run.mark_started().await;
 
     let output = actix_web::rt::time::timeout(
-        Duration::from_secs(3600),
+        Duration::from_secs(7200),
         actix_web::rt::task::spawn_blocking(move || do_job(job)),
     )
     .await;
