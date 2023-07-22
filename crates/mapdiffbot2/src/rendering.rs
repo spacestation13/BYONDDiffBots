@@ -434,22 +434,27 @@ fn render_map_region(
 
         log::debug!("file at: {directory:?}");
 
-        match (image, blob_client.as_ref()) {
-            (Some(image), Some(blob_client)) => {
-                let compressed_image = compress_image(image)?;
-                write_to_azure(&directory, blob_client.clone(), compressed_image.as_slice())?;
-                return_map.insert(directory.to_path_buf(), compressed_image);
-                log::debug!("Sent to azure: {map_name} {directory:?}");
-            }
-            (Some(image), None) => {
-                let compressed_image = compress_image(image)?;
-                write_to_file(&directory, compressed_image.as_slice())?;
-                return_map.insert(directory.to_path_buf(), compressed_image);
-                log::debug!("Wrote to file: {map_name} {directory:?}");
-            }
-            (_, _) => (),
+        if let Some(image) = image {
+            let compressed_image = compress_image(image)?;
+            return_map.insert(directory.to_path_buf(), compressed_image);
         }
     }
+    return_map.iter().for_each(|(directory, compressed_image)| {
+        if let Some(ref blob_client) = blob_client {
+            if let Err(e) =
+                write_to_azure(&directory, blob_client.clone(), compressed_image.as_slice())
+            {
+                log::error!("{e:?}")
+            };
+            log::debug!("Sent to azure: {map_name} {directory:?}");
+        } else {
+            if let Err(e) = write_to_file(&directory, compressed_image.as_slice()) {
+                log::error!("{e:?}")
+            };
+            log::debug!("Wrote to file: {map_name} {directory:?}");
+        }
+    });
+
     Ok(return_map)
 }
 
