@@ -58,7 +58,7 @@ fn render(
             )],
         )),
         (None, Some(after)) => {
-            let urls = full_render(job, &after).context("Failed to render new icon file")?;
+            let urls = full_render(job, &after).wrap_err("Failed to render new icon file")?;
 
             Ok((
                 "ADDED",
@@ -69,7 +69,7 @@ fn render(
                                 env!("CARGO_MANIFEST_DIR"),
                                 "/templates/diff_line.txt"
                             )),
-                            state_name = format!("{}:{}", state_name.0, state_name.1),
+                            state_name = format_args!("{}:{}", state_name.0, state_name.1),
                             old = "",
                             new = url,
                             change_text = "Created",
@@ -79,7 +79,7 @@ fn render(
             ))
         }
         (Some(before), None) => {
-            let urls = full_render(job, &before).context("Failed to render deleted icon file")?;
+            let urls = full_render(job, &before).wrap_err("Failed to render deleted icon file")?;
 
             Ok((
                 "DELETED",
@@ -90,7 +90,7 @@ fn render(
                                 env!("CARGO_MANIFEST_DIR"),
                                 "/templates/diff_line.txt"
                             )),
-                            state_name = format!("{}:{}", state_name.0, state_name.1),
+                            state_name = format_args!("{}:{}", state_name.0, state_name.1),
                             old = url,
                             new = "",
                             change_text = "Deleted",
@@ -133,6 +133,7 @@ fn render(
                             &before_renderer,
                         )
                         .with_context(|| format!("Failed to render before-state {state:?}"))?;
+                        #[allow(clippy::format_in_format_args)]
                         Ok(format!(
                             include_str!(concat!(
                                 env!("CARGO_MANIFEST_DIR"),
@@ -151,6 +152,7 @@ fn render(
                             &after_renderer,
                         )
                         .with_context(|| format!("Failed to render after-state {state:?}"))?;
+                        #[allow(clippy::format_in_format_args)]
                         Ok(format!(
                             include_str!(concat!(
                                 env!("CARGO_MANIFEST_DIR"),

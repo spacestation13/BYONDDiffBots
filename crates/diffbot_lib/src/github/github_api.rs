@@ -91,7 +91,7 @@ impl CheckRun {
                 }),
             )
             .await
-            .context("Submitting check")?;
+            .wrap_err("Submitting check")?;
 
         Ok(Self {
             id: result.id,
@@ -109,7 +109,7 @@ impl CheckRun {
     pub async fn rename(&self, name: &str) -> Result<()> {
         self.update(UpdateCheckRunBuilder::default().name(name.to_owned()))
             .await
-            .context("Renaming check run")
+            .wrap_err("Renaming check run")
     }
 
     pub async fn mark_queued(&self) -> Result<()> {
@@ -119,7 +119,7 @@ impl CheckRun {
                 .started_at(chrono::Utc::now().to_rfc3339()),
         )
         .await
-        .context("Marking check run as queued")
+        .wrap_err("Marking check run as queued")
     }
 
     pub async fn mark_started(&self) -> Result<()> {
@@ -129,7 +129,7 @@ impl CheckRun {
                 .started_at(chrono::Utc::now().to_rfc3339()),
         )
         .await
-        .context("Marking check run as in progress")
+        .wrap_err("Marking check run as in progress")
     }
 
     pub async fn mark_failed(&self, stack_trace: &str) -> Result<()> {
@@ -150,7 +150,7 @@ impl CheckRun {
                 }),
         )
         .await
-        .context("Marking check as failure")
+        .wrap_err("Marking check as failure")
     }
 
     pub async fn mark_succeeded(&self, output: Output) -> Result<()> {
@@ -161,7 +161,7 @@ impl CheckRun {
                 .output(output),
         )
         .await
-        .context("Marking check as success")
+        .wrap_err("Marking check as success")
     }
 
     pub async fn mark_skipped(&self, output: Output) -> Result<()> {
@@ -172,17 +172,17 @@ impl CheckRun {
                 .output(output),
         )
         .await
-        .context("Marking check as skipped")
+        .wrap_err("Marking check as skipped")
     }
 
     pub async fn set_output(&self, output: Output) -> Result<()> {
         self.update(UpdateCheckRunBuilder::default().output(output))
             .await
-            .context("Setting check run output")
+            .wrap_err("Setting check run output")
     }
 
     async fn update(&self, builder: UpdateCheckRunBuilder) -> Result<()> {
-        let update = builder.build().context("Building UpdateCheckRun")?;
+        let update = builder.build().wrap_err("Building UpdateCheckRun")?;
 
         #[derive(Deserialize)]
         struct Empty {}
@@ -197,7 +197,7 @@ impl CheckRun {
                 Some(&update),
             )
             .await
-            .context("Updating check run")?;
+            .wrap_err("Updating check run")?;
 
         Ok(())
     }

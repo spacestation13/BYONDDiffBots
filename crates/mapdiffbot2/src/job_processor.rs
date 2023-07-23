@@ -52,15 +52,17 @@ fn render(
 
     let (base_branch, head_branch) =
         fetch_and_get_branches(&base.sha, &head.sha, repo, &head_branch, base_branch_name)
-            .context("Fetching and constructing diffs")?;
+            .wrap_err("Fetching and constructing diffs")?;
 
-    let path = repo_dir.absolutize().context("Making repo path absolute")?;
+    let path = repo_dir
+        .absolutize()
+        .wrap_err("Making repo path absolute")?;
 
     let base_context = with_checkout(&base_branch, repo, || RenderingContext::new(&path))
-        .context("Parsing base")?;
+        .wrap_err("Parsing base")?;
 
     let head_context = with_checkout(&head_branch, repo, || RenderingContext::new(&path))
-        .context("Parsing head")?;
+        .wrap_err("Parsing head")?;
 
     let base_render_passes = dmm_tools::render_passes::configure(
         base_context.map_config(),
@@ -82,7 +84,7 @@ fn render(
 
     let removed_maps = with_checkout(&base_branch, repo, || {
         let maps = load_maps_with_whole_map_regions(removed_files, &path)
-            .context("Loading removed maps")?;
+            .wrap_err("Loading removed maps")?;
         render_map_regions(
             &base_context,
             maps.par_iter().map(|(k, v)| (k.as_str(), v)),
@@ -92,7 +94,7 @@ fn render(
             &removed_errors,
             crate::rendering::MapType::Base,
         )
-        .context("Rendering removed maps")?;
+        .wrap_err("Rendering removed maps")?;
         Ok(maps)
     })?;
 
@@ -104,7 +106,7 @@ fn render(
 
     let added_maps = with_checkout(&head_branch, repo, || {
         let maps =
-            load_maps_with_whole_map_regions(added_files, &path).context("Loading added maps")?;
+            load_maps_with_whole_map_regions(added_files, &path).wrap_err("Loading added maps")?;
         render_map_regions(
             &head_context,
             maps.par_iter().map(|(k, v)| (k.as_str(), v)),
@@ -114,15 +116,15 @@ fn render(
             &added_errors,
             crate::rendering::MapType::Head,
         )
-        .context("Rendering added maps")?;
+        .wrap_err("Rendering added maps")?;
         Ok(maps)
     })?;
 
     //do modified maps
     let base_maps = with_checkout(&base_branch, repo, || Ok(load_maps(modified_files, &path)))
-        .context("Loading base maps")?;
+        .wrap_err("Loading base maps")?;
     let mut head_maps = with_checkout(&head_branch, repo, || Ok(load_maps(modified_files, &path)))
-        .context("Loading head maps")?;
+        .wrap_err("Loading head maps")?;
 
     let modified_maps = base_maps
         .into_iter()
@@ -168,7 +170,7 @@ fn render(
             &modified_before_errors,
             crate::rendering::MapType::Base,
         )
-        .context("Rendering modified before maps")
+        .wrap_err("Rendering modified before maps")
     })?;
 
     let after = with_checkout(&head_branch, repo, || {
@@ -183,7 +185,7 @@ fn render(
             &modified_after_errors,
             crate::rendering::MapType::Head,
         )
-        .context("Rendering modified after maps")
+        .wrap_err("Rendering modified after maps")
     })?;
 
     render_diffs(before, after, blob_client.clone());
@@ -275,21 +277,19 @@ fn generate_finished_output<P: AsRef<Path>>(
                     match region {
                         crate::rendering::BoundType::None => (),
                         crate::rendering::BoundType::OnlyHead => {
-                            #[allow(clippy::format_in_format_args)]
                             builder.add_text(&format!(
                                 include_str!("../templates/diff_template_mod.txt"),
                                 bounds = fmt_dim,
                                 filename = name,
                                 image_before_link = "Unavailable",
-                                image_after_link = format!("[New]({link_after})"),
+                                image_after_link = format_args!("[New]({link_after})"),
                                 image_diff_link = "Unavailable",
                                 old_row = Z_ADDED_TEXT,
-                                new_row = format!("![{ROW_DESC}]({link_after})"),
+                                new_row = format_args!("![{ROW_DESC}]({link_after})"),
                                 diff_row = Z_ADDED_TEXT
                             ));
                         }
                         crate::rendering::BoundType::OnlyBase => {
-                            #[allow(clippy::format_in_format_args)]
                             builder.add_text(&format!(
                                 include_str!("../templates/diff_template_mod.txt"),
                                 bounds = fmt_dim,
@@ -303,17 +303,16 @@ fn generate_finished_output<P: AsRef<Path>>(
                             ));
                         }
                         crate::rendering::BoundType::Both(bounds) => {
-                            #[allow(clippy::format_in_format_args)]
                             builder.add_text(&format!(
                                 include_str!("../templates/diff_template_mod.txt"),
                                 bounds = bounds.to_string(),
                                 filename = name,
-                                image_before_link = format!("[Old]({link_before})"),
-                                image_after_link = format!("[New]({link_after})"),
-                                image_diff_link = format!("[Diff]({link_diff})"),
-                                old_row = format!("![{ROW_DESC}]({link_before})"),
-                                new_row = format!("![{ROW_DESC}]({link_after})"),
-                                diff_row = format!("![{ROW_DESC}]({link_diff})")
+                                image_before_link = format_args!("[Old]({link_before})"),
+                                image_after_link = format_args!("[New]({link_after})"),
+                                image_diff_link = format_args!("[Diff]({link_diff})"),
+                                old_row = format_args!("![{ROW_DESC}]({link_before})"),
+                                new_row = format_args!("![{ROW_DESC}]({link_after})"),
+                                diff_row = format_args!("![{ROW_DESC}]({link_diff})")
                             ));
                         }
                     }
@@ -359,7 +358,7 @@ pub fn do_job(job: Job, blob_client: Azure) -> Result<CheckOutputs> {
                 };
                 let _ = job.check_run.set_output(output).await; // we don't really care if updating the job fails, just continue
             });
-        clone_repo(&repo, &repo_dir).context("Cloning repo")?;
+        clone_repo(&repo, &repo_dir).wrap_err("Cloning repo")?;
     }
 
     let non_abs_directory: PathBuf = [
@@ -372,7 +371,7 @@ pub fn do_job(job: Job, blob_client: Azure) -> Result<CheckOutputs> {
     let output_directory = non_abs_directory
         .as_path()
         .absolutize()
-        .context("Absolutizing images path")?;
+        .wrap_err("Absolutizing images path")?;
 
     log::debug!(
         "Dirs absolutized from {:?} to {:?}",
@@ -391,15 +390,15 @@ pub fn do_job(job: Job, blob_client: Azure) -> Result<CheckOutputs> {
     let modified_files = filter_on_status(ChangeType::Modified);
     let removed_files = filter_on_status(ChangeType::Deleted);
 
-    let repository = git2::Repository::open(&repo_dir).context("Opening repository")?;
+    let repository = git2::Repository::open(&repo_dir).wrap_err("Opening repository")?;
 
     let mut remote = repository.find_remote("origin")?;
 
     remote
         .connect(git2::Direction::Fetch)
-        .context("Connecting to remote")?;
+        .wrap_err("Connecting to remote")?;
 
-    remote.disconnect().context("Disconnecting from remote")?;
+    remote.disconnect().wrap_err("Disconnecting from remote")?;
 
     let output_directory = if blob_client.is_some() {
         Path::new(&non_abs_directory)
@@ -414,12 +413,14 @@ pub fn do_job(job: Job, blob_client: Azure) -> Result<CheckOutputs> {
         (&repository, &job.base.r#ref),
         (&repo_dir, output_directory, blob_client),
         job.pull_request,
-    ) {
+    )
+    .wrap_err("")
+    {
         Ok(maps) => generate_finished_output(&non_abs_directory, maps),
         Err(err) => Err(err),
     };
 
-    clean_up_references(&repository, &job.base.r#ref).context("Cleaning up references")?;
+    clean_up_references(&repository, &job.base.r#ref).wrap_err("Cleaning up references")?;
 
     res
 }

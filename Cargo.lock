@@ -1931,7 +1931,6 @@ dependencies = [
  "eyre",
  "hashbrown 0.14.0",
  "hex",
- "itertools 0.11.0",
  "jsonwebtoken",
  "mysql_async",
  "ndarray",

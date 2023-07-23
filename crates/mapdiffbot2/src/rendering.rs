@@ -153,7 +153,7 @@ pub fn load_maps(
                 file.filename.clone(),
                 dmm::Map::from_file(&actual_path)
                     .map_err(|e| eyre::anyhow!(e))
-                    .context(format!("Map name: {}", &file.filename)),
+                    .wrap_err_with(|| format!("Map name: {}", &file.filename)),
             )
         })
         .collect()
@@ -280,7 +280,7 @@ impl RenderingContext {
 
         dm_context.autodetect_config(&environment);
         let pp = dreammaker::preprocessor::Preprocessor::new(&dm_context, environment)
-            .context("Creating preprocessor")?;
+            .wrap_err("Creating preprocessor")?;
         let indents = dreammaker::indents::IndentProcessor::new(&dm_context, pp);
         let parser = dreammaker::parser::Parser::new(&dm_context, indents);
 
@@ -320,7 +320,7 @@ pub fn render_map(
         arena: &arena,
     };
     minimap::generate(minimap_context, icon_cache)
-        .map_err(|_| eyre::anyhow!("An error occured during map rendering"))
+        .map_err(|_| eyre::eyre!("An error occured during map rendering"))
 }
 
 #[derive(Clone, Copy)]
@@ -400,7 +400,7 @@ fn render_map_region(
                     errors,
                     render_passes,
                 )
-                .with_context(|| format!("Rendering map {map_name}"))?,
+                .wrap_err_with(|| format!("Rendering map {map_name}"))?,
             ),
             (MapType::Head, BoundType::OnlyHead) => {
                 let bounds = BoundingBox::for_full_map(&map.map);
@@ -414,7 +414,7 @@ fn render_map_region(
                         errors,
                         render_passes,
                     )
-                    .with_context(|| format!("Rendering map {map_name}"))?,
+                    .wrap_err_with(|| format!("Rendering map {map_name}"))?,
                 )
             }
             (_, _) => None,
@@ -435,20 +435,23 @@ fn render_map_region(
         log::debug!("file at: {directory:?}");
 
         if let Some(image) = image {
-            let compressed_image = compress_image(image)?;
+            let compressed_image = compress_image(image).wrap_err("Failed to compress image")?;
             return_map.insert(directory.to_path_buf(), compressed_image);
         }
     }
     return_map.iter().for_each(|(directory, compressed_image)| {
         if let Some(ref blob_client) = blob_client {
             if let Err(e) =
-                write_to_azure(&directory, blob_client.clone(), compressed_image.as_slice())
+                write_to_azure(directory, blob_client.clone(), compressed_image.as_slice())
+                    .wrap_err("Sending image to azure")
             {
                 log::error!("{e:?}")
             };
             log::debug!("Sent to azure: {map_name} {directory:?}");
         } else {
-            if let Err(e) = write_to_file(&directory, compressed_image.as_slice()) {
+            if let Err(e) = write_to_file(directory, compressed_image.as_slice())
+                .wrap_err("Writing image to file")
+            {
                 log::error!("{e:?}")
             };
             log::debug!("Wrote to file: {map_name} {directory:?}");
@@ -467,9 +470,11 @@ pub fn render_diffs(before: RenderedMaps, after: RenderedMaps, blob_client: Azur
             Some((before, after))
         })
         .map(
-            |((before_path, before_image), (_, after_image))| -> Result<()> {
-                let (before_image, after_image) =
-                    (decode_image(before_image)?, decode_image(after_image)?);
+            |((before_path, before_image), (_, after_image))| -> Result<(PathBuf, Vec<u8>)> {
+                let (before_image, after_image) = (
+                    decode_image(before_image).wrap_err("Failed to decode before image")?,
+                    decode_image(after_image).wrap_err("Failed to decode after image")?,
+                );
 
                 let image =
                     ImageBuffer::from_fn(after_image.width(), after_image.height(), |x, y| {
@@ -485,20 +490,32 @@ pub fn render_diffs(before: RenderedMaps, after: RenderedMaps, blob_client: Azur
 
                 let final_path = replace_name_pathbuf(before_path, "-before.png", "-diff.png");
 
-                let image = compress_image(image)?;
+                let image = compress_image(image).wrap_err("Failed to compress image")?;
 
-                if let Some(client) = blob_client.clone() {
-                    write_to_azure(&final_path, client, image.as_slice())?;
-                    log::debug!("Sent to azure: {final_path:?}");
-                } else {
-                    write_to_file(&final_path, image.as_slice())?;
-                    log::debug!("Written to file: {final_path:?}");
-                }
-
-                Ok(())
+                Ok((final_path, image))
             },
         )
         .collect::<Vec<_>>();
+
+    res.iter()
+        .filter_map(|item| item.as_ref().ok())
+        .for_each(|(final_path, image)| {
+            if let Some(client) = blob_client.clone() {
+                if let Err(e) = write_to_azure(final_path, client, image.as_slice())
+                    .wrap_err("Sending image to azure")
+                {
+                    log::error!("{e:?}")
+                };
+                log::debug!("Sent to azure: {final_path:?}");
+            } else {
+                if let Err(e) =
+                    write_to_file(final_path, image.as_slice()).wrap_err("Writing image to file")
+                {
+                    log::error!("{e:?}")
+                };
+                log::debug!("Written to file: {final_path:?}");
+            }
+        });
 
     res.into_iter().for_each(|res| {
         if let Err(e) = res {
@@ -518,17 +535,19 @@ fn write_to_azure<P: AsRef<Path>>(
         path.as_ref().iter().map(|ostr| ostr.to_str().unwrap()),
     );
 
-    let handle = actix_web::rt::Runtime::new()?;
+    let handle = actix_web::rt::Runtime::new().wrap_err("Failed to get an actixweb runtime")?;
 
     let blob_client = client.clone();
 
-    handle.block_on(blob_client.put(&path, compressed_image.to_owned().into()))?;
+    handle
+        .block_on(blob_client.put(&path, compressed_image.to_owned().into()))
+        .wrap_err("Failed to put a block blob into azure")?;
     Ok(())
 }
 
 fn compress_image(image: image::RgbaImage) -> Result<Vec<u8>> {
     let mut vec = vec![];
-    encode_image(&mut vec, &image)?;
+    encode_image(&mut vec, &image).wrap_err("Failed to encode image")?;
     Ok(vec)
 }
 
@@ -537,11 +556,15 @@ fn write_to_file<P: AsRef<Path>>(path: P, compressed_image: &[u8]) -> Result<()>
         path.as_ref()
             .parent()
             .ok_or_else(|| eyre::eyre!("Path has no parent!"))?,
-    )?;
+    )
+    .wrap_err("Failed to create dir")?;
 
-    let mut file = std::io::BufWriter::new(std::fs::File::create(path)?);
+    let mut file = std::io::BufWriter::new(
+        std::fs::File::create(path).wrap_err("Failed to create image file")?,
+    );
 
-    file.write_all(compressed_image)?;
+    file.write_all(compressed_image)
+        .wrap_err("Failed to write image to file")?;
 
     Ok(())
 }
@@ -551,23 +574,24 @@ fn encode_image<W: std::io::Write>(write_to: &mut W, image: &image::RgbaImage) -
         image::codecs::png::CompressionType::Best,
         image::codecs::png::FilterType::Adaptive,
     );
-    encoder.write_image(
-        image.as_bytes(),
-        image.width(),
-        image.height(),
-        image::ColorType::Rgba8,
-    )?;
+    encoder
+        .write_image(
+            image.as_bytes(),
+            image.width(),
+            image.height(),
+            image::ColorType::Rgba8,
+        )
+        .wrap_err("Failed to encode image")?;
     Ok(())
 }
 
 fn decode_image(bytes: &[u8]) -> Result<image::RgbaImage> {
     let image = image::io::Reader::new(std::io::Cursor::new(bytes))
-        .with_guessed_format()?
-        .decode()?;
-    let image = match image {
-        image::DynamicImage::ImageRgba8(image) => image,
-        _ => return Err(eyre::eyre!("Image is not rgba8 smh smh smh")),
-    };
+        .with_guessed_format()
+        .wrap_err("Failed to guess image format")?
+        .decode()
+        .wrap_err("Failed to decode image")?;
+    let image = image.to_rgba8();
     Ok(image)
 }
 
