@@ -1,7 +1,5 @@
 # Blacklisted repos, and message to show on blacklisted repo's jobs (Optional)
-blacklist = [
-    1337,
-]
+blacklist = [1337]
 blacklist_contact = "Good luck!"
 
 # Cron schedule for git gc operations (Optional, defaults to below value)
@@ -27,7 +25,7 @@ private_key_path = "diffbot.pem"
 address = "0.0.0.0"
 port = 1234
 # Server host for images (Required)
-file_hosting_url = "http://example.com:1234/images"
+file_hosting_url = "http://example.com:1234"
 
 # Actixweb forms and string limits (Optional)
 [web.limits]
