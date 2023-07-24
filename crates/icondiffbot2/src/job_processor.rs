@@ -69,7 +69,7 @@ fn render(
                                 env!("CARGO_MANIFEST_DIR"),
                                 "/templates/diff_line.txt"
                             )),
-                            state_name = format_args!("{}:{}", state_name.0, state_name.1),
+                            state_name = format_args!("{} ({})", state_name.1, state_name.0),
                             old = "",
                             new = url,
                             change_text = "Created",
@@ -90,7 +90,7 @@ fn render(
                                 env!("CARGO_MANIFEST_DIR"),
                                 "/templates/diff_line.txt"
                             )),
-                            state_name = format_args!("{}:{}", state_name.0, state_name.1),
+                            state_name = format_args!("{} ({})", state_name.1, state_name.0),
                             old = url,
                             new = "",
                             change_text = "Deleted",
@@ -105,16 +105,30 @@ fn render(
                 .metadata
                 .states
                 .values()
+                .map(|vec| {
+                    vec.iter()
+                        .enumerate()
+                        .map(|(duplication_index, (_, state))| {
+                            (duplication_index, state.name.as_str())
+                        })
+                        .collect::<Vec<_>>()
+                })
                 .flatten()
-                .map(|(idx, item)| (*idx, item.name.as_str()))
                 .collect();
             let after_states: HashSet<(usize, &str), ahash::RandomState> = after
                 .icon
                 .metadata
                 .states
                 .values()
+                .map(|vec| {
+                    vec.iter()
+                        .enumerate()
+                        .map(|(duplication_index, (_, state))| {
+                            (duplication_index, state.name.as_str())
+                        })
+                        .collect::<Vec<_>>()
+                })
                 .flatten()
-                .map(|(idx, item)| (*idx, item.name.as_str()))
                 .collect();
 
             let prefix = format!("{}/{}", job.installation, job.pull_request);
@@ -129,17 +143,21 @@ fn render(
                         let (name, url) = render_state(
                             &prefix,
                             &before,
-                            before.icon.metadata.get_icon_state(state.1).unwrap(),
+                            before
+                                .icon
+                                .metadata
+                                .get_icon_state((state.0, state.1).into())
+                                .map(|(_, state_item)| (state.0, state_item))
+                                .unwrap(),
                             &before_renderer,
                         )
                         .with_context(|| format!("Failed to render before-state {state:?}"))?;
-                        #[allow(clippy::format_in_format_args)]
                         Ok(format!(
                             include_str!(concat!(
                                 env!("CARGO_MANIFEST_DIR"),
                                 "/templates/diff_line.txt"
                             )),
-                            state_name = format!("{}:{}", name.0, name.1),
+                            state_name = format_args!("{} ({})", name.1, name.0),
                             old = url,
                             new = "",
                             change_text = "Deleted",
@@ -148,17 +166,21 @@ fn render(
                         let (name, url) = render_state(
                             &prefix,
                             &after,
-                            after.icon.metadata.get_icon_state(state.1).unwrap(),
+                            after
+                                .icon
+                                .metadata
+                                .get_icon_state((state.0, state.1).into())
+                                .map(|(_, state_item)| (state.0, state_item))
+                                .unwrap(),
                             &after_renderer,
                         )
                         .with_context(|| format!("Failed to render after-state {state:?}"))?;
-                        #[allow(clippy::format_in_format_args)]
                         Ok(format!(
                             include_str!(concat!(
                                 env!("CARGO_MANIFEST_DIR"),
                                 "/templates/diff_line.txt"
                             )),
-                            state_name = format!("{}:{}", name.0, name.1),
+                            state_name = format_args!("{} ({})", name.1, name.0),
                             old = "",
                             new = url,
                             change_text = "Created",
@@ -176,37 +198,45 @@ fn render(
             table.par_extend(
                 before_states
                     .par_intersection(&after_states)
-                    .map(|(_, state)| {
-                        let before_state = before.icon.metadata.get_icon_state(state).unwrap();
-                        let after_state = after.icon.metadata.get_icon_state(state).unwrap();
+                    .map(|&(duplication_index, state)| {
+                        let state_index = (duplication_index, state).into();
+                        let before_state =
+                            before.icon.metadata.get_icon_state(state_index).unwrap();
+                        let after_state = after.icon.metadata.get_icon_state(state_index).unwrap();
 
                         let difference = {
                             // #[cfg(debug_assertions)]
                             // dbg!(before_state, after_state);
-                            if before_state != after_state {
+                            if before_state.1 != after_state.1 {
                                 true
                             } else {
                                 let before_state_render =
-                                    before_renderer.render_to_images(state)?;
-                                let after_state_render = after_renderer.render_to_images(state)?;
+                                    before_renderer.render_to_images(state_index)?;
+                                let after_state_render =
+                                    after_renderer.render_to_images(state_index)?;
                                 before_state_render != after_state_render
                             }
                         };
 
                         if difference {
-                            let before_state = before.icon.metadata.get_icon_state(state).unwrap();
-                            let after_state = after.icon.metadata.get_icon_state(state).unwrap();
-
-                            let (_, before_url) =
-                                render_state(&prefix, &before, before_state, &before_renderer)
-                                    .with_context(|| {
-                                        format!("Failed to render modified before-state {state}")
-                                    })?;
-                            let (_, after_url) =
-                                render_state(&prefix, &after, after_state, &after_renderer)
-                                    .with_context(|| {
-                                        format!("Failed to render modified before-state {state}")
-                                    })?;
+                            let (_, before_url) = render_state(
+                                &prefix,
+                                &before,
+                                (duplication_index, before_state.1),
+                                &before_renderer,
+                            )
+                            .with_context(|| {
+                                format!("Failed to render modified before-state {state}")
+                            })?;
+                            let (_, after_url) = render_state(
+                                &prefix,
+                                &after,
+                                (duplication_index, before_state.1),
+                                &after_renderer,
+                            )
+                            .with_context(|| {
+                                format!("Failed to render modified before-state {state}")
+                            })?;
 
                             Ok(format!(
                                 include_str!(concat!(
@@ -260,7 +290,7 @@ fn render_state<'a, S: AsRef<str> + std::fmt::Debug>(
     let mut path = directory.join(&filename);
 
     let render_guard = renderer
-        .prepare_render_state(state)
+        .prepare_render_state(state, index)
         .with_context(|| format!("Failed to create render guard for state {}", state.name))?;
 
     let extension = match render_guard.render_type {
@@ -276,7 +306,7 @@ fn render_state<'a, S: AsRef<str> + std::fmt::Debug>(
         .with_context(|| format!("Failed to render state {} to file {:?}", state.name, &path))?;
 
     let url = format!(
-        "{}/{}/{}.{}",
+        "{}/images/{}/{}.{}",
         CONFIG.get().unwrap().web.file_hosting_url,
         prefix.as_ref(),
         filename,
@@ -302,9 +332,15 @@ fn full_render(job: &Job, target: &IconFileWithName) -> Result<Vec<((usize, Stri
         .metadata
         .states
         .par_values()
+        .map(|vec| {
+            vec.iter()
+                .enumerate()
+                .map(|(duplication_index, (_, state))| (duplication_index, state))
+                .collect::<Vec<_>>()
+        })
         .flatten()
         .map(|(idx, state)| {
-            render_state(&prefix, target, (*idx, state), &renderer)
+            render_state(&prefix, target, (idx, state), &renderer)
                 .with_context(|| format!("Failed to render state {}", state.name))
         })
         .filter_map(|r: Result<((usize, String), String), eyre::Error>| {
