@@ -39,12 +39,12 @@ pub fn do_job(job: Job) -> Result<CheckOutputs> {
 #[tracing::instrument]
 fn render(
     job: &Job,
-    diff: (Option<IconFileWithName>, Option<IconFileWithName>),
+    diff: (Result<Option<IconFileWithName>>, Option<IconFileWithName>),
 ) -> Result<(&'static str, Vec<String>)> {
     // TODO: Alphabetize
     // TODO: Test more edge cases
     match diff {
-        (None, None) => Ok((
+        (Ok(None), None) => Ok((
             "UNCHANGED",
             vec![format!(
                 include_str!(concat!(
@@ -57,7 +57,18 @@ fn render(
                 change_text = "UNCHANGED",
             )],
         )),
-        (None, Some(after)) => {
+        (Err(e), _) => Ok((
+            "ERROR",
+            vec![format!(
+                include_str!(concat!(
+                    env!("CARGO_MANIFEST_DIR"),
+                    "/templates/diff_line_error.txt"
+                )),
+                error = format_args!("Before icon render failed:\n```{e:?}```"),
+            )],
+        )),
+
+        (Ok(None), Some(after)) => {
             let urls = full_render(job, &after).wrap_err("Failed to render new icon file")?;
 
             Ok((
@@ -78,7 +89,7 @@ fn render(
                     .collect(),
             ))
         }
-        (Some(before), None) => {
+        (Ok(Some(before)), None) => {
             let urls = full_render(job, &before).wrap_err("Failed to render deleted icon file")?;
 
             Ok((
@@ -99,7 +110,7 @@ fn render(
                     .collect(),
             ))
         }
-        (Some(before), Some(after)) => {
+        (Ok(Some(before)), Some(after)) => {
             let before_states: HashSet<(usize, &str), ahash::RandomState> = before
                 .icon
                 .metadata

@@ -31,19 +31,15 @@ pub fn sha_to_iconfile(
     job: &Job,
     filename: &str,
     sha: (Option<&str>, Option<&str>),
-) -> Result<(Option<IconFileWithName>, Option<IconFileWithName>)> {
+) -> Result<(Result<Option<IconFileWithName>>, Option<IconFileWithName>)> {
     Ok((
-        get_if_exists(job, filename, sha.0)?,
+        get_if_exists(job, filename, sha.0),
         get_if_exists(job, filename, sha.1)?,
     ))
 }
 
 #[tracing::instrument]
-pub fn get_if_exists(
-    job: &Job,
-    filename: &str,
-    sha: Option<&str>,
-) -> Result<Option<IconFileWithName>> {
+fn get_if_exists(job: &Job, filename: &str, sha: Option<&str>) -> Result<Option<IconFileWithName>> {
     if let Some(sha) = sha {
         let rt = Runtime::new()?;
         let raw = rt.block_on(async {
