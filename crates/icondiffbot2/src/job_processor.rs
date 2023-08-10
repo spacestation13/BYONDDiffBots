@@ -115,13 +115,11 @@ fn render(
                 .icon
                 .metadata
                 .states
-                .values()
-                .map(|vec| {
+                .iter()
+                .map(|(name, vec)| {
                     vec.iter()
                         .enumerate()
-                        .map(|(duplication_index, (_, state))| {
-                            (duplication_index, state.name.as_str())
-                        })
+                        .map(|(duplication_index, _)| (duplication_index, name.as_str()))
                         .collect::<Vec<_>>()
                 })
                 .flatten()
@@ -130,13 +128,11 @@ fn render(
                 .icon
                 .metadata
                 .states
-                .values()
-                .map(|vec| {
+                .iter()
+                .map(|(name, vec)| {
                     vec.iter()
                         .enumerate()
-                        .map(|(duplication_index, (_, state))| {
-                            (duplication_index, state.name.as_str())
-                        })
+                        .map(|(duplication_index, _)| (duplication_index, name.as_str()))
                         .collect::<Vec<_>>()
                 })
                 .flatten()

@@ -6,10 +6,10 @@ license = "MIT"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-serde = { version = "1.0.174", features = ["derive"] }
-serde_json = { version = "1.0.103"}
+serde = { version = "1.0.183", features = ["derive"] }
+serde_json = { version = "1.0.104"}
 toml = "0.7.6"
-octocrab = "0.28.0"
+octocrab = "0.29.1"
 dmm-tools = { git = "https://github.com/jupyterkat/SpacemanDMM/" }
 dreammaker = { git = "https://github.com/jupyterkat/SpacemanDMM/" }
 ahash = "0.8.3"
@@ -37,8 +37,8 @@ object_store = { version = "0.6.1", features = ["azure"] }
 tokio = { version = "1.29.1", features = ["io-util"]}
 
 mysql_async = "0.32.2"
-time = "0.3.23"
+time = "0.3.25"
 
 [target.'cfg(not(target_env = "msvc"))'.dependencies]
-tikv-jemallocator = "0.5.0"
+tikv-jemallocator = "0.5.4"
 
