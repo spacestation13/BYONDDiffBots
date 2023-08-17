@@ -1,4 +1,4 @@
-use diffbot_lib::log;
+use diffbot_lib::tracing;
 use eyre::{Context, Result};
 use path_absolutize::Absolutize;
 use std::path::Path;
@@ -41,7 +41,7 @@ fn render(
     pull_request_number: u64,
     // feel like this is a bit of a hack but it works for now
 ) -> Result<RenderedMaps> {
-    log::debug!(
+    tracing::debug!(
         "Fetching and getting branches, base: {:?}, head: {:?}",
         base,
         head
@@ -332,7 +332,7 @@ fn generate_finished_output<P: AsRef<Path>>(
 }
 
 pub fn do_job(job: Job, blob_client: Azure) -> Result<CheckOutputs> {
-    log::debug!(
+    tracing::debug!(
         "Starting Job on repo: {}, pr number: {}, base commit: {}, head commit: {}",
         job.repo.full_name(),
         job.pull_request,
@@ -348,7 +348,7 @@ pub fn do_job(job: Job, blob_client: Azure) -> Result<CheckOutputs> {
     let handle = actix_web::rt::Runtime::new()?;
 
     if !repo_dir.exists() {
-        log::debug!("Directory {:?} doesn't exist, creating dir", repo_dir);
+        tracing::debug!("Directory {:?} doesn't exist, creating dir", repo_dir);
         std::fs::create_dir_all(&repo_dir)?;
         handle.block_on(async {
                 let output = Output {
@@ -373,7 +373,7 @@ pub fn do_job(job: Job, blob_client: Azure) -> Result<CheckOutputs> {
         .absolutize()
         .wrap_err("Absolutizing images path")?;
 
-    log::debug!(
+    tracing::debug!(
         "Dirs absolutized from {:?} to {:?}",
         non_abs_directory,
         output_directory

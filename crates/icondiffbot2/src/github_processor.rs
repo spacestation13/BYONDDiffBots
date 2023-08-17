@@ -5,7 +5,7 @@ use diffbot_lib::{
         graphql::get_pull_files,
     },
     job::types::Job,
-    log,
+    tracing,
 };
 use eyre::Result;
 use octocrab::models::InstallationId;
@@ -45,7 +45,7 @@ async fn handle_pull_request(
                 let mut conn = match pool.get_conn().await {
                     Ok(conn) => conn,
                     Err(e) => {
-                        log::error!("{:?}", e);
+                        tracing::error!("{:?}", e);
                         return Ok(());
                     }
                 };
@@ -74,7 +74,7 @@ async fn handle_pull_request(
                     )
                     .await
                 {
-                    log::error!("{:?}", e);
+                    tracing::error!("{:?}", e);
                 };
             }
             Ok(())
@@ -84,7 +84,7 @@ async fn handle_pull_request(
                 let mut conn = match pool.get_conn().await {
                     Ok(conn) => conn,
                     Err(e) => {
-                        log::error!("{:?}", e);
+                        tracing::error!("{:?}", e);
                         return Ok(());
                     }
                 };
@@ -104,7 +104,7 @@ async fn handle_pull_request(
                     )
                     .await
                 {
-                    log::error!("{:?}", e);
+                    tracing::error!("{:?}", e);
                 };
             };
             Ok(())

@@ -3,7 +3,7 @@ use crate::{
     table_builder::OutputTableBuilder,
     CONFIG,
 };
-use diffbot_lib::log::error;
+use diffbot_lib::tracing::error;
 use diffbot_lib::{github::github_types::CheckOutputs, job::types::Job};
 use dmm_tools::dmi::render::{IconRenderer, RenderType};
 use dmm_tools::dmi::State;

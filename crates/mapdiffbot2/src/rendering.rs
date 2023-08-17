@@ -8,7 +8,7 @@ use std::{
 
 extern crate dreammaker;
 
-use diffbot_lib::log;
+use diffbot_lib::tracing;
 
 use diffbot_lib::github::github_types::FileDiff;
 use dmm_tools::{dmm, minimap, render_passes::RenderPass, IconCache};
@@ -72,7 +72,7 @@ pub fn get_diff_bounding_box(
     let left_dims = base_map.dim_xyz();
     let right_dims = head_map.dim_xyz();
     if left_dims != right_dims {
-        log::info!(
+        tracing::info!(
             "Maps have different sizes: {:?} {:?}",
             left_dims,
             right_dims
@@ -82,7 +82,7 @@ pub fn get_diff_bounding_box(
     let max_y = min(left_dims.1, right_dims.1);
     let max_x = min(left_dims.0, right_dims.0);
 
-    log::debug!("max_y: {}, max_x: {}", max_y, max_x);
+    tracing::debug!("max_y: {}, max_x: {}", max_y, max_x);
 
     let mut rightmost = 0usize;
     let mut leftmost = max_x;
@@ -115,7 +115,7 @@ pub fn get_diff_bounding_box(
         return None;
     }
 
-    log::debug!(
+    tracing::debug!(
         "Before expansion max: (right, top):({}, {}), min: (left, bottom):({}, {})",
         rightmost,
         topmost,
@@ -130,7 +130,7 @@ pub fn get_diff_bounding_box(
     leftmost = leftmost.saturating_sub(2).clamp(1, (max_x - 1).max(1));
     bottommost = bottommost.saturating_sub(2).clamp(1, (max_y - 1).max(1));
 
-    log::debug!(
+    tracing::debug!(
         "After expansion max: (right, top):({}, {}), min: (left, bottom):({}, {})",
         rightmost,
         topmost,
@@ -359,7 +359,7 @@ where
 
     results.iter().for_each(|res| {
         if let Err(e) = res {
-            log::error!("{e:?}") //errors please
+            tracing::error!("{e:?}") //errors please
         }
     });
 
@@ -420,7 +420,7 @@ fn render_map_region(
             (_, _) => None,
         };
 
-        log::debug!(
+        tracing::debug!(
             "maprender: {map_name}, image: {}, azure: {}, path: {}",
             image.is_some(),
             blob_client.is_some(),
@@ -432,7 +432,7 @@ fn render_map_region(
             ))
             .join(Path::new(&format!("{z_level}-{filename}")));
 
-        log::debug!("file at: {directory:?}");
+        tracing::debug!("file at: {directory:?}");
 
         if let Some(image) = image {
             let compressed_image = compress_image(image).wrap_err("Failed to compress image")?;
@@ -445,16 +445,16 @@ fn render_map_region(
                 write_to_azure(directory, blob_client.clone(), compressed_image.as_slice())
                     .wrap_err("Sending image to azure")
             {
-                log::error!("{e:?}")
+                tracing::error!("{e:?}")
             };
-            log::debug!("Sent to azure: {map_name} {directory:?}");
+            tracing::debug!("Sent to azure: {map_name} {directory:?}");
         } else {
             if let Err(e) = write_to_file(directory, compressed_image.as_slice())
                 .wrap_err("Writing image to file")
             {
-                log::error!("{e:?}")
+                tracing::error!("{e:?}")
             };
-            log::debug!("Wrote to file: {map_name} {directory:?}");
+            tracing::debug!("Wrote to file: {map_name} {directory:?}");
         }
     });
 
@@ -504,22 +504,22 @@ pub fn render_diffs(before: RenderedMaps, after: RenderedMaps, blob_client: Azur
                 if let Err(e) = write_to_azure(final_path, client, image.as_slice())
                     .wrap_err("Sending image to azure")
                 {
-                    log::error!("{e:?}")
+                    tracing::error!("{e:?}")
                 };
-                log::debug!("Sent to azure: {final_path:?}");
+                tracing::debug!("Sent to azure: {final_path:?}");
             } else {
                 if let Err(e) =
                     write_to_file(final_path, image.as_slice()).wrap_err("Writing image to file")
                 {
-                    log::error!("{e:?}")
+                    tracing::error!("{e:?}")
                 };
-                log::debug!("Written to file: {final_path:?}");
+                tracing::debug!("Written to file: {final_path:?}");
             }
         });
 
     res.into_iter().for_each(|res| {
         if let Err(e) = res {
-            log::error!("{e:?}");
+            tracing::error!("{e:?}");
         }
     });
 }

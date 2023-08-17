@@ -3,7 +3,7 @@ use std::time::Duration;
 use super::job_processor::do_job;
 use diffbot_lib::job::types::Job;
 
-use diffbot_lib::log::{error, info};
+use diffbot_lib::tracing::{error, info};
 
 pub async fn handle_jobs<S: AsRef<str>>(name: S, mut job_receiver: yaque::Receiver) {
     loop {
@@ -60,10 +60,9 @@ async fn job_handler(name: &str, job: Job) {
 
     if let Err(e) = output {
         let fuckup = match e.try_into_panic() {
-            Ok(panic) => match panic.downcast::<String>() {
-                Ok(s) => *s,
-                Err(_) => "*crickets*".to_string(),
-            },
+            Ok(panic) => {
+                format!("{panic:#?}")
+            }
             Err(e) => e.to_string(),
         };
         error!("Join Handle error: {}", fuckup);

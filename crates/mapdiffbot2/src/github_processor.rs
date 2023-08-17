@@ -1,4 +1,4 @@
-use diffbot_lib::log;
+use diffbot_lib::tracing;
 use eyre::{Context, Result};
 use mysql_async::{params, prelude::Queryable};
 use octocrab::models::InstallationId;
@@ -22,7 +22,7 @@ async fn process_pull(
     installation: &Installation,
     job_sender: DataJobSender,
 ) -> Result<()> {
-    log::debug!("Processing pull request");
+    tracing::debug!("Processing pull request");
 
     if pull
         .title
@@ -111,7 +111,7 @@ async fn process_pull(
 
     job_sender.lock().await.send(job).await?;
 
-    log::debug!("Job sent to queue");
+    tracing::debug!("Job sent to queue");
 
     Ok(())
 }
@@ -127,7 +127,7 @@ async fn handle_pull_request(
 
     match payload.action.as_str() {
         "opened" | "synchronize" => {
-            log::debug!("Creating checkrun");
+            tracing::debug!("Creating checkrun");
 
             let check_run = CheckRun::create(
                 &payload.repository.full_name(),
@@ -156,7 +156,7 @@ async fn handle_pull_request(
                 let mut conn = match pool.get_conn().await {
                     Ok(conn) => conn,
                     Err(e) => {
-                        log::error!("{:?}", e);
+                        tracing::error!("{:?}", e);
                         return Ok("Getting mysql connection failed");
                     }
                 };
@@ -184,7 +184,7 @@ async fn handle_pull_request(
                     )
                     .await
                 {
-                    log::error!("{:?}", e);
+                    tracing::error!("{:?}", e);
                 };
             }
         }
@@ -193,7 +193,7 @@ async fn handle_pull_request(
                 let mut conn = match pool.get_conn().await {
                     Ok(conn) => conn,
                     Err(e) => {
-                        log::error!("{:?}", e);
+                        tracing::error!("{:?}", e);
                         return Ok("Getting mysql connection failed");
                     }
                 };
@@ -213,7 +213,7 @@ async fn handle_pull_request(
                     )
                     .await
                 {
-                    log::error!("{:?}", e);
+                    tracing::error!("{:?}", e);
                 };
             }
         }
@@ -245,12 +245,12 @@ pub async fn process_github_payload(
         &payload,
     )?;
 
-    log::debug!("Payload received, processing");
+    tracing::debug!("Payload received, processing");
 
     handle_pull_request(payload, job_sender, pool)
         .await
         .map_err(|e| {
-            log::error!("Error handling event: {:?}", e);
+            tracing::error!("Error handling event: {:?}", e);
             actix_web::error::ErrorBadRequest(e)
         })
 }
