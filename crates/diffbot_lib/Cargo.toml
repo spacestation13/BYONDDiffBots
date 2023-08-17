@@ -19,7 +19,7 @@ sha2 = "0.10.7"
 hmac = "0.12.1"
 hex = "0.4.3"
 tracing = "0.1"
-tracing-subscriber = { version = "0.3", features = ["fmt"] }
+tracing-subscriber = { version = "0.3", features = ["fmt", "time"] }
 
 actix-web = "4.3.1"
 
