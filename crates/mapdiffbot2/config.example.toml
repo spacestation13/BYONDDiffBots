@@ -37,3 +37,7 @@ string = 131072
 # storage_account= "storageaccountname"
 # storage_access_key= "accesskey"
 # storage_container = "containername"
+
+# Send logs to a grafana loki server (Optional) (Logs will still be printed to stdout)
+#[grafana_loki]
+#url = "http://example.com:1234"

@@ -29,7 +29,7 @@ delay_timer = "0.11.4"
 hex = { version = "0.4.3", features = ["serde"] }
 itertools = "0.11.0"
 indexmap = { version = "2.0.0", features = ["rayon"] }
-tracing = "0.1"
+tracing-loki = "0.2.4"
 
 actix-web = "4.3.1"
 actix-files = "0.6.2"

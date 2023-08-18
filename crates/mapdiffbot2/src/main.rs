@@ -54,6 +54,11 @@ pub struct AzureBlobs {
 }
 
 #[derive(Debug, Deserialize)]
+pub struct GrafanaLoki {
+    url: String,
+}
+
+#[derive(Debug, Deserialize)]
 pub struct Config {
     pub github: GithubConfig,
     pub web: WebConfig,
@@ -67,8 +72,8 @@ pub struct Config {
     pub logging: String,
     pub secret: Option<String>,
     pub db_url: Option<String>,
-
     pub azure_blobs: Option<AzureBlobs>,
+    pub grafana_loki: Option<GrafanaLoki>,
 }
 
 fn default_schedule() -> String {
@@ -115,7 +120,19 @@ async fn main() -> eyre::Result<()> {
     let config =
         init_config(&config_path).unwrap_or_else(|_| panic!("Failed to read {config_path:?}"));
 
-    diffbot_lib::logger::init_logger(&config.logging).expect("Log init failed!");
+    let (layer, tasks) = if let Some(ref loki_config) = config.grafana_loki {
+        let (layer, tasks) = tracing_loki::builder()
+            .build_url(tracing_loki::url::Url::parse(&loki_config.url).unwrap())?;
+        (Some(layer), Some(tasks))
+    } else {
+        (None, None)
+    };
+
+    diffbot_lib::logger::init_logger(&config.logging, layer).expect("Log init failed!");
+
+    if let Some(tasks) = tasks {
+        actix_web::rt::spawn(tasks);
+    }
 
     let key = read_key(PathBuf::from(&config.github.private_key_path));
 

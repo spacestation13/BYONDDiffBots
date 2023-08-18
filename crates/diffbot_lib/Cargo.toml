@@ -20,6 +20,8 @@ hmac = "0.12.1"
 hex = "0.4.3"
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["fmt", "time"] }
+tracing-panic = "0.1.1"
+tracing-loki = "0.2.4"
 
 actix-web = "4.3.1"
 
