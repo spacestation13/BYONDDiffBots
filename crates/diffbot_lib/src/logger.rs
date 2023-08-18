@@ -31,6 +31,7 @@ pub fn init_logger(
         tracing_subscriber::fmt()
             .with_level(true)
             .with_line_number(true)
+            .with_max_level(get_log_level(log_level))
             .init();
     }
 
