@@ -3,23 +3,23 @@ use std::time::Duration;
 use super::job_processor::do_job;
 use diffbot_lib::job::types::Job;
 
-use diffbot_lib::tracing::{error, info};
+use diffbot_lib::tracing;
 
 pub async fn handle_jobs<S: AsRef<str>>(name: S, mut job_receiver: yaque::Receiver) {
     loop {
         match job_receiver.recv().await {
             Ok(jobguard) => {
-                info!("Job received from queue");
+                tracing::info!("Job received from queue");
                 let job = serde_json::from_slice(&jobguard);
                 match job {
                     Ok(job) => job_handler(name.as_ref(), job).await,
-                    Err(err) => error!("Failed to parse job from queue: {}", err),
+                    Err(err) => tracing::error!("Failed to parse job from queue: {err}"),
                 }
                 if let Err(err) = jobguard.commit() {
-                    error!("Failed to commit change to queue: {}", err)
+                    tracing::error!("Failed to commit change to queue: {err}")
                 };
             }
-            Err(err) => error!("{}", err),
+            Err(err) => tracing::error!("{err}"),
         }
     }
 }
@@ -27,10 +27,9 @@ pub async fn handle_jobs<S: AsRef<str>>(name: S, mut job_receiver: yaque::Receiv
 async fn job_handler(name: &str, job: Job) {
     let (repo, pull_request, check_run) =
         (job.repo.clone(), job.pull_request, job.check_run.clone());
-    info!(
-        "[{}#{}] [{}] Starting",
+    tracing::info!(
+        "[{}#{pull_request}] [{}] Starting",
         repo.full_name(),
-        pull_request,
         check_run.id()
     );
 
@@ -42,16 +41,15 @@ async fn job_handler(name: &str, job: Job) {
     )
     .await;
 
-    info!(
-        "[{}#{}] [{}] Finished",
+    tracing::info!(
+        "[{}#{pull_request}] [{}] Finished",
         repo.full_name(),
-        pull_request,
         check_run.id()
     );
 
     let output = {
         if output.is_err() {
-            error!("Job timed out!");
+            tracing::error!("Job timed out!");
             let _ = check_run.mark_failed("Job timed out after 1 hours!").await;
             return;
         }
@@ -65,7 +63,7 @@ async fn job_handler(name: &str, job: Job) {
             }
             Err(e) => e.to_string(),
         };
-        error!("Join Handle error: {}", fuckup);
+        tracing::error!("Join Handle error: {fuckup}");
         let _ = check_run.mark_failed(&fuckup).await;
         return;
     }
@@ -73,11 +71,18 @@ async fn job_handler(name: &str, job: Job) {
     let output = output.unwrap();
     if let Err(e) = output {
         let fuckup = format!("{e:?}");
-        error!("Other rendering error: {}", fuckup);
+        tracing::error!("Other rendering error: {fuckup}");
         let _ = check_run.mark_failed(&fuckup).await;
         return;
     }
 
     let output = output.unwrap();
-    diffbot_lib::job::runner::handle_output(output, check_run, name).await;
+    if let Err(e) = diffbot_lib::job::runner::handle_output(output, &check_run, name).await {
+        let fuckup = format!("{e:?}");
+        tracing::error!("Output upload error: {fuckup}");
+        _ = check_run
+            .mark_failed(&format!("Failed to upload job output: {fuckup}"))
+            .await;
+        return;
+    };
 }

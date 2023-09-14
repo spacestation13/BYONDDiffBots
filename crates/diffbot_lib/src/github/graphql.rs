@@ -117,9 +117,9 @@ pub async fn get_pull_files<I: Into<InstallationId>>(
         let queried: QueryReturn = crab
             .graphql(&Query {
                 query: format!(
-                    "{{ repository(owner: \"{}\", name: \"{}\")
+                    "{{ repository(owner: \"{user}\", name: \"{repo}\")
     {{ pullRequest(number: {})
-        {{ files(first: 100, after: \"{}\")
+        {{ files(first: 100, after: \"{cursor}\")
             {{ edges
                 {{ cursor node
                     {{ path changeType }}
@@ -128,7 +128,7 @@ pub async fn get_pull_files<I: Into<InstallationId>>(
         }}
     }}
 }}",
-                    user, repo, pull.number, cursor
+                    pull.number
                 ),
             })
             .await?;

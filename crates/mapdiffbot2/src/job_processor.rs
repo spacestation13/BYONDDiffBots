@@ -1,4 +1,3 @@
-use diffbot_lib::tracing;
 use eyre::{Context, Result};
 use path_absolutize::Absolutize;
 use std::path::Path;
@@ -20,6 +19,7 @@ use diffbot_lib::{
         Branch, ChangeType, CheckOutputBuilder, CheckOutputs, FileDiff, Output,
     },
     job::types::Job,
+    tracing,
 };
 
 use super::Azure;
@@ -229,7 +229,7 @@ fn generate_finished_output<P: AsRef<Path>>(
         let file_index = file.clone().replace('/', "_").replace(".dmm", "");
         map.iter_levels().for_each(|(level, _)| {
             let link = format!("{link_base}/a/{file_index}/{level}-added.png");
-            let name = format!("{} (Z-level: {})", file, level + 1);
+            let name = format!("{file} (Z-level: {})", level + 1);
 
             builder.add_text(&format!(
                 include_str!("../templates/diff_template_add.txt"),
@@ -243,7 +243,7 @@ fn generate_finished_output<P: AsRef<Path>>(
         let file_index = file.clone().replace('/', "_").replace(".dmm", "");
         map.iter_levels().for_each(|(level, _)| {
             let link = format!("{link_base}/r/{file_index}/{level}-removed.png");
-            let name = format!("{} (Z-level: {})", file, level + 1);
+            let name = format!("{file} (Z-level: {})", level + 1);
 
             builder.add_text(&format!(
                 include_str!("../templates/diff_template_remove.txt"),
@@ -264,9 +264,9 @@ fn generate_finished_output<P: AsRef<Path>>(
                 let file_index = file.clone().replace('/', "_").replace(".dmm", "");
                 map.iter_levels().for_each(|(level, region)| {
                     let link = format!("{link_base}/m/{file_index}/{level}");
-                    let name = format!("{} (Z-level: {})", file, level + 1);
+                    let name = format!("{file} (Z-level: {})", level + 1);
                     let (dim_x, dim_y, _) = map.map.dim_xyz();
-                    let fmt_dim = format!("({}, {}, {})", dim_x, dim_y, level + 1);
+                    let fmt_dim = format!("({dim_x}, {dim_y}, {})", level + 1);
 
                     let (link_before, link_after, link_diff) = (
                         format!("{link}-before.png"),

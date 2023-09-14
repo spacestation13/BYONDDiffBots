@@ -24,7 +24,7 @@ pub async fn gc_scheduler(cron_str: String, job: Arc<Mutex<JobSender>>) {
                             .expect("Cannot serialize cleanupjob, what the fuck");
                     async move {
                         if let Err(err) = sender_clone.lock().await.send(job).await {
-                            tracing::error!("Cannot send cleanup job: {}", err)
+                            tracing::error!("Cannot send cleanup job: {err}")
                         }
                     }
                 })

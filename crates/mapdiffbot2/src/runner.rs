@@ -25,13 +25,13 @@ pub async fn handle_jobs<S: AsRef<str>>(
                         }
                         JobType::CleanupJob(_) => garbage_collect_all_repos().await,
                     },
-                    Err(err) => tracing::error!("Failed to parse job from queue: {}", err),
+                    Err(err) => tracing::error!("Failed to parse job from queue: {err}"),
                 }
                 if let Err(err) = jobguard.commit() {
-                    tracing::error!("Failed to commit change to queue: {}", err)
+                    tracing::error!("Failed to commit change to queue: {err}")
                 };
             }
-            Err(err) => tracing::error!("{}", err),
+            Err(err) => tracing::error!("{err}"),
         }
     }
 }
@@ -63,9 +63,8 @@ async fn garbage_collect_all_repos() {
                             if !output.success() {
                                 match output.code() {
                                     Some(num) => tracing::error!(
-                                        "GC failed on dir {} with code {}",
+                                        "GC failed on dir {} with code {num}",
                                         path.display(),
-                                        num
                                     ),
                                     None => tracing::error!(
                                         "GC failed on dir {}, process terminated!",
@@ -75,10 +74,10 @@ async fn garbage_collect_all_repos() {
                             }
                             Ok(())
                         }() {
-                            tracing::error!("{}", err);
+                            tracing::error!("{err}");
                         }
                     }
-                    Err(err) => tracing::error!("Walkdir failed: {}", err),
+                    Err(err) => tracing::error!("Walkdir failed: {err}"),
                 }
             }
             Ok(())
@@ -103,14 +102,14 @@ async fn garbage_collect_all_repos() {
             }
             Err(e) => e.to_string(),
         };
-        tracing::error!("Join Handle error: {}", fuckup);
+        tracing::error!("Join Handle error: {fuckup}");
         return;
     }
 
     let output = output.unwrap();
     if let Err(e) = output {
         let fuckup = format!("{e:?}");
-        tracing::error!("GC errored: {}", fuckup);
+        tracing::error!("GC errored: {fuckup}");
     }
 }
 
@@ -118,9 +117,8 @@ async fn job_handler(name: &str, job: Job, blob_client: Azure) {
     let (repo, pull_request, check_run) =
         (job.repo.clone(), job.pull_request, job.check_run.clone());
     tracing::info!(
-        "[{}#{}] [{}] Starting",
+        "[{}#{pull_request}] [{}] Starting",
         repo.full_name(),
-        pull_request,
         check_run.id()
     );
 
@@ -133,9 +131,8 @@ async fn job_handler(name: &str, job: Job, blob_client: Azure) {
     .await;
 
     tracing::info!(
-        "[{}#{}] [{}] Finished",
+        "[{}#{pull_request}] [{}] Finished",
         repo.full_name(),
-        pull_request,
         check_run.id()
     );
 
@@ -155,7 +152,7 @@ async fn job_handler(name: &str, job: Job, blob_client: Azure) {
             }
             Err(e) => e.to_string(),
         };
-        tracing::error!("Join Handle error: {}", fuckup);
+        tracing::error!("Join Handle error: {fuckup}");
         let _ = check_run.mark_failed(&fuckup).await;
         return;
     }
@@ -163,11 +160,18 @@ async fn job_handler(name: &str, job: Job, blob_client: Azure) {
     let output = output.unwrap();
     if let Err(e) = output {
         let fuckup = format!("{e:?}");
-        tracing::error!("Other rendering error: {}", fuckup);
+        tracing::error!("Other rendering error: {fuckup}");
         let _ = check_run.mark_failed(&fuckup).await;
         return;
     }
 
     let output = output.unwrap();
-    diffbot_lib::job::runner::handle_output(output, check_run, name).await;
+    if let Err(e) = diffbot_lib::job::runner::handle_output(output, &check_run, name).await {
+        let fuckup = format!("{e:?}");
+        tracing::error!("Output upload error: {fuckup}");
+        _ = check_run
+            .mark_failed(&format!("Failed to upload job output: {fuckup}"))
+            .await;
+        return;
+    };
 }

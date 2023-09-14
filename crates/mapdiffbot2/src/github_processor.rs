@@ -1,4 +1,3 @@
-use diffbot_lib::tracing;
 use eyre::{Context, Result};
 use mysql_async::{params, prelude::Queryable};
 use octocrab::models::InstallationId;
@@ -13,6 +12,7 @@ use diffbot_lib::{
         graphql::get_pull_files,
     },
     job::types::{Job, JobType},
+    tracing,
 };
 
 async fn process_pull(

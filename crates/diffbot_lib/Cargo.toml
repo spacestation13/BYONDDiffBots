@@ -5,13 +5,13 @@ edition = "2021"
 license = "MIT"
 
 [dependencies]
-serde = { version = "1.0.183", features = ["derive"] }
-serde_json = "1.0.105"
-octocrab = "0.29.3"
+serde = { version = "1.0.188", features = ["derive"] }
+serde_json = "1.0.107"
+octocrab = "0.30.1"
 eyre = "0.6.8"
 derive_builder = "0.12.0"
-chrono = "0.4.26"
-reqwest = "0.11.18"
+chrono = "0.4.30"
+reqwest = "0.11.20"
 yaque = { git = "https://github.com/jupyterkat/yaque" }
 futures-lite = "1.13.0"
 simple_logger = "4.2.0"
@@ -23,7 +23,7 @@ tracing-subscriber = { version = "0.3", features = ["fmt", "time"] }
 tracing-panic = "0.1.1"
 tracing-loki = "0.2.4"
 
-actix-web = "4.3.1"
+actix-web = "4.4.0"
 
 async-fs = "1.6.0"
 async-mutex = "1.4.0"

@@ -82,7 +82,7 @@ pub fn get_diff_bounding_box(
     let max_y = min(left_dims.1, right_dims.1);
     let max_x = min(left_dims.0, right_dims.0);
 
-    tracing::debug!("max_y: {}, max_x: {}", max_y, max_x);
+    tracing::debug!("max_y: {max_y}, max_x: {max_x}");
 
     let mut rightmost = 0usize;
     let mut leftmost = max_x;
@@ -116,11 +116,7 @@ pub fn get_diff_bounding_box(
     }
 
     tracing::debug!(
-        "Before expansion max: (right, top):({}, {}), min: (left, bottom):({}, {})",
-        rightmost,
-        topmost,
-        leftmost,
-        bottommost
+        "Before expansion max: (right, top):({rightmost}, {topmost}), min: (left, bottom):({leftmost}, {bottommost})",
     );
 
     //this is a god awful way to expand bounds without it going out of bounds
@@ -131,11 +127,7 @@ pub fn get_diff_bounding_box(
     bottommost = bottommost.saturating_sub(2).clamp(1, (max_y - 1).max(1));
 
     tracing::debug!(
-        "After expansion max: (right, top):({}, {}), min: (left, bottom):({}, {})",
-        rightmost,
-        topmost,
-        leftmost,
-        bottommost
+        "After expansion max: (right, top):({rightmost}, {topmost}), min: (left, bottom):({leftmost}, {bottommost})",
     );
 
     Some(BoundingBox::new(leftmost, bottommost, rightmost, topmost))

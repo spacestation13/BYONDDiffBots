@@ -3,8 +3,7 @@ use crate::{
     table_builder::OutputTableBuilder,
     CONFIG,
 };
-use diffbot_lib::tracing::error;
-use diffbot_lib::{github::github_types::CheckOutputs, job::types::Job};
+use diffbot_lib::{github::github_types::CheckOutputs, job::types::Job, tracing};
 use dmm_tools::dmi::render::{IconRenderer, RenderType};
 use dmm_tools::dmi::State;
 use eyre::{Context, Result};
@@ -25,13 +24,20 @@ pub fn do_job(job: Job) -> Result<CheckOutputs> {
 
     let mut map = OutputTableBuilder::new();
 
-    for dmi in &job.files {
-        let file = sha_to_iconfile(&job, &dmi.filename, status_to_sha(&job, &dmi.status))?;
-
-        let states = render(&job, file)?;
-
-        map.insert(dmi.filename.as_str(), states);
-    }
+    job.files
+        .iter()
+        .map(|dmi| {
+            (
+                sha_to_iconfile(&job, &dmi.filename, status_to_sha(&job, &dmi.status)),
+                dmi,
+            )
+        })
+        .map(|(file, dmi)| -> Result<()> {
+            let states = render(&job, file?)?;
+            map.insert(dmi.filename.as_str(), states);
+            Ok(())
+        })
+        .collect::<Result<()>>()?;
 
     map.build()
 }
@@ -196,7 +202,7 @@ fn render(
                 })
                 .filter_map(|r: Result<String, eyre::Error>| {
                     r.map_err(|e| {
-                        error!("Error encountered during parse: {}", e);
+                        tracing::error!("Error encountered during parse: {e}");
                     })
                     .ok()
                 })
@@ -261,7 +267,7 @@ fn render(
                     })
                     .filter_map(|r: Result<String, eyre::Error>| {
                         r.map_err(|e| {
-                            error!("Error encountered during parse: {}", e);
+                            tracing::error!("Error encountered during parse: {}", e);
                         })
                         .ok()
                     })
@@ -313,11 +319,9 @@ fn render_state<'a, S: AsRef<str> + std::fmt::Debug>(
         .with_context(|| format!("Failed to render state {} to file {:?}", state.name, &path))?;
 
     let url = format!(
-        "{}/images/{}/{}.{}",
+        "{}/images/{}/{filename}.{extension}",
         CONFIG.get().unwrap().web.file_hosting_url,
         prefix.as_ref(),
-        filename,
-        extension,
     );
 
     buffer.flush().with_context(|| {
@@ -352,7 +356,7 @@ fn full_render(job: &Job, target: &IconFileWithName) -> Result<Vec<((usize, Stri
         })
         .filter_map(|r: Result<((usize, String), String), eyre::Error>| {
             r.map_err(|e| {
-                error!("Error encountered during parse: {}", e);
+                tracing::error!("Error encountered during parse: {e}");
             })
             .ok()
         })

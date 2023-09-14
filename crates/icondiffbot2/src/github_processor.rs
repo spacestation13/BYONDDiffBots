@@ -1,7 +1,7 @@
 use diffbot_lib::{
     github::{
         github_api::CheckRun,
-        github_types::{ChangeType, Output, PullRequestEventPayload},
+        github_types::{ChangeType, FileDiff, Output, PullRequestEventPayload},
         graphql::get_pull_files,
     },
     job::types::Job,
@@ -9,8 +9,6 @@ use diffbot_lib::{
 };
 use eyre::Result;
 use octocrab::models::InstallationId;
-
-use diffbot_lib::github::github_types::FileDiff;
 
 use mysql_async::{params, prelude::Queryable};
 
@@ -143,9 +141,8 @@ async fn handle_pull(
         let output = Output {
             title: "Repo blacklisted",
             summary: format!(
-                "Repository {} is blacklisted. {}",
+                "Repository {} is blacklisted. {contact}",
                 payload.repository.full_name(),
-                contact
             ),
             text: "".to_owned(),
         };
