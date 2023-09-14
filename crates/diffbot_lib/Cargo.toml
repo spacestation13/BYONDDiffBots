@@ -12,7 +12,6 @@ eyre = "0.6.8"
 derive_builder = "0.12.0"
 chrono = "0.4.30"
 reqwest = "0.11.20"
-yaque = { git = "https://github.com/jupyterkat/yaque" }
 futures-lite = "1.13.0"
 simple_logger = "4.2.0"
 sha2 = "0.10.7"
@@ -22,8 +21,8 @@ tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["fmt", "time"] }
 tracing-panic = "0.1.1"
 tracing-loki = "0.2.4"
+flume = "0.11.0"
 
 actix-web = "4.4.0"
 
 async-fs = "1.6.0"
-async-mutex = "1.4.0"

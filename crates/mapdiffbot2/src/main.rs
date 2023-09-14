@@ -9,17 +9,16 @@ use std::fs::File;
 use std::io::Read;
 use std::path::PathBuf;
 
-use diffbot_lib::async_mutex::Mutex;
 use mysql_async::prelude::Queryable;
 use once_cell::sync::OnceCell;
 use serde::Deserialize;
-use std::sync::Arc;
 
 #[cfg(not(target_env = "msvc"))]
 #[global_allocator]
 static GLOBAL: tikv_jemallocator::Jemalloc = tikv_jemallocator::Jemalloc;
 
-pub type DataJobSender = actix_web::web::Data<Arc<Mutex<diffbot_lib::job::types::JobSender>>>;
+pub type DataJobSender =
+    actix_web::web::Data<diffbot_lib::job::types::JobSender<diffbot_lib::job::types::JobType>>;
 
 #[actix_web::get("/")]
 async fn index() -> &'static str {
@@ -108,8 +107,6 @@ fn init_config(path: &std::path::Path) -> eyre::Result<&'static Config> {
     Ok(CONFIG.get().unwrap())
 }
 
-const JOB_JOURNAL_LOCATION: &str = "jobs";
-
 type Azure = Option<std::sync::Arc<object_store::azure::MicrosoftAzure>>;
 
 #[actix_web::main]
@@ -146,8 +143,7 @@ async fn main() -> eyre::Result<()> {
             .expect("fucked up octocrab"),
     );
 
-    let (job_sender, job_receiver) = yaque::channel(JOB_JOURNAL_LOCATION)
-        .expect("Couldn't open an on-disk queue, check permissions or drive space?");
+    let (job_sender, job_receiver) = flume::unbounded();
 
     let pool = config
         .db_url
@@ -191,8 +187,6 @@ async fn main() -> eyre::Result<()> {
         job_receiver,
         blob_client,
     ));
-
-    let job_sender = Arc::new(Mutex::new(job_sender));
 
     let job_clone = job_sender.clone();
 

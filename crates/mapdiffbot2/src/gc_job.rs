@@ -1,13 +1,10 @@
-use std::sync::Arc;
-
 use delay_timer::prelude::*;
 use diffbot_lib::{
-    async_mutex::Mutex,
     job::types::{JobSender, JobType},
     tracing,
 };
 
-pub async fn gc_scheduler(cron_str: String, job: Arc<Mutex<JobSender>>) {
+pub async fn gc_scheduler(cron_str: String, job: JobSender<JobType>) {
     let scheduler = DelayTimerBuilder::default()
         .tokio_runtime_by_default()
         .build();
@@ -19,11 +16,8 @@ pub async fn gc_scheduler(cron_str: String, job: Arc<Mutex<JobSender>>) {
                 .set_task_id(1)
                 .spawn_async_routine(move || {
                     let sender_clone = job.clone();
-                    let job =
-                        serde_json::to_vec(&JobType::CleanupJob("GC_REQUEST_DUMMY".to_owned()))
-                            .expect("Cannot serialize cleanupjob, what the fuck");
                     async move {
-                        if let Err(err) = sender_clone.lock().await.send(job).await {
+                        if let Err(err) = sender_clone.send_async(JobType::CleanupJob).await {
                             tracing::error!("Cannot send cleanup job: {err}")
                         }
                     }

@@ -107,9 +107,9 @@ async fn process_pull(
         installation: InstallationId(installation.id),
     };
 
-    let job = serde_json::to_vec(&JobType::GithubJob(Box::new(job)))?;
-
-    job_sender.lock().await.send(job).await?;
+    job_sender
+        .send_async(JobType::GithubJob(Box::new(job)))
+        .await?;
 
     tracing::debug!("Job sent to queue");
 

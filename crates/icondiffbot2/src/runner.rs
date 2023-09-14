@@ -5,19 +5,12 @@ use diffbot_lib::job::types::Job;
 
 use diffbot_lib::tracing;
 
-pub async fn handle_jobs<S: AsRef<str>>(name: S, mut job_receiver: yaque::Receiver) {
+pub async fn handle_jobs<S: AsRef<str>>(name: S, job_receiver: flume::Receiver<Job>) {
     loop {
-        match job_receiver.recv().await {
-            Ok(jobguard) => {
+        match job_receiver.recv_async().await {
+            Ok(job) => {
                 tracing::info!("Job received from queue");
-                let job = serde_json::from_slice(&jobguard);
-                match job {
-                    Ok(job) => job_handler(name.as_ref(), job).await,
-                    Err(err) => tracing::error!("Failed to parse job from queue: {err}"),
-                }
-                if let Err(err) = jobguard.commit() {
-                    tracing::error!("Failed to commit change to queue: {err}")
-                };
+                job_handler(name.as_ref(), job).await;
             }
             Err(err) => tracing::error!("{err}"),
         }

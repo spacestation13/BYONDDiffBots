@@ -10,27 +10,17 @@ use super::Azure;
 
 pub async fn handle_jobs<S: AsRef<str>>(
     name: S,
-    mut job_receiver: yaque::Receiver,
+    job_receiver: flume::Receiver<JobType>,
     blob_client: Azure,
 ) {
     loop {
-        match job_receiver.recv().await {
-            Ok(jobguard) => {
-                tracing::info!("Job received from queue");
-                let job: Result<JobType, serde_json::Error> = serde_json::from_slice(&jobguard);
-                match job {
-                    Ok(job) => match job {
-                        JobType::GithubJob(job) => {
-                            job_handler(name.as_ref(), *job, blob_client.clone()).await
-                        }
-                        JobType::CleanupJob(_) => garbage_collect_all_repos().await,
-                    },
-                    Err(err) => tracing::error!("Failed to parse job from queue: {err}"),
+        match job_receiver.recv_async().await {
+            Ok(job_type) => match job_type {
+                JobType::GithubJob(job) => {
+                    job_handler(name.as_ref(), *job, blob_client.clone()).await
                 }
-                if let Err(err) = jobguard.commit() {
-                    tracing::error!("Failed to commit change to queue: {err}")
-                };
-            }
+                JobType::CleanupJob => garbage_collect_all_repos().await,
+            },
             Err(err) => tracing::error!("{err}"),
         }
     }

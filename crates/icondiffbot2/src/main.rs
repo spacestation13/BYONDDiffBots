@@ -4,7 +4,10 @@ mod runner;
 mod sha;
 mod table_builder;
 
-use diffbot_lib::{async_fs, async_mutex::Mutex, job::types::JobSender};
+use diffbot_lib::{
+    async_fs,
+    job::types::{Job, JobSender},
+};
 use mysql_async::prelude::Queryable;
 use octocrab::OctocrabBuilder;
 use once_cell::sync::OnceCell;
@@ -19,7 +22,7 @@ use std::{
 #[global_allocator]
 static GLOBAL: tikv_jemallocator::Jemalloc = tikv_jemallocator::Jemalloc;
 
-pub type DataJobSender = actix_web::web::Data<Mutex<JobSender>>;
+pub type DataJobSender = actix_web::web::Data<JobSender<Job>>;
 
 #[actix_web::get("/")]
 async fn index() -> &'static str {
@@ -113,8 +116,6 @@ fn read_key(path: &Path) -> Vec<u8> {
     key
 }
 
-const JOB_JOURNAL_LOCATION: &str = "jobs";
-
 #[actix_web::main]
 async fn main() -> eyre::Result<()> {
     simple_eyre::install().expect("Eyre handler installation failed!");
@@ -153,8 +154,7 @@ async fn main() -> eyre::Result<()> {
 
     async_fs::create_dir_all("./images").await.unwrap();
 
-    let (job_sender, job_receiver) = yaque::channel(JOB_JOURNAL_LOCATION)
-        .expect("Couldn't open an on-disk queue, check permissions or drive space?");
+    let (job_sender, job_receiver) = flume::unbounded();
 
     let pool = config
         .db_url
@@ -180,7 +180,7 @@ async fn main() -> eyre::Result<()> {
 
     actix_web::rt::spawn(runner::handle_jobs("IconDiffBot2", job_receiver));
 
-    let job_sender: DataJobSender = actix_web::web::Data::new(Mutex::new(job_sender));
+    let job_sender: DataJobSender = actix_web::web::Data::new(job_sender);
 
     actix_web::HttpServer::new(move || {
         let pool = actix_web::web::Data::new(pool.clone());
