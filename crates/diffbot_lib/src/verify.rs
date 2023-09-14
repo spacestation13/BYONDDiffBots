@@ -13,7 +13,9 @@ pub fn verify_signature(
 ) -> Result<(), actix_web::error::Error> {
     if let Some(sekrit) = secret {
         let Some(sig) = signature else {
-            return Err(actix_web::error::ErrorBadRequest("Expected signature in header"))
+            return Err(actix_web::error::ErrorBadRequest(
+                "Expected signature in header",
+            ));
         };
 
         //have to wrap it to stop timing attacks on comparison
