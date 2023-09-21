@@ -1,7 +1,5 @@
 # Blacklisted repos, and message to show on blacklisted repo's jobs (Optional)
-blacklist = [
-    1337,
-]
+blacklist = [1337]
 blacklist_contact = "Good luck!"
 
 # Cron schedule for git gc operations (Optional, defaults to below value)
@@ -9,6 +7,10 @@ gc_schedule = "0 0 4 * * *"
 
 # Logging level (Optional, defaults to info), Valid values are "info", "warn", "trace", "error", "debug"
 logging = "info"
+
+# Mysql db url, the bots will write down a table that contains necessary information,
+# for automated deletion (Optional)
+# db_url = ""
 
 # Webhook secret (Optional, payload verification w/ SHA is disabled if not set)
 # secret = "abcdef"
@@ -23,10 +25,19 @@ private_key_path = "diffbot.pem"
 address = "0.0.0.0"
 port = 1234
 # Server host for images (Required)
-file_hosting_url = "http://example.com:1234/images"
+file_hosting_url = "http://example.com:1234"
 
 # Actixweb forms and string limits (Optional)
 [web.limits]
 forms = 131072
 string = 131072
 
+# Azure storage (Optional) (This will make the bot write to an azure storage blob and not local files)
+# [azure_blobs]
+# storage_account= "storageaccountname"
+# storage_access_key= "accesskey"
+# storage_container = "containername"
+
+# Send logs to a grafana loki server (Optional) (Logs will still be printed to stdout)
+#[grafana_loki]
+#url = "http://example.com:1234"

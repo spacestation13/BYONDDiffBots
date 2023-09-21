@@ -35,7 +35,7 @@ impl<'a> OutputTableBuilder<'a> {
                 // A little extra buffer room for the <detail> block
                 if current_table.len() + state.len() > 55_000 {
                     details.push((
-                        format!("{} ({})", file_name, *entry),
+                        format!("{file_name} ({})", *entry),
                         change_type,
                         std::mem::take(&mut current_table),
                     ));
@@ -47,7 +47,7 @@ impl<'a> OutputTableBuilder<'a> {
 
             if !current_table.is_empty() {
                 details.push((
-                    format!("{} ({})", file_name, *entry),
+                    format!("{file_name} ({})", *entry),
                     change_type,
                     std::mem::take(&mut current_table),
                 ));

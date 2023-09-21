@@ -1,2 +1,9 @@
 target/
 .vscode/
+
+images/
+repos/
+jobs/
+
+diffbot.pem
+config.toml

@@ -5,10 +5,10 @@
 
 Modified region: {bounds}
 
-Raw links: [Old]({image_before_link}) - [New]({image_after_link}) - [Diff]({image_diff_link})
+Raw links: {image_before_link} - {image_after_link} - {image_diff_link}
 
 |  Old  |      New      |  Difference  |
 | :---: |     :---:     |    :---:     |
-|![If the image doesn't load, use the raw link above]({image_before_link})|![If the image doesn't load, use the raw link above]({image_after_link})|![If the image doesn't load, use the raw link above]({image_diff_link})|
+| {old_row} | {new_row} | {diff_row}   |
 
 </details>

@@ -3,18 +3,18 @@ use crate::github::{
     github_types::{self, Branch, CheckOutputs, FileDiff},
 };
 use eyre::Result;
+use flume::Sender;
 use octocrab::models::InstallationId;
 use serde::{Deserialize, Serialize};
-use yaque::Sender;
 
 pub type JobRunner = fn(Job) -> Result<CheckOutputs>;
 
-pub type JobSender = Sender;
+pub type JobSender<T> = Sender<T>;
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub enum JobType {
     GithubJob(Box<Job>),
-    CleanupJob(String),
+    CleanupJob,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]

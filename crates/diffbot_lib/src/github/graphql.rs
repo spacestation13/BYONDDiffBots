@@ -1,7 +1,7 @@
 use super::github_types::{ChangeType, FileDiff};
 use eyre::Result;
 use octocrab::models::InstallationId;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 
 /*
   Query:
@@ -50,7 +50,7 @@ use serde::Deserialize;
 */
 
 #[derive(Deserialize)]
-enum QueryData {
+enum QueryReturn {
     #[serde(rename(deserialize = "data"))]
     Data(Data),
     #[serde(rename(deserialize = "error"))]
@@ -97,6 +97,11 @@ struct Node {
     change_type: String,
 }
 
+#[derive(Serialize)]
+struct Query {
+    query: String,
+}
+
 pub async fn get_pull_files<I: Into<InstallationId>>(
     (user, repo): (String, String),
     installation: I,
@@ -109,31 +114,28 @@ pub async fn get_pull_files<I: Into<InstallationId>>(
     let mut ret = vec![];
 
     loop {
-        let queried: QueryData = crab
-            .graphql(&format!(
-                "
-query {{
-  repository(owner:\"{}\", name:\"{}\") {{
-    pullRequest(number:{}) {{
-      files(first:100, after:\"{}\") {{
-        edges {{
-          cursor
-          node {{
-            path
-            changeType
-          }}
+        let queried: QueryReturn = crab
+            .graphql(&Query {
+                query: format!(
+                    "{{ repository(owner: \"{user}\", name: \"{repo}\")
+    {{ pullRequest(number: {})
+        {{ files(first: 100, after: \"{cursor}\")
+            {{ edges
+                {{ cursor node
+                    {{ path changeType }}
+                }}
+            }}
         }}
-      }}
     }}
-  }}
 }}",
-                user, repo, pull.number, cursor
-            ))
+                    pull.number
+                ),
+            })
             .await?;
 
         let data = match queried {
-            QueryData::Data(data) => data,
-            QueryData::Error(errors) => return Err(eyre::eyre!("GraphQL error: {:?}", errors)),
+            QueryReturn::Data(data) => data,
+            QueryReturn::Error(errors) => return Err(eyre::eyre!("GraphQL error: {:?}", errors)),
         };
 
         if data.repository.pull_request.files.edges.is_empty() {

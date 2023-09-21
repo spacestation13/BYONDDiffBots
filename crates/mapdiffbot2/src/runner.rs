@@ -4,26 +4,24 @@ use std::time::Duration;
 use super::job_processor::do_job;
 use diffbot_lib::job::types::{Job, JobType};
 
-use diffbot_lib::log;
+use diffbot_lib::tracing;
 
-pub async fn handle_jobs<S: AsRef<str>>(name: S, mut job_receiver: yaque::Receiver) {
+use super::Azure;
+
+pub async fn handle_jobs<S: AsRef<str>>(
+    name: S,
+    job_receiver: flume::Receiver<JobType>,
+    blob_client: Azure,
+) {
     loop {
-        match job_receiver.recv().await {
-            Ok(jobguard) => {
-                log::info!("Job received from queue");
-                let job: Result<JobType, serde_json::Error> = serde_json::from_slice(&jobguard);
-                match job {
-                    Ok(job) => match job {
-                        JobType::GithubJob(job) => job_handler(name.as_ref(), *job).await,
-                        JobType::CleanupJob(_) => garbage_collect_all_repos().await,
-                    },
-                    Err(err) => log::error!("Failed to parse job from queue: {}", err),
+        match job_receiver.recv_async().await {
+            Ok(job_type) => match job_type {
+                JobType::GithubJob(job) => {
+                    job_handler(name.as_ref(), *job, blob_client.clone()).await
                 }
-                if let Err(err) = jobguard.commit() {
-                    log::error!("Failed to commit change to queue: {}", err)
-                };
-            }
-            Err(err) => log::error!("{}", err),
+                JobType::CleanupJob => garbage_collect_all_repos().await,
+            },
+            Err(err) => tracing::error!("{err}"),
         }
     }
 }
@@ -32,15 +30,15 @@ async fn garbage_collect_all_repos() {
     use eyre::Result;
     use path_absolutize::Absolutize;
     use std::process::Command;
-    log::info!("Garbage collection starting!");
+    tracing::info!("Garbage collection starting!");
 
     let output = actix_web::rt::time::timeout(
-        Duration::from_secs(3600),
+        Duration::from_secs(10800),
         //tfw no try blocks
         actix_web::rt::task::spawn_blocking(move || -> Result<()> {
             let path = PathBuf::from("./repos");
             if !path.exists() {
-                log::info!("Repo path doesn't exist, skipping GC");
+                tracing::info!("Repo path doesn't exist, skipping GC");
                 return Ok(());
             }
             for entry in walkdir::WalkDir::new(path).min_depth(2).max_depth(2) {
@@ -54,12 +52,11 @@ async fn garbage_collect_all_repos() {
                                 Command::new("git").current_dir(&path).arg("gc").status()?;
                             if !output.success() {
                                 match output.code() {
-                                    Some(num) => log::error!(
-                                        "GC failed on dir {} with code {}",
+                                    Some(num) => tracing::error!(
+                                        "GC failed on dir {} with code {num}",
                                         path.display(),
-                                        num
                                     ),
-                                    None => log::error!(
+                                    None => tracing::error!(
                                         "GC failed on dir {}, process terminated!",
                                         path.display(),
                                     ),
@@ -67,10 +64,10 @@ async fn garbage_collect_all_repos() {
                             }
                             Ok(())
                         }() {
-                            log::error!("{}", err);
+                            tracing::error!("{err}");
                         }
                     }
-                    Err(err) => log::error!("Walkdir failed: {}", err),
+                    Err(err) => tracing::error!("Walkdir failed: {err}"),
                 }
             }
             Ok(())
@@ -78,11 +75,11 @@ async fn garbage_collect_all_repos() {
     )
     .await;
 
-    log::info!("Garbage collection finished!");
+    tracing::info!("Garbage collection finished!");
 
     let output = {
         if output.is_err() {
-            log::error!("GC timed out!");
+            tracing::error!("GC timed out!");
             return;
         }
         output.unwrap()
@@ -90,51 +87,48 @@ async fn garbage_collect_all_repos() {
 
     if let Err(e) = output {
         let fuckup = match e.try_into_panic() {
-            Ok(panic) => match panic.downcast_ref::<&str>() {
-                Some(s) => s.to_string(),
-                None => "*crickets*".to_owned(),
-            },
+            Ok(panic) => {
+                format!("{panic:#?}")
+            }
             Err(e) => e.to_string(),
         };
-        log::error!("Join Handle error: {}", fuckup);
+        tracing::error!("Join Handle error: {fuckup}");
         return;
     }
 
     let output = output.unwrap();
     if let Err(e) = output {
         let fuckup = format!("{e:?}");
-        log::error!("GC errored: {}", fuckup);
+        tracing::error!("GC errored: {fuckup}");
     }
 }
 
-async fn job_handler(name: &str, job: Job) {
+async fn job_handler(name: &str, job: Job, blob_client: Azure) {
     let (repo, pull_request, check_run) =
         (job.repo.clone(), job.pull_request, job.check_run.clone());
-    log::info!(
-        "[{}#{}] [{}] Starting",
+    tracing::info!(
+        "[{}#{pull_request}] [{}] Starting",
         repo.full_name(),
-        pull_request,
         check_run.id()
     );
 
     let _ = check_run.mark_started().await;
 
     let output = actix_web::rt::time::timeout(
-        Duration::from_secs(3600),
-        actix_web::rt::task::spawn_blocking(move || do_job(job)),
+        Duration::from_secs(7200),
+        actix_web::rt::task::spawn_blocking(move || do_job(job, blob_client)),
     )
     .await;
 
-    log::info!(
-        "[{}#{}] [{}] Finished",
+    tracing::info!(
+        "[{}#{pull_request}] [{}] Finished",
         repo.full_name(),
-        pull_request,
         check_run.id()
     );
 
     let output = {
         if output.is_err() {
-            log::error!("Job timed out!");
+            tracing::error!("Job timed out!");
             let _ = check_run.mark_failed("Job timed out after 1 hours!").await;
             return;
         }
@@ -143,13 +137,12 @@ async fn job_handler(name: &str, job: Job) {
 
     if let Err(e) = output {
         let fuckup = match e.try_into_panic() {
-            Ok(panic) => match panic.downcast_ref::<&str>() {
-                Some(s) => s.to_string(),
-                None => "*crickets*".to_owned(),
-            },
+            Ok(panic) => {
+                format!("{panic:#?}")
+            }
             Err(e) => e.to_string(),
         };
-        log::error!("Join Handle error: {}", fuckup);
+        tracing::error!("Join Handle error: {fuckup}");
         let _ = check_run.mark_failed(&fuckup).await;
         return;
     }
@@ -157,11 +150,18 @@ async fn job_handler(name: &str, job: Job) {
     let output = output.unwrap();
     if let Err(e) = output {
         let fuckup = format!("{e:?}");
-        log::error!("Other rendering error: {}", fuckup);
+        tracing::error!("Other rendering error: {fuckup}");
         let _ = check_run.mark_failed(&fuckup).await;
         return;
     }
 
     let output = output.unwrap();
-    diffbot_lib::job::runner::handle_output(output, check_run, name).await;
+    if let Err(e) = diffbot_lib::job::runner::handle_output(output, &check_run, name).await {
+        let fuckup = format!("{e:?}");
+        tracing::error!("Output upload error: {fuckup}");
+        _ = check_run
+            .mark_failed(&format!("Failed to upload job output: {fuckup}"))
+            .await;
+        return;
+    };
 }

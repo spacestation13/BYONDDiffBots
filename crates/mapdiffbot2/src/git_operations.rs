@@ -10,14 +10,14 @@ pub fn fetch_and_get_branches<'a>(
     head_branch_name: &str,
     base_branch_name: &str,
 ) -> Result<(git2::Reference<'a>, git2::Reference<'a>)> {
-    let base_id = git2::Oid::from_str(base_sha).context("Parsing base sha")?;
-    let head_id = git2::Oid::from_str(head_sha).context("Parsing head sha")?;
+    let base_id = git2::Oid::from_str(base_sha).wrap_err("Parsing base sha")?;
+    let head_id = git2::Oid::from_str(head_sha).wrap_err("Parsing head sha")?;
 
     let mut remote = repo.find_remote("origin")?;
 
     remote
         .connect(git2::Direction::Fetch)
-        .context("Connecting to remote")?;
+        .wrap_err("Connecting to remote")?;
 
     remote
         .fetch(
@@ -25,14 +25,14 @@ pub fn fetch_and_get_branches<'a>(
             Some(FetchOptions::new().prune(git2::FetchPrune::On)),
             None,
         )
-        .context("Fetching base")?;
+        .wrap_err("Fetching base")?;
     let fetch_head = repo
         .find_reference("FETCH_HEAD")
-        .context("Getting FETCH_HEAD")?;
+        .wrap_err("Getting FETCH_HEAD")?;
 
     let base_commit = repo
         .reference_to_annotated_commit(&fetch_head)
-        .context("Getting commit from FETCH_HEAD")?;
+        .wrap_err("Getting commit from FETCH_HEAD")?;
 
     if let Some(branch) = repo
         .find_branch(base_branch_name, git2::BranchType::Local)
@@ -42,10 +42,10 @@ pub fn fetch_and_get_branches<'a>(
         branch
             .into_reference()
             .set_target(base_commit.id(), "Fast forwarding current ref")
-            .context("Setting base reference to FETCH_HEAD's commit")?;
+            .wrap_err("Setting base reference to FETCH_HEAD's commit")?;
     } else {
         repo.branch_from_annotated_commit(base_branch_name, &base_commit, true)
-            .context("Setting a new base branch to FETCH_HEAD's commit")?;
+            .wrap_err("Setting a new base branch to FETCH_HEAD's commit")?;
     }
 
     repo.set_head(
@@ -53,9 +53,9 @@ pub fn fetch_and_get_branches<'a>(
             .name()
             .unwrap(),
     )
-    .context("Setting HEAD to base")?;
+    .wrap_err("Setting HEAD to base")?;
 
-    let commit = match repo.find_commit(base_id).context("Finding base commit") {
+    let commit = match repo.find_commit(base_id).wrap_err("Finding base commit") {
         Ok(commit) => commit,
         Err(_) => repo.head()?.peel_to_commit()?,
     };
@@ -65,7 +65,7 @@ pub fn fetch_and_get_branches<'a>(
 
     let base_branch = repo
         .resolve_reference_from_short_name(base_branch_name)
-        .context("Getting the base reference")?;
+        .wrap_err("Getting the base reference")?;
 
     remote
         .fetch(
@@ -73,11 +73,11 @@ pub fn fetch_and_get_branches<'a>(
             Some(FetchOptions::new().prune(git2::FetchPrune::On)),
             None,
         )
-        .context("Fetching head")?;
+        .wrap_err("Fetching head")?;
 
     let fetch_head = repo
         .find_reference("FETCH_HEAD")
-        .context("Getting FETCH_HEAD")?;
+        .wrap_err("Getting FETCH_HEAD")?;
 
     let head_name = format!("mdb-pull-{base_sha}-{head_sha}");
 
@@ -87,13 +87,13 @@ pub fn fetch_and_get_branches<'a>(
             &repo.reference_to_annotated_commit(&fetch_head)?,
             true,
         )
-        .context("Creating branch")?
+        .wrap_err("Creating branch")?
         .into_reference();
 
     repo.set_head(head_branch.name().unwrap())
-        .context("Setting HEAD to head")?;
+        .wrap_err("Setting HEAD to head")?;
 
-    let head_commit = match repo.find_commit(head_id).context("Finding head commit") {
+    let head_commit = match repo.find_commit(head_id).wrap_err("Finding head commit") {
         Ok(commit) => commit,
         Err(_) => repo.head()?.peel_to_commit()?,
     };
@@ -105,16 +105,16 @@ pub fn fetch_and_get_branches<'a>(
 
     let head_branch = repo
         .resolve_reference_from_short_name(&head_name)
-        .context("Getting the head reference")?;
+        .wrap_err("Getting the head reference")?;
 
-    remote.disconnect().context("Disconnecting from remote")?;
+    remote.disconnect().wrap_err("Disconnecting from remote")?;
 
     repo.set_head(
         repo.resolve_reference_from_short_name(base_branch_name)?
             .name()
             .unwrap(),
     )
-    .context("Setting head to default branch")?;
+    .wrap_err("Setting head to default branch")?;
 
     repo.checkout_head(Some(
         CheckoutBuilder::default()
@@ -122,7 +122,7 @@ pub fn fetch_and_get_branches<'a>(
             .remove_ignored(true)
             .remove_untracked(true),
     ))
-    .context("Resetting to base commit")?;
+    .wrap_err("Resetting to base commit")?;
 
     Ok((base_branch, head_branch))
 }
@@ -133,15 +133,15 @@ pub fn clean_up_references(repo: &Repository, branch: &str) -> Result<()> {
             .name()
             .unwrap(),
     )
-    .context("Setting head")?;
+    .wrap_err("Setting head")?;
     repo.checkout_head(Some(
         CheckoutBuilder::new()
             .force()
             .remove_ignored(true)
             .remove_untracked(true),
     ))
-    .context("Checkout to head")?;
-    let mut references = repo.references().context("Getting all references")?;
+    .wrap_err("Checkout to head")?;
+    let mut references = repo.references().wrap_err("Getting all references")?;
     let references = references
         .names()
         .filter_map(move |reference| {
@@ -155,8 +155,8 @@ pub fn clean_up_references(repo: &Repository, branch: &str) -> Result<()> {
     for refname in references {
         let mut reference = repo
             .find_reference(&refname)
-            .context("Looking for ref to delete")?;
-        reference.delete().context("Deleting reference")?;
+            .wrap_err("Looking for ref to delete")?;
+        reference.delete().wrap_err("Deleting reference")?;
     }
     Ok(())
 }
@@ -177,6 +177,6 @@ pub fn with_checkout<T>(
 }
 
 pub fn clone_repo(url: &str, dir: &Path) -> Result<()> {
-    git2::Repository::clone(url, dir.as_os_str()).context("Cloning repo")?;
+    git2::Repository::clone(url, dir.as_os_str()).wrap_err("Cloning repo")?;
     Ok(())
 }
