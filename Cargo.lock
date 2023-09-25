@@ -1195,6 +1195,7 @@ version = "0.1.0"
 dependencies = [
  "actix-web",
  "async-fs",
+ "base64 0.21.4",
  "chrono",
  "derive_builder",
  "eyre",
@@ -2345,6 +2346,7 @@ dependencies = [
  "once_cell",
  "path-absolutize",
  "rayon",
+ "secrecy",
  "serde",
  "serde_json",
  "simple-eyre",

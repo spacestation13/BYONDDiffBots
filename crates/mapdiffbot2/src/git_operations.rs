@@ -1,7 +1,8 @@
 use eyre::{Context, Result};
+use secrecy::{Secret, ExposeSecret};
 use std::path::Path;
 
-use git2::{build::CheckoutBuilder, FetchOptions, Repository};
+use git2::{build::{CheckoutBuilder, RepoBuilder}, FetchOptions, Repository, RemoteCallbacks, Cred};
 
 pub fn fetch_and_get_branches<'a>(
     base_sha: &str,
@@ -9,20 +10,20 @@ pub fn fetch_and_get_branches<'a>(
     repo: &'a git2::Repository,
     head_branch_name: &str,
     base_branch_name: &str,
+    repo_token: Secret<String>,
 ) -> Result<(git2::Reference<'a>, git2::Reference<'a>)> {
     let base_id = git2::Oid::from_str(base_sha).wrap_err("Parsing base sha")?;
     let head_id = git2::Oid::from_str(head_sha).wrap_err("Parsing head sha")?;
 
     let mut remote = repo.find_remote("origin")?;
 
-    remote
-        .connect(git2::Direction::Fetch)
-        .wrap_err("Connecting to remote")?;
+    let mut fetch_options = create_fetch_options_for_token(repo_token);
+    fetch_options.prune(git2::FetchPrune::On);
 
     remote
         .fetch(
             &[base_branch_name],
-            Some(FetchOptions::new().prune(git2::FetchPrune::On)),
+            Some(&mut fetch_options),
             None,
         )
         .wrap_err("Fetching base")?;
@@ -70,7 +71,7 @@ pub fn fetch_and_get_branches<'a>(
     remote
         .fetch(
             &[head_branch_name],
-            Some(FetchOptions::new().prune(git2::FetchPrune::On)),
+            Some(&mut fetch_options),
             None,
         )
         .wrap_err("Fetching head")?;
@@ -176,7 +177,34 @@ pub fn with_checkout<T>(
     f()
 }
 
-pub fn clone_repo(url: &str, dir: &Path) -> Result<()> {
-    git2::Repository::clone(url, dir.as_os_str()).wrap_err("Cloning repo")?;
+fn create_fetch_options_for_token(repo_token: Secret<String>) -> FetchOptions<'static>{
+    let mut callbacks = RemoteCallbacks::new();
+    callbacks.credentials(move |_url, _username_from_url, _allowed_types| {
+        Cred::userpass_plaintext(repo_token.expose_secret(), "")
+    });
+
+    let mut fetch_options = git2::FetchOptions::new();
+    fetch_options.remote_callbacks(callbacks);
+    fetch_options
+}
+
+pub fn clone_repo(url: &str, dir: &Path, repo_token: Secret<String>) -> Result<()> {
+    let mut builder = RepoBuilder::new();
+    builder.fetch_options(create_fetch_options_for_token(repo_token));
+
+    builder.clone(url, dir).wrap_err("Cloning repo")?;
     Ok(())
 }
+
+/* local testing
+#[test]
+fn test_private_clone(){
+    clone_repo("https://github.com/Cyberboss/tgstation-private-test", &Path::new("S:/garbage/tgtest"), Secret::new("lol".to_string())).unwrap();
+}
+
+#[test]
+fn test_private_fetch(){
+    let repo = git2::Repository::open("S:/garbage/tgtest").unwrap();
+    fetch_and_get_branches("140c79189849ea616f09b3484f8930211d3705cd", "a34219208f6526d01d88c9fe02cc08554fe29dda", &repo, "TestPRForMDB", "master", Secret::new("lol".to_string())).unwrap();
+}
+ */

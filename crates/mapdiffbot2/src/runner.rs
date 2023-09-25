@@ -116,7 +116,7 @@ async fn job_handler(name: &str, job: Job, blob_client: Azure) {
 
     let output = actix_web::rt::time::timeout(
         Duration::from_secs(7200),
-        actix_web::rt::task::spawn_blocking(move || do_job(job, blob_client)),
+        do_job(job, blob_client),
     )
     .await;
 
@@ -135,19 +135,6 @@ async fn job_handler(name: &str, job: Job, blob_client: Azure) {
         output.unwrap()
     };
 
-    if let Err(e) = output {
-        let fuckup = match e.try_into_panic() {
-            Ok(panic) => {
-                format!("{panic:#?}")
-            }
-            Err(e) => e.to_string(),
-        };
-        tracing::error!("Join Handle error: {fuckup}");
-        let _ = check_run.mark_failed(&fuckup).await;
-        return;
-    }
-
-    let output = output.unwrap();
     if let Err(e) = output {
         let fuckup = format!("{e:?}");
         tracing::error!("Other rendering error: {fuckup}");

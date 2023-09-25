@@ -1,14 +1,12 @@
 use crate::github::github_types::{
     CreateCheckRun, Output, RawCheckRun, Repository, UpdateCheckRunBuilder,
 };
-use async_fs::File;
 use eyre::{format_err, Context, Result};
-use futures_lite::io::AsyncWriteExt;
 use octocrab::models::repos::Content;
 use octocrab::models::InstallationId;
 use serde::{Deserialize, Serialize};
-use std::path::PathBuf;
 use std::{future::Future, pin::Pin};
+use base64::{Engine as _, engine::general_purpose};
 
 pub struct GithubEvent(pub String, pub Option<Vec<u8>>);
 
@@ -207,8 +205,6 @@ impl CheckRun {
     }
 }
 
-static DOWNLOAD_DIR: &str = "download";
-
 async fn find_content<S: AsRef<str>>(
     installation: &InstallationId,
     repo: &Repository,
@@ -244,34 +240,57 @@ pub async fn download_url<S: AsRef<str>>(
 ) -> Result<Vec<u8>> {
     let target = find_content(installation, repo, filename, commit).await?;
 
-    let download_url = target
-        .download_url
-        .as_ref()
-        .ok_or_else(|| format_err!("No download URL given by GitHub"))?;
+    let content = target.content
+        .ok_or_else(|| format_err!("File had no content!"))?
+        .replace("\n", "");
 
-    let response = reqwest::get(download_url).await?;
-
-    Ok(response.bytes().await?.to_vec())
+    general_purpose::STANDARD
+        .decode(content)
+        .map_err(|decode_error| format_err!("DecodeError: {}", decode_error))
 }
 
-pub async fn download_file<S: AsRef<str>>(
-    installation: &InstallationId,
-    repo: &Repository,
-    filename: S,
-    commit: S,
-) -> Result<PathBuf> {
-    let target = find_content(installation, repo, &filename, &commit).await?;
+/* local test requires commenting out the .installation(...) call in find_content(), a valid github token with access, and the following dep: actix-rt = "2.9.0"
 
-    let mut path = PathBuf::new();
-    path.push(".");
-    path.push(DOWNLOAD_DIR);
-    path.push(&target.sha);
-    path.set_extension("dmi"); // Method should have an IDB qualifier due to being a shared crate
+#[actix_web::rt::test]
+async fn test_private_repo_file_download() {
+    octocrab::initialise(octocrab::OctocrabBuilder::new()
+        .personal_token("lol".to_owned())
+        .build()
+        .unwrap());
 
-    async_fs::create_dir_all(path.parent().unwrap()).await?;
-    let mut file = File::create(&path).await?;
+    let bytes = download_url(
+        &InstallationId(0),
+        &Repository{
+        url: "https://api.github.com/repos/Cyberboss/tgstation-private-test".to_owned(),
+        id:0,
+    }, ".tgs.yml", "140c79189849ea616f09b3484f8930211d3705cd").await.unwrap();
 
-    let data = download_url(installation, repo, &filename, &commit).await?;
-    file.write_all(&data).await?;
-    Ok(path)
+    let text = std::str::from_utf8(bytes.as_slice()).unwrap();
+    assert_eq!(r#"# This file is used by TGS (https://github.com/tgstation/tgstation-server) clients to quickly initialize a server instance for the codebase
+# The format isn't documented anywhere but hopefully we never have to change it. If there are questions, contact the TGS maintainer Cyberboss/@Dominion#0444
+version: 1
+# The BYOND version to use (kept in sync with dependencies.sh by the "TGS Test Suite" CI job)
+# Must be interpreted as a string, keep quoted
+byond: "514.1588"
+# Folders to create in "<instance_path>/Configuration/GameStaticFiles/"
+static_files:
+  # Config directory should be static
+  - name: config
+    # This implies the folder should be pre-populated with contents from the repo
+    populate: true
+  # Data directory must be static
+  - name: data
+# String dictionary. The value is the location of the file in the repo to upload to TGS. The key is the name of the file to upload to "<instance_path>/Configuration/EventScripts/"
+# This one is for Linux hosted servers
+linux_scripts:
+  PreCompile.sh: tools/tgs_scripts/PreCompile.sh
+  WatchdogLaunch.sh: tools/tgs_scripts/WatchdogLaunch.sh
+  InstallDeps.sh: tools/tgs_scripts/InstallDeps.sh
+# Same as above for Windows hosted servers
+windows_scripts:
+  PreCompile.bat: tools/tgs_scripts/PreCompile.bat
+# The security level the game should be run at
+security: Trusted
+"#, text)
 }
+*/
