@@ -356,7 +356,7 @@ pub fn do_job(job: Job, blob_client: Azure) -> Result<CheckOutputs> {
                     summary: "The repository is being cloned, this will take a few minutes. Future runs will not require cloning.".to_owned(),
                     text: "".to_owned(),
                 };
-                let _ = job.check_run.set_output(output).await; // we don't really care if updating the job fails, just continue
+                _ = job.check_run.set_output(output).await; // we don't really care if updating the job fails, just continue
             });
         clone_repo(&repo, &repo_dir).wrap_err("Cloning repo")?;
     }

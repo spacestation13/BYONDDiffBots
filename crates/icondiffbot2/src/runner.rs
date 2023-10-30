@@ -26,7 +26,7 @@ async fn job_handler(name: &str, job: Job) {
         check_run.id()
     );
 
-    let _ = check_run.mark_started().await;
+    _ = check_run.mark_started().await;
 
     let output = actix_web::rt::time::timeout(
         Duration::from_secs(7200),
@@ -43,7 +43,7 @@ async fn job_handler(name: &str, job: Job) {
     let output = {
         if output.is_err() {
             tracing::error!("Job timed out!");
-            let _ = check_run.mark_failed("Job timed out after 1 hours!").await;
+            _ = check_run.mark_failed("Job timed out after 1 hours!").await;
             return;
         }
         output.unwrap()
@@ -57,7 +57,7 @@ async fn job_handler(name: &str, job: Job) {
             Err(e) => e.to_string(),
         };
         tracing::error!("Join Handle error: {fuckup}");
-        let _ = check_run.mark_failed(&fuckup).await;
+        _ = check_run.mark_failed(&fuckup).await;
         return;
     }
 
@@ -65,7 +65,7 @@ async fn job_handler(name: &str, job: Job) {
     if let Err(e) = output {
         let fuckup = format!("{e:?}");
         tracing::error!("Other rendering error: {fuckup}");
-        let _ = check_run.mark_failed(&fuckup).await;
+        _ = check_run.mark_failed(&fuckup).await;
         return;
     }
 
