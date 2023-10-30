@@ -32,12 +32,11 @@ pub fn do_job(job: Job) -> Result<CheckOutputs> {
                 dmi,
             )
         })
-        .map(|(file, dmi)| -> Result<()> {
+        .try_for_each(|(file, dmi)| -> Result<()> {
             let states = render(&job, file?)?;
             map.insert(dmi.filename.as_str(), states);
             Ok(())
-        })
-        .collect::<Result<()>>()?;
+        })?;
 
     map.build()
 }
@@ -122,26 +121,24 @@ fn render(
                 .metadata
                 .states
                 .iter()
-                .map(|(name, vec)| {
+                .flat_map(|(name, vec)| {
                     vec.iter()
                         .enumerate()
                         .map(|(duplication_index, _)| (duplication_index, name.as_str()))
                         .collect::<Vec<_>>()
                 })
-                .flatten()
                 .collect();
             let after_states: HashSet<(usize, &str), ahash::RandomState> = after
                 .icon
                 .metadata
                 .states
                 .iter()
-                .map(|(name, vec)| {
+                .flat_map(|(name, vec)| {
                     vec.iter()
                         .enumerate()
                         .map(|(duplication_index, _)| (duplication_index, name.as_str()))
                         .collect::<Vec<_>>()
                 })
-                .flatten()
                 .collect();
 
             let prefix = format!("{}/{}", job.installation, job.pull_request);

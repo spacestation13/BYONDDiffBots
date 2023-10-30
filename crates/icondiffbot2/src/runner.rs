@@ -76,6 +76,5 @@ async fn job_handler(name: &str, job: Job) {
         _ = check_run
             .mark_failed(&format!("Failed to upload job output: {fuckup}"))
             .await;
-        return;
     };
 }
