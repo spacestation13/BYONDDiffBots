@@ -13,6 +13,8 @@ use mysql_async::prelude::Queryable;
 use once_cell::sync::OnceCell;
 use serde::Deserialize;
 
+use diffbot_lib::async_fs;
+
 #[cfg(not(target_env = "msvc"))]
 #[global_allocator]
 static GLOBAL: tikv_jemallocator::Jemalloc = tikv_jemallocator::Jemalloc;
@@ -142,6 +144,8 @@ async fn main() -> eyre::Result<()> {
             .build()
             .expect("fucked up octocrab"),
     );
+
+    async_fs::create_dir_all("./images").await.unwrap();
 
     let (job_sender, job_receiver) = flume::unbounded();
 
