@@ -1,6 +1,6 @@
 use eyre::{Context, Result};
 use path_absolutize::Absolutize;
-use secrecy::Secret;
+use secrecy::ExposeSecret;
 use std::path::Path;
 use std::path::PathBuf;
 
@@ -40,7 +40,6 @@ fn render(
     (repo, base_branch_name): (&git2::Repository, &str),
     (repo_dir, out_dir, blob_client): (&Path, &Path, Azure),
     pull_request_number: u64,
-    repo_token: Secret<String>,
     // feel like this is a bit of a hack but it works for now
 ) -> Result<RenderedMaps> {
     tracing::debug!(
@@ -53,7 +52,7 @@ fn render(
     let head_branch = format!("pull/{pull_request_number}/head:{pull_branch}");
 
     let (base_branch, head_branch) =
-        fetch_and_get_branches(&base.sha, &head.sha, repo, &head_branch, base_branch_name, repo_token)
+        fetch_and_get_branches(&base.sha, &head.sha, repo, &head_branch, base_branch_name)
             .wrap_err("Fetching and constructing diffs")?;
 
     let path = repo_dir
@@ -349,10 +348,11 @@ pub fn do_job(job: Job, blob_client: Azure) -> Result<CheckOutputs> {
     let (_, secret_token) = handle.block_on(octocrab::instance()
         .installation_and_token(job.installation))?;
 
-    let repo = format!("https://github.com/{}", job.repo.full_name());
     let repo_dir: PathBuf = ["./repos/", &job.repo.full_name()].iter().collect();
 
-    if !repo_dir.exists() {
+    let url = format!("https://x-access-token:{}@github.com/{}", secret_token.expose_secret(), job.repo.full_name());
+    let clone_required = !repo_dir.exists();
+    if clone_required {
         tracing::debug!("Directory {:?} doesn't exist, creating dir", repo_dir);
         std::fs::create_dir_all(&repo_dir)?;
         handle.block_on(async {
@@ -363,7 +363,7 @@ pub fn do_job(job: Job, blob_client: Azure) -> Result<CheckOutputs> {
                 };
                 let _ = job.check_run.set_output(output).await; // we don't really care if updating the job fails, just continue
             });
-        clone_repo(&repo, &repo_dir, secret_token.clone()).wrap_err("Cloning repo")?;
+        clone_repo(&url, &repo_dir).wrap_err("Cloning repo")?;
     }
 
     let non_abs_directory: PathBuf = [
@@ -397,6 +397,10 @@ pub fn do_job(job: Job, blob_client: Azure) -> Result<CheckOutputs> {
 
     let repository = git2::Repository::open(&repo_dir).wrap_err("Opening repository")?;
 
+    if !clone_required {
+        repository.remote_set_url("origin", &url)?;
+    }
+
     let mut remote = repository.find_remote("origin")?;
 
     remote
@@ -417,8 +421,7 @@ pub fn do_job(job: Job, blob_client: Azure) -> Result<CheckOutputs> {
         (&added_files, &modified_files, &removed_files),
         (&repository, &job.base.r#ref),
         (&repo_dir, output_directory, blob_client),
-        job.pull_request,
-        secret_token,
+        job.pull_request
     )
     .wrap_err("")
     {
