@@ -333,7 +333,7 @@ fn generate_finished_output<P: AsRef<Path>>(
     Ok(builder.build())
 }
 
-pub async fn do_job(job: Job, blob_client: Azure) -> Result<CheckOutputs> {
+pub fn do_job(job: Job, blob_client: Azure) -> Result<CheckOutputs> {
     tracing::debug!(
         "Starting Job on repo: {}, pr number: {}, base commit: {}, head commit: {}",
         job.repo.full_name(),
@@ -345,14 +345,12 @@ pub async fn do_job(job: Job, blob_client: Azure) -> Result<CheckOutputs> {
     let base = &job.base;
     let head = &job.head;
 
-    let (_, secret_token) = octocrab::instance()
-        .installation_and_token(job.installation)
-        .await?;
+    let handle = actix_web::rt::Runtime::new()?;
+    let (_, secret_token) = handle.block_on(octocrab::instance()
+        .installation_and_token(job.installation))?;
 
     let repo = format!("https://github.com/{}", job.repo.full_name());
     let repo_dir: PathBuf = ["./repos/", &job.repo.full_name()].iter().collect();
-
-    let handle = actix_web::rt::Runtime::new()?;
 
     if !repo_dir.exists() {
         tracing::debug!("Directory {:?} doesn't exist, creating dir", repo_dir);
