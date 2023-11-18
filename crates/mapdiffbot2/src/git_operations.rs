@@ -21,11 +21,11 @@ pub fn fetch_and_get_branches<'a>(
 
     remote
         .fetch(
-            &[base_branch_name],
+            &[base_branch_name, head_branch_name],
             Some(FetchOptions::new().prune(git2::FetchPrune::On)),
             None,
         )
-        .wrap_err("Fetching base")?;
+        .wrap_err("Fetching base and head")?;
     let fetch_head = repo
         .find_reference("FETCH_HEAD")
         .wrap_err("Getting FETCH_HEAD")?;
@@ -66,14 +66,6 @@ pub fn fetch_and_get_branches<'a>(
     let base_branch = repo
         .resolve_reference_from_short_name(base_branch_name)
         .wrap_err("Getting the base reference")?;
-
-    remote
-        .fetch(
-            &[head_branch_name],
-            Some(FetchOptions::new().prune(git2::FetchPrune::On)),
-            None,
-        )
-        .wrap_err("Fetching head")?;
 
     let fetch_head = repo
         .find_reference("FETCH_HEAD")
