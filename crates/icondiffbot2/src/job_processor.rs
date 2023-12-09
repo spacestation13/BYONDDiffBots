@@ -17,7 +17,7 @@ use std::{
 };
 
 #[tracing::instrument]
-pub fn do_job(job: Job) -> Result<CheckOutputs> {
+pub fn do_job(job: Job, client: reqwest::Client) -> Result<CheckOutputs> {
     let handle = actix_web::rt::Runtime::new()?;
 
     handle.block_on(async { job.check_run.mark_started().await })?;
@@ -28,18 +28,37 @@ pub fn do_job(job: Job) -> Result<CheckOutputs> {
         .iter()
         .map(|dmi| {
             (
-                sha_to_iconfile(&job, &dmi.filename, status_to_sha(&job, &dmi.status)),
+                sha_to_iconfile(
+                    &job,
+                    &dmi.filename,
+                    status_to_sha(&job, &dmi.status),
+                    client.clone(),
+                ),
                 dmi,
             )
         })
-        .map(|(file, dmi)| -> Result<()> {
+        .try_for_each(|(file, dmi)| -> Result<()> {
             let states = render(&job, file?)?;
             map.insert(dmi.filename.as_str(), states);
             Ok(())
-        })
-        .collect::<Result<()>>()?;
+        })?;
 
     map.build()
+}
+
+fn is_state_different(first_state: &State, second_state: &State) -> bool {
+    if first_state.r#loop != second_state.r#loop
+        || first_state.movement != second_state.movement
+        || first_state.rewind != second_state.rewind
+        || first_state.dirs != second_state.dirs
+        || first_state.frames != second_state.frames
+        || first_state.hotspot != second_state.hotspot
+        || first_state.name != second_state.name
+    {
+        true
+    } else {
+        false
+    }
 }
 
 #[tracing::instrument]
@@ -122,26 +141,24 @@ fn render(
                 .metadata
                 .states
                 .iter()
-                .map(|(name, vec)| {
+                .flat_map(|(name, vec)| {
                     vec.iter()
                         .enumerate()
                         .map(|(duplication_index, _)| (duplication_index, name.as_str()))
                         .collect::<Vec<_>>()
                 })
-                .flatten()
                 .collect();
             let after_states: HashSet<(usize, &str), ahash::RandomState> = after
                 .icon
                 .metadata
                 .states
                 .iter()
-                .map(|(name, vec)| {
+                .flat_map(|(name, vec)| {
                     vec.iter()
                         .enumerate()
                         .map(|(duplication_index, _)| (duplication_index, name.as_str()))
                         .collect::<Vec<_>>()
                 })
-                .flatten()
                 .collect();
 
             let prefix = format!("{}/{}", job.installation, job.pull_request);
@@ -220,7 +237,7 @@ fn render(
                         let difference = {
                             // #[cfg(debug_assertions)]
                             // dbg!(before_state, after_state);
-                            if before_state.1 != after_state.1 {
+                            if is_state_different(before_state.1, after_state.1) {
                                 true
                             } else {
                                 let before_state_render =

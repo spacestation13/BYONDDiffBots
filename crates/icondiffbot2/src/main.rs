@@ -1,3 +1,4 @@
+mod downloading;
 mod github_processor;
 mod job_processor;
 mod runner;
@@ -151,6 +152,7 @@ async fn main() -> eyre::Result<()> {
             .build()
             .expect("fucked up octocrab"),
     );
+    let reqwest_client = reqwest::Client::new();
 
     async_fs::create_dir_all("./images").await.unwrap();
 
@@ -178,7 +180,11 @@ async fn main() -> eyre::Result<()> {
         .await?;
     }
 
-    actix_web::rt::spawn(runner::handle_jobs("IconDiffBot2", job_receiver));
+    actix_web::rt::spawn(runner::handle_jobs(
+        "IconDiffBot2",
+        job_receiver,
+        reqwest_client,
+    ));
 
     let job_sender: DataJobSender = actix_web::web::Data::new(job_sender);
 
