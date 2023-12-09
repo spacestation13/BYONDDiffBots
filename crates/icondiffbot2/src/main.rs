@@ -11,8 +11,8 @@ use diffbot_lib::{
 };
 use mysql_async::prelude::Queryable;
 use octocrab::OctocrabBuilder;
-use once_cell::sync::OnceCell;
 use serde::Deserialize;
+use std::sync::OnceLock;
 use std::{
     fs::File,
     io::Read,
@@ -74,7 +74,7 @@ fn default_log_level() -> String {
     "info".to_string()
 }
 
-static CONFIG: OnceCell<Config> = OnceCell::new();
+static CONFIG: OnceLock<Config> = OnceLock::new();
 // static FLAME_LAYER_GUARD: OnceCell<tracing_flame::FlushGuard<std::io::BufWriter<File>>> =
 // OnceCell::new();
 

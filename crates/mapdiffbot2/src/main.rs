@@ -10,8 +10,8 @@ use std::io::Read;
 use std::path::PathBuf;
 
 use mysql_async::prelude::Queryable;
-use once_cell::sync::OnceCell;
 use serde::Deserialize;
+use std::sync::OnceLock;
 
 #[cfg(not(target_env = "msvc"))]
 #[global_allocator]
@@ -83,7 +83,7 @@ fn default_log_level() -> String {
     "info".to_string()
 }
 
-static CONFIG: OnceCell<Config> = OnceCell::new();
+static CONFIG: OnceLock<Config> = OnceLock::new();
 
 fn read_key(path: PathBuf) -> Vec<u8> {
     let mut key_file =
