@@ -46,21 +46,6 @@ pub fn do_job(job: Job, client: reqwest::Client) -> Result<CheckOutputs> {
     map.build()
 }
 
-fn is_state_different(first_state: &State, second_state: &State) -> bool {
-    if first_state.r#loop != second_state.r#loop
-        || first_state.movement != second_state.movement
-        || first_state.rewind != second_state.rewind
-        || first_state.dirs != second_state.dirs
-        || first_state.frames != second_state.frames
-        || first_state.hotspot != second_state.hotspot
-        || first_state.name != second_state.name
-    {
-        true
-    } else {
-        false
-    }
-}
-
 #[tracing::instrument]
 fn render(
     job: &Job,
@@ -237,7 +222,7 @@ fn render(
                         let difference = {
                             // #[cfg(debug_assertions)]
                             // dbg!(before_state, after_state);
-                            if is_state_different(before_state.1, after_state.1) {
+                            if before_state.1 != after_state.1 {
                                 true
                             } else {
                                 let before_state_render =
