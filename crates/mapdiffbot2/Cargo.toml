@@ -15,7 +15,7 @@ dreammaker = { git = "https://github.com/jupyterkat/SpacemanDMM/" }
 ahash = "0.8.6"
 path-absolutize = "3.1.1"
 jsonwebtoken = "9.2.0"
-eyre = "0.6.10"
+eyre = "0.6.11"
 simple-eyre = "0.3.1"
 rayon = "1.8.0"
 image = "0.24.7"
@@ -29,7 +29,7 @@ tracing-loki = "0.2.4"
 flume = "0.11.0"
 object_store = { version = "0.8.0", features = ["azure"] }
 mysql_async = "0.33.0"
-time = "0.3.30"
+time = "0.3.31"
 secrecy = "0.8.0"
 
 actix-web = "4.4.0"
