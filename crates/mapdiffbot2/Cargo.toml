@@ -6,13 +6,13 @@ license = "MIT"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-serde = { version = "1.0.193", features = ["derive"] }
-serde_json = { version = "1.0.108" }
+serde = { version = "1.0.194", features = ["derive"] }
+serde_json = { version = "1.0.110" }
 toml = "0.8.8"
 octocrab = "0.32.0"
 dmm-tools = { git = "https://github.com/jupyterkat/SpacemanDMM/" }
 dreammaker = { git = "https://github.com/jupyterkat/SpacemanDMM/" }
-ahash = "0.8.6"
+ahash = "0.8.7"
 path-absolutize = "3.1.1"
 jsonwebtoken = "9.2.0"
 eyre = "0.6.11"
@@ -32,7 +32,7 @@ mysql_async = "0.33.0"
 time = "0.3.31"
 secrecy = "0.8.0"
 
-actix-web = "4.4.0"
+actix-web = "4.4.1"
 actix-files = "0.6.2"
 
 [target.'cfg(not(target_env = "msvc"))'.dependencies]
