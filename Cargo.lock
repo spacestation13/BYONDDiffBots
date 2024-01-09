@@ -758,7 +758,7 @@ dependencies = [
 [[package]]
 name = "builtins-proc-macro"
 version = "0.0.0"
-source = "git+https://github.com/jupyterkat/SpacemanDMM/#261065af6e8d6a32b6f2edb4ebf53b216ea13b0f"
+source = "git+https://github.com/jupyterkat/SpacemanDMM/#06a670f953940d1e4c22ccc8d5a7af6801706fab"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -1336,7 +1336,7 @@ dependencies = [
 [[package]]
 name = "dmm-tools"
 version = "0.1.0"
-source = "git+https://github.com/jupyterkat/SpacemanDMM/#261065af6e8d6a32b6f2edb4ebf53b216ea13b0f"
+source = "git+https://github.com/jupyterkat/SpacemanDMM/#06a670f953940d1e4c22ccc8d5a7af6801706fab"
 dependencies = [
  "ahash 0.8.7",
  "bytemuck",
@@ -1363,7 +1363,7 @@ checksum = "fea41bba32d969b513997752735605054bc0dfa92b4c56bf1189f2e174be7a10"
 [[package]]
 name = "dreammaker"
 version = "0.1.0"
-source = "git+https://github.com/jupyterkat/SpacemanDMM/#261065af6e8d6a32b6f2edb4ebf53b216ea13b0f"
+source = "git+https://github.com/jupyterkat/SpacemanDMM/#06a670f953940d1e4c22ccc8d5a7af6801706fab"
 dependencies = [
  "ahash 0.8.7",
  "bitflags 2.4.1",
@@ -2157,7 +2157,7 @@ checksum = "71dd52191aae121e8611f1e8dc3e324dd0dd1dee1e6dd91d10ee07a3cfb4d9d8"
 [[package]]
 name = "interval-tree"
 version = "0.8.0"
-source = "git+https://github.com/jupyterkat/SpacemanDMM/#261065af6e8d6a32b6f2edb4ebf53b216ea13b0f"
+source = "git+https://github.com/jupyterkat/SpacemanDMM/#06a670f953940d1e4c22ccc8d5a7af6801706fab"
 
 [[package]]
 name = "io-lifetimes"
@@ -4259,7 +4259,7 @@ dependencies = [
 [[package]]
 name = "tinydmi"
 version = "0.1.0"
-source = "git+https://github.com/jupyterkat/SpacemanDMM/#261065af6e8d6a32b6f2edb4ebf53b216ea13b0f"
+source = "git+https://github.com/jupyterkat/SpacemanDMM/#06a670f953940d1e4c22ccc8d5a7af6801706fab"
 dependencies = [
  "ahash 0.8.7",
  "eyre",
