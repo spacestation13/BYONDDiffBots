@@ -134,7 +134,7 @@ fn render(
                 k.clone(),
                 (
                     v,
-                    head_maps.remove(&k).expect(
+                    head_maps.shift_remove(&k).expect(
                         "head maps has maps that isn't inside base maps on modified comparison",
                     ),
                 ),
@@ -345,12 +345,16 @@ pub fn do_job(job: Job, blob_client: Azure) -> Result<CheckOutputs> {
     let head = &job.head;
 
     let handle = actix_web::rt::Runtime::new()?;
-    let (_, secret_token) = handle.block_on(octocrab::instance()
-        .installation_and_token(job.installation))?;
+    let (_, secret_token) =
+        handle.block_on(octocrab::instance().installation_and_token(job.installation))?;
 
     let repo_dir: PathBuf = ["./repos/", &job.repo.full_name()].iter().collect();
 
-    let url = format!("https://x-access-token:{}@github.com/{}", secret_token.expose_secret(), job.repo.full_name());
+    let url = format!(
+        "https://x-access-token:{}@github.com/{}",
+        secret_token.expose_secret(),
+        job.repo.full_name()
+    );
     let clone_required = !repo_dir.exists();
     if clone_required {
         tracing::debug!("Directory {:?} doesn't exist, creating dir", repo_dir);
@@ -421,7 +425,7 @@ pub fn do_job(job: Job, blob_client: Azure) -> Result<CheckOutputs> {
         (&added_files, &modified_files, &removed_files),
         (&repository, &job.base.r#ref),
         (&repo_dir, output_directory, blob_client),
-        job.pull_request
+        job.pull_request,
     )
     .wrap_err("")
     {
