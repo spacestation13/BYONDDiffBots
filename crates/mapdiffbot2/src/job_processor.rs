@@ -1,6 +1,7 @@
 use eyre::{Context, Result};
 use path_absolutize::Absolutize;
 use secrecy::ExposeSecret;
+use std::io::Read;
 use std::path::Path;
 use std::path::PathBuf;
 
@@ -26,11 +27,18 @@ use diffbot_lib::{
 use super::Azure;
 
 use rayon::prelude::*;
+use serde::Deserialize;
 
 struct RenderedMaps {
     added_maps: Vec<(String, MapWithRegions)>,
     removed_maps: Vec<(String, MapWithRegions)>,
     modified_maps: MapsWithRegions,
+}
+
+#[derive(Deserialize)]
+struct MapConfig {
+    include_pass: String,
+    exclude_pass: String,
 }
 
 fn render(
@@ -65,16 +73,28 @@ fn render(
     let head_context = with_checkout(&head_branch, repo, || RenderingContext::new(&path))
         .wrap_err("Parsing head")?;
 
+    let config = with_checkout(&head_branch, repo, || {
+        let config_path = path.to_path_buf().join("mapdiff.toml");
+        let mut config_str = String::new();
+        std::fs::File::open(config_path)?.read_to_string(&mut config_str)?;
+        let config: MapConfig = toml::from_str(&config_str)?;
+        Ok(config)
+    })
+    .unwrap_or_else(|_| MapConfig {
+        include_pass: "".to_owned(),
+        exclude_pass: "hide-space,hide-invisible,random".to_owned(),
+    });
+
     let base_render_passes = dmm_tools::render_passes::configure(
         base_context.map_config(),
-        "",
-        "hide-space,hide-invisible,random",
+        &config.include_pass,
+        &config.exclude_pass,
     );
 
     let head_render_passes = dmm_tools::render_passes::configure(
         head_context.map_config(),
-        "",
-        "hide-space,hide-invisible,random",
+        &config.include_pass,
+        &config.exclude_pass,
     );
 
     //do removed maps
