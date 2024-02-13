@@ -96,7 +96,7 @@ fn read_key(path: PathBuf) -> Vec<u8> {
         File::open(&path).unwrap_or_else(|_| panic!("Unable to find file {}", path.display()));
 
     let mut key = Vec::new();
-    let _ = key_file
+    _ = key_file
         .read_to_end(&mut key)
         .unwrap_or_else(|_| panic!("Failed to read key {}", path.display()));
 
