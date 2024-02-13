@@ -65,6 +65,8 @@ pub struct Config {
     pub blacklist_contact: String,
     #[serde(default = "default_log_level")]
     pub logging: String,
+    #[serde(default = "default_msg")]
+    pub summary_msg: String,
     pub secret: Option<String>,
     pub db_url: Option<String>,
     pub grafana_loki: Option<GrafanaLoki>,
@@ -72,6 +74,10 @@ pub struct Config {
 
 fn default_log_level() -> String {
     "info".to_string()
+}
+
+fn default_msg() -> String {
+    "*Please file any issues [here](https://github.com/spacestation13/BYONDDiffBots/issues).*\n\nIcons with diff:".to_string()
 }
 
 static CONFIG: OnceLock<Config> = OnceLock::new();
@@ -86,6 +92,10 @@ fn init_config(path: &Path) -> eyre::Result<&'static Config> {
 
     CONFIG.set(config).expect("Failed to set config");
     Ok(CONFIG.get().unwrap())
+}
+
+fn read_config() -> &'static Config {
+    CONFIG.get().unwrap()
 }
 
 // fn init_global_subscriber() {

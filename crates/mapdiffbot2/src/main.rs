@@ -69,6 +69,8 @@ pub struct Config {
     pub gc_schedule: String,
     #[serde(default = "default_log_level")]
     pub logging: String,
+    #[serde(default = "default_msg")]
+    pub summary_msg: String,
     pub secret: Option<String>,
     pub db_url: Option<String>,
     pub azure_blobs: Option<AzureBlobs>,
@@ -81,6 +83,10 @@ fn default_schedule() -> String {
 
 fn default_log_level() -> String {
     "info".to_string()
+}
+
+fn default_msg() -> String {
+    "*Please file any issues [here](https://github.com/spacestation13/BYONDDiffBots/issues).*\n\n*Github may fail to render some images, appearing as cropped on large map changes. Please use the raw links in this case.*\n\nMaps with diff:".to_string()
 }
 
 static CONFIG: OnceLock<Config> = OnceLock::new();
@@ -105,6 +111,10 @@ fn init_config(path: &std::path::Path) -> eyre::Result<&'static Config> {
 
     CONFIG.set(config).expect("Failed to set config");
     Ok(CONFIG.get().unwrap())
+}
+
+fn read_config() -> &'static Config {
+    CONFIG.get().unwrap()
 }
 
 type Azure = Option<std::sync::Arc<object_store::azure::MicrosoftAzure>>;

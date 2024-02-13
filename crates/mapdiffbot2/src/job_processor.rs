@@ -238,10 +238,7 @@ fn generate_finished_output<P: AsRef<Path>>(
         .to_string()
         .replace('\\', "/");
 
-    let mut builder = CheckOutputBuilder::new(
-    "Map renderings",
-    "*Please file any issues [here](https://github.com/spacestation13/BYONDDiffBots/issues).*\n\n*Github may fail to render some images, appearing as cropped on large map changes. Please use the raw links in this case.*\n\nMaps with diff:",
-    );
+    let mut builder = CheckOutputBuilder::new("Map renderings", &crate::read_config().summary_msg);
 
     let link_base = format!("{file_url}/{non_abs_directory}");
 
