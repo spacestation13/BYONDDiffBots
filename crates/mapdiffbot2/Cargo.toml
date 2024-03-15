@@ -6,28 +6,28 @@ license = "MIT"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-serde = { version = "1.0.196", features = ["derive"] }
-serde_json = { version = "1.0.113" }
-toml = "0.8.10"
-octocrab = "0.34.1"
+serde = { version = "1.0.197", features = ["derive"] }
+serde_json = { version = "1.0.114" }
+toml = "0.8.11"
+octocrab = "0.35.0"
 dmm-tools = { git = "https://github.com/jupyterkat/SpacemanDMM/" }
 dreammaker = { git = "https://github.com/jupyterkat/SpacemanDMM/" }
-ahash = "0.8.8"
+ahash = "0.8.11"
 path-absolutize = "3.1.1"
 jsonwebtoken = "9.2.0"
 eyre = "0.6.12"
 simple-eyre = "0.3.1"
-rayon = "1.8.1"
-image = "0.24.8"
+rayon = "1.9.0"
+image = "0.25.0"
 diffbot_lib = { path = "../diffbot_lib" }
 git2 = "0.18.2"
-walkdir = "2.4.0"
+walkdir = "2.5.0"
 delay_timer = "0.11.5"
 itertools = "0.12.1"
-indexmap = { version = "2.2.3", features = ["rayon"] }
+indexmap = { version = "2.2.5", features = ["rayon"] }
 tracing-loki = "0.2.4"
 flume = "0.11.0"
-object_store = { version = "0.9.0", features = ["azure"] }
+object_store = { version = "0.9.1", features = ["azure"] }
 mysql_async = "0.33.0"
 time = "0.3.34"
 secrecy = "0.8.0"

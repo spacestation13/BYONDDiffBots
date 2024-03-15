@@ -6,18 +6,18 @@ license = "MIT"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-serde = { version = "1.0.196", features = ["derive"] }
-serde_json = "1.0.113"
-octocrab = "0.34.1"
+serde = { version = "1.0.197", features = ["derive"] }
+serde_json = "1.0.114"
+octocrab = "0.35.0"
 dmm-tools = { git = "https://github.com/jupyterkat/SpacemanDMM/" }
 jsonwebtoken = "9.2.0"
-reqwest = "0.11.24"
+reqwest = "0.11.26"
 diffbot_lib = { path = "../diffbot_lib" }
 eyre = "0.6.12"
 simple-eyre = "0.3.1"
-rayon = "1.8.1"
-toml = "0.8.10"
-ahash = "0.8.8"
+rayon = "1.9.0"
+toml = "0.8.11"
+ahash = "0.8.11"
 hashbrown = { version = "0.14.3", features = ["rayon"] }
 tracing-loki = "0.2.4"
 flume = "0.11.0"
