@@ -26,6 +26,9 @@ pub fn fetch_and_get_branches<'a>(
             None,
         )
         .wrap_err("Fetching base and head")?;
+
+    remote.disconnect().wrap_err("Disconnecting from remote")?;
+
     let fetch_head = repo
         .find_reference("FETCH_HEAD")
         .wrap_err("Getting FETCH_HEAD")?;
@@ -95,11 +98,60 @@ pub fn fetch_and_get_branches<'a>(
         "Setting head branch to the correct commit",
     )?;
 
+    let mut head_branch = repo
+        .resolve_reference_from_short_name(&head_name)
+        .wrap_err("Getting the head reference")?;
+
+    //do some merge action
+
+    if let Err(e) = repo
+        .merge(
+            &[
+                &repo.reference_to_annotated_commit(&head_branch)?,
+                &repo.reference_to_annotated_commit(&base_branch)?,
+            ],
+            Some(git2::MergeOptions::default().fail_on_conflict(true)),
+            Some(
+                CheckoutBuilder::default()
+                    .force()
+                    .remove_ignored(true)
+                    .remove_untracked(true),
+            ),
+        )
+        .wrap_err("Trying to merge base into head")
+    {
+        repo.cleanup_state()?;
+        repo.checkout_head(Some(
+            CheckoutBuilder::default()
+                .force()
+                .remove_ignored(true)
+                .remove_untracked(true),
+        ))
+        .wrap_err("Resetting to base commit")?;
+        return Err(e);
+    };
+
+    let treeoid = repo.index()?.write_tree()?;
+
+    let destination_commit = repo.head()?.peel_to_commit()?;
+
+    let merge_commit = repo.commit(
+        Some("HEAD"),
+        &head_commit.author(),
+        &head_commit.author(),
+        "MAPDIFFBOT: MERGING BASE INTO HEAD",
+        &repo.find_tree(treeoid)?,
+        &[&head_commit, &destination_commit],
+    )?;
+    repo.cleanup_state()?;
+
+    head_branch.set_target(merge_commit, "Setting head to the merge commit")?;
+
     let head_branch = repo
         .resolve_reference_from_short_name(&head_name)
         .wrap_err("Getting the head reference")?;
 
-    remote.disconnect().wrap_err("Disconnecting from remote")?;
+    //reset back to default branch
 
     repo.set_head(
         repo.resolve_reference_from_short_name(base_branch_name)?

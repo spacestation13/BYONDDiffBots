@@ -18,7 +18,7 @@ jsonwebtoken = "9.2.0"
 eyre = "0.6.12"
 simple-eyre = "0.3.1"
 rayon = "1.9.0"
-image = "0.25.0"
+image = "0.24.8"
 diffbot_lib = { path = "../diffbot_lib" }
 git2 = "0.18.2"
 walkdir = "2.5.0"
