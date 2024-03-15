@@ -532,7 +532,11 @@ fn write_to_azure<P: AsRef<Path>>(
     let blob_client = client.clone();
 
     handle
-        .block_on(blob_client.put(&path, compressed_image.to_owned().into()))
+        .block_on(async {
+            blob_client
+                .put(&path, compressed_image.to_owned().into())
+                .await
+        })
         .wrap_err("Failed to put a block blob into azure")?;
     Ok(())
 }

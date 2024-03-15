@@ -74,8 +74,8 @@ impl<'a> OutputTableBuilder<'a> {
             if current_output_text.len() + diff_block.len() > 60_000 {
                 chunks.push(Output {
                     title: "Icon difference rendering",
-                    summary: "*Please file any issues [here](https://github.com/spacestation13/BYONDDiffBots/issues).*\n\nIcons with diff:".to_string(),
-                    text: std::mem::take(&mut current_output_text)
+                    summary: crate::read_config().summary_msg.to_string(),
+                    text: std::mem::take(&mut current_output_text),
                 });
             }
 
@@ -85,8 +85,8 @@ impl<'a> OutputTableBuilder<'a> {
         if !current_output_text.is_empty() {
             chunks.push(Output {
                 title: "Icon difference rendering",
-                summary: "*Please file any issues [here](https://github.com/spacestation13/BYONDDiffBots/issues).*\n\nIcons with diff:".to_string(),
-                text: std::mem::take(&mut current_output_text)
+                summary: crate::read_config().summary_msg.to_string(),
+                text: std::mem::take(&mut current_output_text),
             });
         }
         Ok(chunks)

@@ -1,3 +1,4 @@
+mod downloading;
 mod github_processor;
 mod job_processor;
 mod runner;
@@ -10,8 +11,8 @@ use diffbot_lib::{
 };
 use mysql_async::prelude::Queryable;
 use octocrab::OctocrabBuilder;
-use once_cell::sync::OnceCell;
 use serde::Deserialize;
+use std::sync::OnceLock;
 use std::{
     fs::File,
     io::Read,
@@ -64,6 +65,8 @@ pub struct Config {
     pub blacklist_contact: String,
     #[serde(default = "default_log_level")]
     pub logging: String,
+    #[serde(default = "default_msg")]
+    pub summary_msg: String,
     pub secret: Option<String>,
     pub db_url: Option<String>,
     pub grafana_loki: Option<GrafanaLoki>,
@@ -73,7 +76,11 @@ fn default_log_level() -> String {
     "info".to_string()
 }
 
-static CONFIG: OnceCell<Config> = OnceCell::new();
+fn default_msg() -> String {
+    "*Please file any issues [here](https://github.com/spacestation13/BYONDDiffBots/issues).*\n\nIcons with diff:".to_string()
+}
+
+static CONFIG: OnceLock<Config> = OnceLock::new();
 // static FLAME_LAYER_GUARD: OnceCell<tracing_flame::FlushGuard<std::io::BufWriter<File>>> =
 // OnceCell::new();
 
@@ -85,6 +92,10 @@ fn init_config(path: &Path) -> eyre::Result<&'static Config> {
 
     CONFIG.set(config).expect("Failed to set config");
     Ok(CONFIG.get().unwrap())
+}
+
+fn read_config() -> &'static Config {
+    CONFIG.get().unwrap()
 }
 
 // fn init_global_subscriber() {
@@ -109,7 +120,7 @@ fn read_key(path: &Path) -> Vec<u8> {
         File::open(path).unwrap_or_else(|_| panic!("Unable to find file {}", path.display()));
 
     let mut key = Vec::new();
-    let _ = key_file
+    _ = key_file
         .read_to_end(&mut key)
         .unwrap_or_else(|_| panic!("Failed to read key {}", path.display()));
 
@@ -151,6 +162,7 @@ async fn main() -> eyre::Result<()> {
             .build()
             .expect("fucked up octocrab"),
     );
+    let reqwest_client = reqwest::Client::new();
 
     async_fs::create_dir_all("./images").await.unwrap();
 
@@ -178,7 +190,11 @@ async fn main() -> eyre::Result<()> {
         .await?;
     }
 
-    actix_web::rt::spawn(runner::handle_jobs("IconDiffBot2", job_receiver));
+    actix_web::rt::spawn(runner::handle_jobs(
+        "IconDiffBot2",
+        job_receiver,
+        reqwest_client,
+    ));
 
     let job_sender: DataJobSender = actix_web::web::Data::new(job_sender);
 

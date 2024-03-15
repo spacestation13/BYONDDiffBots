@@ -1,12 +1,8 @@
-use crate::github::github_types::{
-    CreateCheckRun, Output, RawCheckRun, Repository, UpdateCheckRunBuilder,
-};
-use eyre::{format_err, Context, Result};
-use octocrab::models::repos::Content;
+use crate::github::github_types::{CreateCheckRun, Output, RawCheckRun, UpdateCheckRunBuilder};
+use eyre::{Context, Result};
 use octocrab::models::InstallationId;
 use serde::{Deserialize, Serialize};
 use std::{future::Future, pin::Pin};
-use base64::{Engine as _, engine::general_purpose};
 
 pub struct GithubEvent(pub String, pub Option<Vec<u8>>);
 
@@ -203,50 +199,6 @@ impl CheckRun {
     pub fn id(&self) -> u64 {
         self.id
     }
-}
-
-async fn find_content<S: AsRef<str>>(
-    installation: &InstallationId,
-    repo: &Repository,
-    filename: S,
-    commit: S,
-) -> Result<Content> {
-    let (owner, repo) = repo.name_tuple();
-    let items = octocrab::instance()
-        .installation(*installation)
-        .repos(owner, repo)
-        .get_content()
-        .path(filename.as_ref())
-        .r#ref(commit.as_ref())
-        .send()
-        .await?
-        .take_items();
-
-    if items.len() > 1 {
-        return Err(format_err!("Directory given to find_content"));
-    }
-
-    items
-        .into_iter()
-        .next()
-        .ok_or_else(|| format_err!("No content was found"))
-}
-
-pub async fn download_url<S: AsRef<str>>(
-    installation: &InstallationId,
-    repo: &Repository,
-    filename: S,
-    commit: S,
-) -> Result<Vec<u8>> {
-    let target = find_content(installation, repo, filename, commit).await?;
-
-    let content = target.content
-        .ok_or_else(|| format_err!("File had no content!"))?
-        .replace("\n", "");
-
-    general_purpose::STANDARD
-        .decode(content)
-        .map_err(|decode_error| format_err!("DecodeError: {}", decode_error))
 }
 
 /* local test requires commenting out the .installation(...) call in find_content(), a valid github token with access, and the following dep: actix-rt = "2.9.0"

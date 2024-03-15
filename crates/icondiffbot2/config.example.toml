@@ -5,6 +5,9 @@ blacklist_contact = "Good luck!"
 # Logging level (Optional, defaults to info), Valid values are "info", "warn", "trace", "error", "debug"
 logging = "info"
 
+# Summary message, the message that goes before the diff, (Optional, defaults to below)
+# summary_msg = "*Please file any issues [here](https://github.com/spacestation13/BYONDDiffBots/issues).*\n\nIcons with diff:"
+
 # Mysql db url, the bots will write down a table that contains necessary information,
 # for automated deletion (Optional)
 # db_url = ""

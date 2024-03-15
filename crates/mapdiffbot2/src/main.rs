@@ -10,8 +10,8 @@ use std::io::Read;
 use std::path::PathBuf;
 
 use mysql_async::prelude::Queryable;
-use once_cell::sync::OnceCell;
 use serde::Deserialize;
+use std::sync::OnceLock;
 
 #[cfg(not(target_env = "msvc"))]
 #[global_allocator]
@@ -69,6 +69,8 @@ pub struct Config {
     pub gc_schedule: String,
     #[serde(default = "default_log_level")]
     pub logging: String,
+    #[serde(default = "default_msg")]
+    pub summary_msg: String,
     pub secret: Option<String>,
     pub db_url: Option<String>,
     pub azure_blobs: Option<AzureBlobs>,
@@ -83,14 +85,18 @@ fn default_log_level() -> String {
     "info".to_string()
 }
 
-static CONFIG: OnceCell<Config> = OnceCell::new();
+fn default_msg() -> String {
+    "*Please file any issues [here](https://github.com/spacestation13/BYONDDiffBots/issues).*\n\n*Github may fail to render some images, appearing as cropped on large map changes. Please use the raw links in this case.*\n\nMaps with diff:".to_string()
+}
+
+static CONFIG: OnceLock<Config> = OnceLock::new();
 
 fn read_key(path: PathBuf) -> Vec<u8> {
     let mut key_file =
         File::open(&path).unwrap_or_else(|_| panic!("Unable to find file {}", path.display()));
 
     let mut key = Vec::new();
-    let _ = key_file
+    _ = key_file
         .read_to_end(&mut key)
         .unwrap_or_else(|_| panic!("Failed to read key {}", path.display()));
 
@@ -105,6 +111,10 @@ fn init_config(path: &std::path::Path) -> eyre::Result<&'static Config> {
 
     CONFIG.set(config).expect("Failed to set config");
     Ok(CONFIG.get().unwrap())
+}
+
+fn read_config() -> &'static Config {
+    CONFIG.get().unwrap()
 }
 
 type Azure = Option<std::sync::Arc<object_store::azure::MicrosoftAzure>>;
