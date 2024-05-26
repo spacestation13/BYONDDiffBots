@@ -575,7 +575,7 @@ fn encode_image<W: std::io::Write>(write_to: &mut W, image: &image::RgbaImage) -
             image.as_bytes(),
             image.width(),
             image.height(),
-            image::ColorType::Rgba8,
+            image::ColorType::Rgba8.into(),
         )
         .wrap_err("Failed to encode image")?;
     Ok(())

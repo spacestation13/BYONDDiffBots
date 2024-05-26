@@ -66,19 +66,15 @@ pub fn fetch_and_get_branches<'a>(
     repo.resolve_reference_from_short_name(base_branch_name)?
         .set_target(commit.id(), "Setting default branch to the correct commit")?;
 
-    let base_branch = repo
-        .resolve_reference_from_short_name(base_branch_name)
-        .wrap_err("Getting the base reference")?;
-
     let fetch_head = repo
         .find_reference("FETCH_HEAD")
         .wrap_err("Getting FETCH_HEAD")?;
 
-    let head_name = format!("mdb-pull-{base_sha}-{head_sha}");
+    let head_branch_name = format!("mdb-pull-{base_sha}-{head_sha}");
 
     let mut head_branch = repo
         .branch_from_annotated_commit(
-            &head_name,
+            &head_branch_name,
             &repo.reference_to_annotated_commit(&fetch_head)?,
             true,
         )
@@ -98,18 +94,52 @@ pub fn fetch_and_get_branches<'a>(
         "Setting head branch to the correct commit",
     )?;
 
-    let mut head_branch = repo
-        .resolve_reference_from_short_name(&head_name)
-        .wrap_err("Getting the head reference")?;
+    merge_base_into_head(base_branch_name, &head_branch_name, repo).wrap_err("Merging")?;
 
-    //do some merge action
+    repo.set_head(
+        repo.resolve_reference_from_short_name(base_branch_name)?
+            .name()
+            .unwrap(),
+    )
+    .wrap_err("Setting head to default branch")?;
+
+    repo.checkout_head(Some(
+        CheckoutBuilder::default()
+            .force()
+            .remove_ignored(true)
+            .remove_untracked(true),
+    ))
+    .wrap_err("Resetting to base commit")?;
+
+    Ok((
+        repo.resolve_reference_from_short_name(base_branch_name)
+            .wrap_err("Getting the base reference")?,
+        repo.resolve_reference_from_short_name(&head_branch_name)
+            .wrap_err("Getting the head reference")?,
+    ))
+}
+
+fn merge_base_into_head(base: &str, head: &str, repo: &Repository) -> Result<()> {
+    repo.set_head(
+        repo.resolve_reference_from_short_name(head)?
+            .name()
+            .unwrap(),
+    )?;
+    repo.checkout_head(Some(
+        CheckoutBuilder::default()
+            .force()
+            .remove_ignored(true)
+            .remove_untracked(true),
+    ))
+    .wrap_err("Resetting repo to head")?;
+
+    let head_commit = repo.head()?.peel_to_commit()?;
+
+    let base_branch = repo.resolve_reference_from_short_name(base)?;
 
     if let Err(e) = repo
         .merge(
-            &[
-                &repo.reference_to_annotated_commit(&head_branch)?,
-                &repo.reference_to_annotated_commit(&base_branch)?,
-            ],
+            &[&repo.reference_to_annotated_commit(&base_branch)?],
             Some(git2::MergeOptions::default().fail_on_conflict(true)),
             Some(
                 CheckoutBuilder::default()
@@ -145,30 +175,9 @@ pub fn fetch_and_get_branches<'a>(
     )?;
     repo.cleanup_state()?;
 
-    head_branch.set_target(merge_commit, "Setting head to the merge commit")?;
-
-    let head_branch = repo
-        .resolve_reference_from_short_name(&head_name)
-        .wrap_err("Getting the head reference")?;
-
-    //reset back to default branch
-
-    repo.set_head(
-        repo.resolve_reference_from_short_name(base_branch_name)?
-            .name()
-            .unwrap(),
-    )
-    .wrap_err("Setting head to default branch")?;
-
-    repo.checkout_head(Some(
-        CheckoutBuilder::default()
-            .force()
-            .remove_ignored(true)
-            .remove_untracked(true),
-    ))
-    .wrap_err("Resetting to base commit")?;
-
-    Ok((base_branch, head_branch))
+    repo.resolve_reference_from_short_name(head)?
+        .set_target(merge_commit, "Setting head to the merge commit")?;
+    Ok(())
 }
 
 pub fn clean_up_references(repo: &Repository, branch: &str) -> Result<()> {
