@@ -806,7 +806,7 @@ checksum = "c6a6c0b39c38fd754ac338b00a88066436389c0f029da5d37d1e01091d9b7c17"
 [[package]]
 name = "builtins-proc-macro"
 version = "0.0.0"
-source = "git+https://github.com/jupyterkat/SpacemanDMM/#23b27995312246d2ca4fbece91d5b55956fe599f"
+source = "git+https://github.com/jupyterkat/SpacemanDMM/#d7fb9b26a8335d5e46daf292a9e8fbff0ccd1ee6"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -1354,10 +1354,9 @@ dependencies = [
 [[package]]
 name = "dmm-tools"
 version = "0.1.0"
-source = "git+https://github.com/jupyterkat/SpacemanDMM/#23b27995312246d2ca4fbece91d5b55956fe599f"
+source = "git+https://github.com/jupyterkat/SpacemanDMM/#d7fb9b26a8335d5e46daf292a9e8fbff0ccd1ee6"
 dependencies = [
  "ahash 0.8.11",
- "bitvec",
  "bytemuck",
  "dreammaker",
  "either",
@@ -1381,7 +1380,7 @@ checksum = "fea41bba32d969b513997752735605054bc0dfa92b4c56bf1189f2e174be7a10"
 [[package]]
 name = "dreammaker"
 version = "0.1.0"
-source = "git+https://github.com/jupyterkat/SpacemanDMM/#23b27995312246d2ca4fbece91d5b55956fe599f"
+source = "git+https://github.com/jupyterkat/SpacemanDMM/#d7fb9b26a8335d5e46daf292a9e8fbff0ccd1ee6"
 dependencies = [
  "ahash 0.8.11",
  "bitflags 2.5.0",
@@ -2312,7 +2311,7 @@ checksum = "71dd52191aae121e8611f1e8dc3e324dd0dd1dee1e6dd91d10ee07a3cfb4d9d8"
 [[package]]
 name = "interval-tree"
 version = "0.8.0"
-source = "git+https://github.com/jupyterkat/SpacemanDMM/#23b27995312246d2ca4fbece91d5b55956fe599f"
+source = "git+https://github.com/jupyterkat/SpacemanDMM/#d7fb9b26a8335d5e46daf292a9e8fbff0ccd1ee6"
 
 [[package]]
 name = "io-lifetimes"
@@ -2804,11 +2803,10 @@ dependencies = [
 
 [[package]]
 name = "native-tls"
-version = "0.2.11"
+version = "0.2.12"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "07226173c32f2926027b63cce4bcd8076c3552846cbe7925f3aaffeac0a3b92e"
+checksum = "a8614eb2c83d59d1c8cc974dd3f920198647674a0a035e1af1fa58707e317466"
 dependencies = [
- "lazy_static",
  "libc",
  "log",
  "openssl",
@@ -3816,9 +3814,9 @@ checksum = "719b953e2095829ee67db738b3bfa9fa368c94900df327b3f07fe6e794d2fe1f"
 
 [[package]]
 name = "rustc-hash"
-version = "1.1.0"
+version = "1.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "08d43f7aa6b08d49f382cde6a7982047c3426db949b1424bc4b7ec9ae12c6ce2"
+checksum = "3450ed37fe9609abb6bc3b8891b6e078404e4c53c7332350e2e15126a95229bf"
 
 [[package]]
 name = "rustc_version"
@@ -4520,7 +4518,7 @@ dependencies = [
 [[package]]
 name = "tinydmi"
 version = "0.1.0"
-source = "git+https://github.com/jupyterkat/SpacemanDMM/#23b27995312246d2ca4fbece91d5b55956fe599f"
+source = "git+https://github.com/jupyterkat/SpacemanDMM/#d7fb9b26a8335d5e46daf292a9e8fbff0ccd1ee6"
 dependencies = [
  "ahash 0.8.11",
  "eyre",
