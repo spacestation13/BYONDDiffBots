@@ -140,7 +140,12 @@ fn merge_base_into_head(base: &str, head: &str, repo: &Repository) -> Result<()>
     if let Err(e) = repo
         .merge(
             &[&repo.reference_to_annotated_commit(&base_branch)?],
-            Some(git2::MergeOptions::default().fail_on_conflict(true)),
+            Some(
+                git2::MergeOptions::default()
+                    .ignore_whitespace(true)
+                    .fail_on_conflict(false)
+                    .file_favor(git2::FileFavor::Theirs),
+            ),
             Some(
                 CheckoutBuilder::default()
                     .force()
@@ -151,6 +156,11 @@ fn merge_base_into_head(base: &str, head: &str, repo: &Repository) -> Result<()>
         .wrap_err("Trying to merge base into head")
     {
         repo.cleanup_state()?;
+        repo.set_head(
+            repo.resolve_reference_from_short_name(base)?
+                .name()
+                .unwrap(),
+        )?;
         repo.checkout_head(Some(
             CheckoutBuilder::default()
                 .force()
