@@ -1,7 +1,7 @@
 use eyre::{Context, Result};
 use std::path::Path;
 
-use git2::{build::CheckoutBuilder, FetchOptions, Repository};
+use git2::{build::CheckoutBuilder, FetchOptions, Repository, SubmoduleUpdateOptions};
 
 pub fn fetch_and_get_branches<'a>(
     base_sha: &str,
@@ -96,20 +96,7 @@ pub fn fetch_and_get_branches<'a>(
 
     merge_base_into_head(base_branch_name, &head_branch_name, repo).wrap_err("Merging")?;
 
-    repo.set_head(
-        repo.resolve_reference_from_short_name(base_branch_name)?
-            .name()
-            .unwrap(),
-    )
-    .wrap_err("Setting head to default branch")?;
-
-    repo.checkout_head(Some(
-        CheckoutBuilder::default()
-            .force()
-            .remove_ignored(true)
-            .remove_untracked(true),
-    ))
-    .wrap_err("Resetting to base commit")?;
+    checkout_to(base_branch_name, repo).wrap_err("Checking out to base")?;
 
     Ok((
         repo.resolve_reference_from_short_name(base_branch_name)
@@ -120,18 +107,7 @@ pub fn fetch_and_get_branches<'a>(
 }
 
 fn merge_base_into_head(base: &str, head: &str, repo: &Repository) -> Result<()> {
-    repo.set_head(
-        repo.resolve_reference_from_short_name(head)?
-            .name()
-            .unwrap(),
-    )?;
-    repo.checkout_head(Some(
-        CheckoutBuilder::default()
-            .force()
-            .remove_ignored(true)
-            .remove_untracked(true),
-    ))
-    .wrap_err("Resetting repo to head")?;
+    checkout_to(head, repo).wrap_err("Checking out to head")?;
 
     let head_commit = repo.head()?.peel_to_commit()?;
 
@@ -156,18 +132,7 @@ fn merge_base_into_head(base: &str, head: &str, repo: &Repository) -> Result<()>
         .wrap_err("Trying to merge base into head")
     {
         repo.cleanup_state()?;
-        repo.set_head(
-            repo.resolve_reference_from_short_name(base)?
-                .name()
-                .unwrap(),
-        )?;
-        repo.checkout_head(Some(
-            CheckoutBuilder::default()
-                .force()
-                .remove_ignored(true)
-                .remove_untracked(true),
-        ))
-        .wrap_err("Resetting to base commit")?;
+        checkout_to(base, repo).wrap_err("Checking out to base")?;
         return Err(e);
     };
 
@@ -191,19 +156,7 @@ fn merge_base_into_head(base: &str, head: &str, repo: &Repository) -> Result<()>
 }
 
 pub fn clean_up_references(repo: &Repository, branch: &str) -> Result<()> {
-    repo.set_head(
-        repo.resolve_reference_from_short_name(branch)?
-            .name()
-            .unwrap(),
-    )
-    .wrap_err("Setting head")?;
-    repo.checkout_head(Some(
-        CheckoutBuilder::new()
-            .force()
-            .remove_ignored(true)
-            .remove_untracked(true),
-    ))
-    .wrap_err("Checkout to head")?;
+    checkout_to(branch, repo).wrap_err("Checking out to default branch")?;
     let mut references = repo.references().wrap_err("Getting all references")?;
     let references = references
         .names()
@@ -236,7 +189,56 @@ pub fn with_checkout<T>(
             .remove_ignored(true)
             .remove_untracked(true),
     ))?;
+
+    if let Ok(submodules) = repo.submodules() {
+        submodules.into_iter().for_each(|mut submodule| {
+            _ = submodule.update(
+                true,
+                Some(
+                    SubmoduleUpdateOptions::default()
+                        .allow_fetch(true)
+                        .checkout({
+                            let mut builder = CheckoutBuilder::new();
+                            builder.force().remove_untracked(true).remove_ignored(true);
+                            builder
+                        }),
+                ),
+            );
+        })
+    }
     f()
+}
+
+pub fn checkout_to(checkout_ref: &str, repo: &Repository) -> Result<()> {
+    repo.set_head(
+        repo.resolve_reference_from_short_name(checkout_ref)?
+            .name()
+            .unwrap(),
+    )?;
+    repo.checkout_head(Some(
+        CheckoutBuilder::new()
+            .force()
+            .remove_ignored(true)
+            .remove_untracked(true),
+    ))?;
+
+    if let Ok(submodules) = repo.submodules() {
+        submodules.into_iter().for_each(|mut submodule| {
+            _ = submodule.update(
+                true,
+                Some(
+                    SubmoduleUpdateOptions::default()
+                        .allow_fetch(true)
+                        .checkout({
+                            let mut builder = CheckoutBuilder::new();
+                            builder.force().remove_untracked(true).remove_ignored(true);
+                            builder
+                        }),
+                ),
+            );
+        })
+    }
+    Ok(())
 }
 
 pub fn clone_repo(url: &str, dir: &Path) -> Result<()> {
