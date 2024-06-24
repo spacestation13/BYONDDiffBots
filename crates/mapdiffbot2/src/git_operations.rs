@@ -58,10 +58,7 @@ pub fn fetch_and_get_branches<'a>(
     )
     .wrap_err("Setting HEAD to base")?;
 
-    let commit = match repo.find_commit(base_id).wrap_err("Finding base commit") {
-        Ok(commit) => commit,
-        Err(_) => repo.head()?.peel_to_commit()?,
-    };
+    let commit = repo.find_commit(base_id).wrap_err("Finding base commit")?;
 
     repo.resolve_reference_from_short_name(base_branch_name)?
         .set_target(commit.id(), "Setting default branch to the correct commit")?;
@@ -84,10 +81,7 @@ pub fn fetch_and_get_branches<'a>(
     repo.set_head(head_branch.name().unwrap())
         .wrap_err("Setting HEAD to head")?;
 
-    let head_commit = match repo.find_commit(head_id).wrap_err("Finding head commit") {
-        Ok(commit) => commit,
-        Err(_) => repo.head()?.peel_to_commit()?,
-    };
+    let head_commit = repo.find_commit(head_id).wrap_err("Finding head commit")?;
 
     head_branch.set_target(
         head_commit.id(),
@@ -183,12 +177,7 @@ pub fn with_checkout<T>(
     f: impl FnOnce() -> Result<T>,
 ) -> Result<T> {
     repo.set_head(checkout_ref.name().unwrap())?;
-    repo.checkout_head(Some(
-        CheckoutBuilder::new()
-            .force()
-            .remove_ignored(true)
-            .remove_untracked(true),
-    ))?;
+    repo.checkout_head(Some(CheckoutBuilder::new().force().remove_untracked(true)))?;
 
     if let Ok(submodules) = repo.submodules() {
         submodules.into_iter().for_each(|mut submodule| {
@@ -199,13 +188,14 @@ pub fn with_checkout<T>(
                         .allow_fetch(true)
                         .checkout({
                             let mut builder = CheckoutBuilder::new();
-                            builder.force().remove_untracked(true).remove_ignored(true);
+                            builder.force().remove_untracked(true);
                             builder
                         }),
                 ),
             );
         })
     }
+    commit_all_stragglers(repo)?;
     f()
 }
 
@@ -215,12 +205,7 @@ pub fn checkout_to(checkout_ref: &str, repo: &Repository) -> Result<()> {
             .name()
             .unwrap(),
     )?;
-    repo.checkout_head(Some(
-        CheckoutBuilder::new()
-            .force()
-            .remove_ignored(true)
-            .remove_untracked(true),
-    ))?;
+    repo.checkout_head(Some(CheckoutBuilder::new().force().remove_untracked(true)))?;
 
     if let Ok(submodules) = repo.submodules() {
         submodules.into_iter().for_each(|mut submodule| {
@@ -231,12 +216,43 @@ pub fn checkout_to(checkout_ref: &str, repo: &Repository) -> Result<()> {
                         .allow_fetch(true)
                         .checkout({
                             let mut builder = CheckoutBuilder::new();
-                            builder.force().remove_untracked(true).remove_ignored(true);
+                            builder.force().remove_untracked(true);
                             builder
                         }),
                 ),
             );
         })
+    }
+    commit_all_stragglers(repo)?;
+    Ok(())
+}
+
+//Commits all untracked files that pop up during checkout, e.g un-normalized eofs
+fn commit_all_stragglers(repo: &Repository) -> Result<()> {
+    let dirty = repo
+        .statuses(None)?
+        .into_iter()
+        .find(|item| {
+            item.status().is_wt_modified()
+                || item.status().is_wt_deleted()
+                || item.status().is_wt_new()
+                || item.status().is_wt_renamed()
+                || item.status().is_wt_typechange()
+        })
+        .map_or(false, |_| true);
+    if dirty {
+        let head_commit = repo.head()?.peel_to_commit()?;
+        repo.index()?
+            .add_all(["*"].iter(), git2::IndexAddOption::empty(), None)?;
+        _ = repo.commit(
+            Some("HEAD"),
+            &head_commit.author(),
+            &head_commit.author(),
+            "MAPDIFFBOT: COMMITTING AUTOMATED CHANGES",
+            &repo.find_tree(repo.index()?.write_tree()?)?,
+            &[&head_commit],
+        )?;
+        repo.checkout_head(None)?;
     }
     Ok(())
 }
