@@ -233,11 +233,18 @@ fn commit_all_stragglers(repo: &Repository) -> Result<()> {
         .statuses(None)?
         .into_iter()
         .find(|item| {
-            item.status().is_wt_modified()
-                || item.status().is_wt_deleted()
-                || item.status().is_wt_new()
-                || item.status().is_wt_renamed()
-                || item.status().is_wt_typechange()
+            item.status().contains(
+                git2::Status::INDEX_NEW
+                    | git2::Status::INDEX_MODIFIED
+                    | git2::Status::INDEX_DELETED
+                    | git2::Status::INDEX_RENAMED
+                    | git2::Status::INDEX_TYPECHANGE
+                    | git2::Status::WT_NEW
+                    | git2::Status::WT_MODIFIED
+                    | git2::Status::WT_DELETED
+                    | git2::Status::WT_RENAMED
+                    | git2::Status::WT_TYPECHANGE,
+            )
         })
         .map_or(false, |_| true);
     if dirty {
