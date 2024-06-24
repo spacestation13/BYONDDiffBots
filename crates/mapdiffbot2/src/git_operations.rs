@@ -233,7 +233,7 @@ fn commit_all_stragglers(repo: &Repository) -> Result<()> {
         .statuses(None)?
         .into_iter()
         .find(|item| {
-            item.status().contains(
+            item.status().intersects(
                 git2::Status::INDEX_NEW
                     | git2::Status::INDEX_MODIFIED
                     | git2::Status::INDEX_DELETED
