@@ -16,8 +16,8 @@ hex = "0.4.3"
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["fmt", "time"] }
 tracing-panic = "0.1.2"
-tracing-loki = "0.2.4"
+tracing-loki = "0.2.5"
 flume = "0.11.0"
 async-fs = "2.1.2"
 
-actix-web = "4.6.0"
+actix-web = "4.8.0"

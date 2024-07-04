@@ -7,8 +7,8 @@ license = "MIT"
 
 [dependencies]
 serde = { version = "1.0.203", features = ["derive"] }
-serde_json = { version = "1.0.117" }
-toml = "0.8.13"
+serde_json = { version = "1.0.120" }
+toml = "0.8.14"
 octocrab = "0.38.0"
 dmm-tools = { git = "https://github.com/jupyterkat/SpacemanDMM/" }
 dreammaker = { git = "https://github.com/jupyterkat/SpacemanDMM/" }
@@ -20,20 +20,20 @@ simple-eyre = "0.3.1"
 rayon = "1.10.0"
 image = "0.25.1"
 diffbot_lib = { path = "../diffbot_lib" }
-git2 = "0.18.3"
+git2 = "0.19.0"
 walkdir = "2.5.0"
 delay_timer = "0.11.6"
 itertools = "0.13.0"
 indexmap = { version = "2.2.6", features = ["rayon"] }
-tracing-loki = "0.2.4"
+tracing-loki = "0.2.5"
 flume = "0.11.0"
 object_store = { version = "0.10.1", features = ["azure"] }
 mysql_async = "0.34.1"
 time = "0.3.36"
 secrecy = "0.8.0"
 
-actix-web = "4.6.0"
-actix-files = "0.6.5"
+actix-web = "4.8.0"
+actix-files = "0.6.6"
 
 [target.'cfg(not(target_env = "msvc"))'.dependencies]
 tikv-jemallocator = "0.5.4"
