@@ -1,7 +1,7 @@
 use eyre::{Context, Result};
 use std::path::Path;
 
-use git2::{build::CheckoutBuilder, FetchOptions, Repository, SubmoduleUpdateOptions};
+use git2::{build::CheckoutBuilder, FetchOptions, Repository};
 
 pub fn fetch_and_get_branches<'a>(
     base_sha: &str,
@@ -178,23 +178,6 @@ pub fn with_checkout<T>(
 ) -> Result<T> {
     repo.set_head(checkout_ref.name().unwrap())?;
     repo.checkout_head(Some(CheckoutBuilder::new().force().remove_untracked(true)))?;
-
-    if let Ok(submodules) = repo.submodules() {
-        submodules.into_iter().for_each(|mut submodule| {
-            _ = submodule.update(
-                true,
-                Some(
-                    SubmoduleUpdateOptions::default()
-                        .allow_fetch(true)
-                        .checkout({
-                            let mut builder = CheckoutBuilder::new();
-                            builder.force().remove_untracked(true);
-                            builder
-                        }),
-                ),
-            );
-        })
-    }
     commit_all_stragglers(repo)?;
     f()
 }
@@ -206,23 +189,6 @@ pub fn checkout_to(checkout_ref: &str, repo: &Repository) -> Result<()> {
             .unwrap(),
     )?;
     repo.checkout_head(Some(CheckoutBuilder::new().force().remove_untracked(true)))?;
-
-    if let Ok(submodules) = repo.submodules() {
-        submodules.into_iter().for_each(|mut submodule| {
-            _ = submodule.update(
-                true,
-                Some(
-                    SubmoduleUpdateOptions::default()
-                        .allow_fetch(true)
-                        .checkout({
-                            let mut builder = CheckoutBuilder::new();
-                            builder.force().remove_untracked(true);
-                            builder
-                        }),
-                ),
-            );
-        })
-    }
     commit_all_stragglers(repo)?;
     Ok(())
 }

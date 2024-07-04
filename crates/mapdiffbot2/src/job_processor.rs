@@ -416,7 +416,19 @@ pub fn do_job(job: Job, blob_client: Azure) -> Result<CheckOutputs> {
     let modified_files = filter_on_status(ChangeType::Modified);
     let removed_files = filter_on_status(ChangeType::Deleted);
 
-    let repository = git2::Repository::open(&repo_dir).wrap_err("Opening repository")?;
+    let mut repository = git2::Repository::open(&repo_dir).wrap_err("Opening repository")?;
+
+    //has to be done this way because of borrowing rules
+    if let Ok(submod_names) = repository.submodules().map(|submodules| {
+        submodules
+            .into_iter()
+            .filter_map(|submod| submod.name().map(|refstr| refstr.to_owned()))
+            .collect::<Vec<_>>()
+    }) {
+        submod_names.into_iter().for_each(|name| {
+            _ = repository.submodule_set_ignore(&name, git2::SubmoduleIgnore::All);
+        });
+    };
 
     if !clone_required {
         repository.remote_set_url("origin", &url)?;
