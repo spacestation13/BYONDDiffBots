@@ -74,7 +74,7 @@ fn render(
                     env!("CARGO_MANIFEST_DIR"),
                     "/templates/diff_line_error.txt"
                 )),
-                error = format_args!("Before icon render failed:\n```{e:?}```"),
+                error = format_args!("Before icon render failed:\n{e:?}"),
             )],
         )),
 

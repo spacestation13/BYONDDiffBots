@@ -5,8 +5,8 @@ edition = "2021"
 license = "MIT"
 
 [dependencies]
-serde = { version = "1.0.203", features = ["derive"] }
-octocrab = "0.38.0"
+serde = { version = "1.0.206", features = ["derive"] }
+octocrab = "0.39.0"
 eyre = "0.6.12"
 derive_builder = "0.20.0"
 chrono = "0.4.38"
@@ -20,4 +20,4 @@ tracing-loki = "0.2.5"
 flume = "0.11.0"
 async-fs = "2.1.2"
 
-actix-web = "4.8.0"
+actix-web = "4.9.0"

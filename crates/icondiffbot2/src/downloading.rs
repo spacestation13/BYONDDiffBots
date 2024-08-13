@@ -4,6 +4,18 @@ use octocrab::models::repos::Content;
 use octocrab::models::InstallationId;
 use secrecy::ExposeSecret;
 
+//https://url.spec.whatwg.org/#c0-control-percent-encode-set
+const PATH_ENCODING: &percent_encoding::AsciiSet = &percent_encoding::CONTROLS
+    //query
+    .add(b' ')
+    .add(b'"')
+    .add(b'<')
+    .add(b'>')
+    .add(b'`')
+    //path
+    .add(b'}')
+    .add(b'{');
+
 async fn find_content<S: AsRef<str>>(
     installation: &InstallationId,
     repo: &Repository,
@@ -15,7 +27,10 @@ async fn find_content<S: AsRef<str>>(
         .installation(*installation)
         .repos(owner, repo)
         .get_content()
-        .path(filename.as_ref())
+        .path(
+            percent_encoding::percent_encode(filename.as_ref().as_bytes(), PATH_ENCODING)
+                .to_string(),
+        )
         .r#ref(commit.as_ref())
         .send()
         .await?
