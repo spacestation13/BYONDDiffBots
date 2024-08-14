@@ -13,6 +13,7 @@ const PATH_ENCODING: &percent_encoding::AsciiSet = &percent_encoding::CONTROLS
     .add(b'>')
     .add(b'`')
     //path
+    .add(b'?')
     .add(b'}')
     .add(b'{');
 
