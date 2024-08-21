@@ -5,19 +5,23 @@ use diffbot_lib::job::types::Job;
 
 use diffbot_lib::tracing;
 
-pub async fn handle_jobs<S: AsRef<str>>(name: S, job_receiver: flume::Receiver<Job>) {
+pub async fn handle_jobs<S: AsRef<str>>(
+    name: S,
+    job_receiver: flume::Receiver<Job>,
+    client: reqwest::Client,
+) {
     loop {
         match job_receiver.recv_async().await {
             Ok(job) => {
                 tracing::info!("Job received from queue");
-                job_handler(name.as_ref(), job).await;
+                job_handler(name.as_ref(), job, client.clone()).await;
             }
             Err(err) => tracing::error!("{err}"),
         }
     }
 }
 
-async fn job_handler(name: &str, job: Job) {
+async fn job_handler(name: &str, job: Job, client: reqwest::Client) {
     let (repo, pull_request, check_run) =
         (job.repo.clone(), job.pull_request, job.check_run.clone());
     tracing::info!(
@@ -26,11 +30,11 @@ async fn job_handler(name: &str, job: Job) {
         check_run.id()
     );
 
-    let _ = check_run.mark_started().await;
+    _ = check_run.mark_started().await;
 
     let output = actix_web::rt::time::timeout(
         Duration::from_secs(7200),
-        actix_web::rt::task::spawn_blocking(move || do_job(job)),
+        actix_web::rt::task::spawn_blocking(move || do_job(job, client)),
     )
     .await;
 
@@ -43,7 +47,7 @@ async fn job_handler(name: &str, job: Job) {
     let output = {
         if output.is_err() {
             tracing::error!("Job timed out!");
-            let _ = check_run.mark_failed("Job timed out after 1 hours!").await;
+            _ = check_run.mark_failed("Job timed out after 1 hours!").await;
             return;
         }
         output.unwrap()
@@ -57,7 +61,7 @@ async fn job_handler(name: &str, job: Job) {
             Err(e) => e.to_string(),
         };
         tracing::error!("Join Handle error: {fuckup}");
-        let _ = check_run.mark_failed(&fuckup).await;
+        _ = check_run.mark_failed(&fuckup).await;
         return;
     }
 
@@ -65,7 +69,7 @@ async fn job_handler(name: &str, job: Job) {
     if let Err(e) = output {
         let fuckup = format!("{e:?}");
         tracing::error!("Other rendering error: {fuckup}");
-        let _ = check_run.mark_failed(&fuckup).await;
+        _ = check_run.mark_failed(&fuckup).await;
         return;
     }
 
@@ -76,6 +80,5 @@ async fn job_handler(name: &str, job: Job) {
         _ = check_run
             .mark_failed(&format!("Failed to upload job output: {fuckup}"))
             .await;
-        return;
     };
 }

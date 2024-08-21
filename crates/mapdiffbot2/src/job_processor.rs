@@ -1,6 +1,7 @@
 use eyre::{Context, Result};
 use path_absolutize::Absolutize;
 use secrecy::ExposeSecret;
+use std::io::Read;
 use std::path::Path;
 use std::path::PathBuf;
 
@@ -26,11 +27,18 @@ use diffbot_lib::{
 use super::Azure;
 
 use rayon::prelude::*;
+use serde::Deserialize;
 
 struct RenderedMaps {
     added_maps: Vec<(String, MapWithRegions)>,
     removed_maps: Vec<(String, MapWithRegions)>,
     modified_maps: MapsWithRegions,
+}
+
+#[derive(Deserialize)]
+struct MapConfig {
+    include_pass: String,
+    exclude_pass: String,
 }
 
 fn render(
@@ -65,16 +73,28 @@ fn render(
     let head_context = with_checkout(&head_branch, repo, || RenderingContext::new(&path))
         .wrap_err("Parsing head")?;
 
+    let config = with_checkout(&head_branch, repo, || {
+        let config_path = path.to_path_buf().join("mapdiff.toml");
+        let mut config_str = String::new();
+        std::fs::File::open(config_path)?.read_to_string(&mut config_str)?;
+        let config: MapConfig = toml::from_str(&config_str)?;
+        Ok(config)
+    })
+    .unwrap_or_else(|_| MapConfig {
+        include_pass: "".to_owned(),
+        exclude_pass: "hide-space,hide-invisible,random".to_owned(),
+    });
+
     let base_render_passes = dmm_tools::render_passes::configure(
         base_context.map_config(),
-        "",
-        "hide-space,hide-invisible,random",
+        &config.include_pass,
+        &config.exclude_pass,
     );
 
     let head_render_passes = dmm_tools::render_passes::configure(
         head_context.map_config(),
-        "",
-        "hide-space,hide-invisible,random",
+        &config.include_pass,
+        &config.exclude_pass,
     );
 
     //do removed maps
@@ -134,7 +154,7 @@ fn render(
                 k.clone(),
                 (
                     v,
-                    head_maps.remove(&k).expect(
+                    head_maps.shift_remove(&k).expect(
                         "head maps has maps that isn't inside base maps on modified comparison",
                     ),
                 ),
@@ -218,10 +238,7 @@ fn generate_finished_output<P: AsRef<Path>>(
         .to_string()
         .replace('\\', "/");
 
-    let mut builder = CheckOutputBuilder::new(
-    "Map renderings",
-    "*Please file any issues [here](https://github.com/spacestation13/BYONDDiffBots/issues).*\n\n*Github may fail to render some images, appearing as cropped on large map changes. Please use the raw links in this case.*\n\nMaps with diff:",
-    );
+    let mut builder = CheckOutputBuilder::new("Map renderings", &crate::read_config().summary_msg);
 
     let link_base = format!("{file_url}/{non_abs_directory}");
 
@@ -345,12 +362,16 @@ pub fn do_job(job: Job, blob_client: Azure) -> Result<CheckOutputs> {
     let head = &job.head;
 
     let handle = actix_web::rt::Runtime::new()?;
-    let (_, secret_token) = handle.block_on(octocrab::instance()
-        .installation_and_token(job.installation))?;
+    let (_, secret_token) =
+        handle.block_on(octocrab::instance().installation_and_token(job.installation))?;
 
     let repo_dir: PathBuf = ["./repos/", &job.repo.full_name()].iter().collect();
 
-    let url = format!("https://x-access-token:{}@github.com/{}", secret_token.expose_secret(), job.repo.full_name());
+    let url = format!(
+        "https://x-access-token:{}@github.com/{}",
+        secret_token.expose_secret(),
+        job.repo.full_name()
+    );
     let clone_required = !repo_dir.exists();
     if clone_required {
         tracing::debug!("Directory {:?} doesn't exist, creating dir", repo_dir);
@@ -361,7 +382,7 @@ pub fn do_job(job: Job, blob_client: Azure) -> Result<CheckOutputs> {
                     summary: "The repository is being cloned, this will take a few minutes. Future runs will not require cloning.".to_owned(),
                     text: "".to_owned(),
                 };
-                let _ = job.check_run.set_output(output).await; // we don't really care if updating the job fails, just continue
+                _ = job.check_run.set_output(output).await; // we don't really care if updating the job fails, just continue
             });
         clone_repo(&url, &repo_dir).wrap_err("Cloning repo")?;
     }
@@ -395,7 +416,19 @@ pub fn do_job(job: Job, blob_client: Azure) -> Result<CheckOutputs> {
     let modified_files = filter_on_status(ChangeType::Modified);
     let removed_files = filter_on_status(ChangeType::Deleted);
 
-    let repository = git2::Repository::open(&repo_dir).wrap_err("Opening repository")?;
+    let mut repository = git2::Repository::open(&repo_dir).wrap_err("Opening repository")?;
+
+    //has to be done this way because of borrowing rules
+    if let Ok(submod_names) = repository.submodules().map(|submodules| {
+        submodules
+            .into_iter()
+            .filter_map(|submod| submod.name().map(|refstr| refstr.to_owned()))
+            .collect::<Vec<_>>()
+    }) {
+        submod_names.into_iter().for_each(|name| {
+            _ = repository.submodule_set_ignore(&name, git2::SubmoduleIgnore::All);
+        });
+    };
 
     if !clone_required {
         repository.remote_set_url("origin", &url)?;
@@ -421,7 +454,7 @@ pub fn do_job(job: Job, blob_client: Azure) -> Result<CheckOutputs> {
         (&added_files, &modified_files, &removed_files),
         (&repository, &job.base.r#ref),
         (&repo_dir, output_directory, blob_client),
-        job.pull_request
+        job.pull_request,
     )
     .wrap_err("")
     {

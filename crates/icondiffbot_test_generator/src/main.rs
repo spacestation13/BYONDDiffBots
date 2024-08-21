@@ -1,7 +1,7 @@
 use clap::Parser;
-use octocrab::models::pulls::FileDiff;
+use octocrab::models::repos::DiffEntry;
 
-async fn get_pull_files(args: &Args) -> Result<Vec<FileDiff>, octocrab::Error> {
+async fn get_pull_files(args: &Args) -> Result<Vec<DiffEntry>, octocrab::Error> {
     let crab = octocrab::instance();
     let files = crab
         .pulls(&args.owner, &args.repo)

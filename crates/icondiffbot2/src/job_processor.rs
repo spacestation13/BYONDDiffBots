@@ -17,7 +17,7 @@ use std::{
 };
 
 #[tracing::instrument]
-pub fn do_job(job: Job) -> Result<CheckOutputs> {
+pub fn do_job(job: Job, client: reqwest::Client) -> Result<CheckOutputs> {
     let handle = actix_web::rt::Runtime::new()?;
 
     handle.block_on(async { job.check_run.mark_started().await })?;
@@ -28,16 +28,20 @@ pub fn do_job(job: Job) -> Result<CheckOutputs> {
         .iter()
         .map(|dmi| {
             (
-                sha_to_iconfile(&job, &dmi.filename, status_to_sha(&job, &dmi.status)),
+                sha_to_iconfile(
+                    &job,
+                    &dmi.filename,
+                    status_to_sha(&job, &dmi.status),
+                    client.clone(),
+                ),
                 dmi,
             )
         })
-        .map(|(file, dmi)| -> Result<()> {
+        .try_for_each(|(file, dmi)| -> Result<()> {
             let states = render(&job, file?)?;
             map.insert(dmi.filename.as_str(), states);
             Ok(())
-        })
-        .collect::<Result<()>>()?;
+        })?;
 
     map.build()
 }
@@ -70,7 +74,7 @@ fn render(
                     env!("CARGO_MANIFEST_DIR"),
                     "/templates/diff_line_error.txt"
                 )),
-                error = format_args!("Before icon render failed:\n```{e:?}```"),
+                error = format_args!("Before icon render failed:\n{e:?}"),
             )],
         )),
 
@@ -122,26 +126,24 @@ fn render(
                 .metadata
                 .states
                 .iter()
-                .map(|(name, vec)| {
+                .flat_map(|(name, vec)| {
                     vec.iter()
                         .enumerate()
                         .map(|(duplication_index, _)| (duplication_index, name.as_str()))
                         .collect::<Vec<_>>()
                 })
-                .flatten()
                 .collect();
             let after_states: HashSet<(usize, &str), ahash::RandomState> = after
                 .icon
                 .metadata
                 .states
                 .iter()
-                .map(|(name, vec)| {
+                .flat_map(|(name, vec)| {
                     vec.iter()
                         .enumerate()
                         .map(|(duplication_index, _)| (duplication_index, name.as_str()))
                         .collect::<Vec<_>>()
                 })
-                .flatten()
                 .collect();
 
             let prefix = format!("{}/{}", job.installation, job.pull_request);

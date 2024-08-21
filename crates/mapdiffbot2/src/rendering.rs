@@ -532,7 +532,11 @@ fn write_to_azure<P: AsRef<Path>>(
     let blob_client = client.clone();
 
     handle
-        .block_on(blob_client.put(&path, compressed_image.to_owned().into()))
+        .block_on(async {
+            blob_client
+                .put(&path, compressed_image.to_owned().into())
+                .await
+        })
         .wrap_err("Failed to put a block blob into azure")?;
     Ok(())
 }
@@ -571,7 +575,7 @@ fn encode_image<W: std::io::Write>(write_to: &mut W, image: &image::RgbaImage) -
             image.as_bytes(),
             image.width(),
             image.height(),
-            image::ColorType::Rgba8,
+            image::ColorType::Rgba8.into(),
         )
         .wrap_err("Failed to encode image")?;
     Ok(())

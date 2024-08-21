@@ -26,6 +26,9 @@ pub fn fetch_and_get_branches<'a>(
             None,
         )
         .wrap_err("Fetching base and head")?;
+
+    remote.disconnect().wrap_err("Disconnecting from remote")?;
+
     let fetch_head = repo
         .find_reference("FETCH_HEAD")
         .wrap_err("Getting FETCH_HEAD")?;
@@ -55,27 +58,20 @@ pub fn fetch_and_get_branches<'a>(
     )
     .wrap_err("Setting HEAD to base")?;
 
-    let commit = match repo.find_commit(base_id).wrap_err("Finding base commit") {
-        Ok(commit) => commit,
-        Err(_) => repo.head()?.peel_to_commit()?,
-    };
+    let commit = repo.find_commit(base_id).wrap_err("Finding base commit")?;
 
     repo.resolve_reference_from_short_name(base_branch_name)?
         .set_target(commit.id(), "Setting default branch to the correct commit")?;
-
-    let base_branch = repo
-        .resolve_reference_from_short_name(base_branch_name)
-        .wrap_err("Getting the base reference")?;
 
     let fetch_head = repo
         .find_reference("FETCH_HEAD")
         .wrap_err("Getting FETCH_HEAD")?;
 
-    let head_name = format!("mdb-pull-{base_sha}-{head_sha}");
+    let head_branch_name = format!("mdb-pull-{base_sha}-{head_sha}");
 
     let mut head_branch = repo
         .branch_from_annotated_commit(
-            &head_name,
+            &head_branch_name,
             &repo.reference_to_annotated_commit(&fetch_head)?,
             true,
         )
@@ -85,54 +81,76 @@ pub fn fetch_and_get_branches<'a>(
     repo.set_head(head_branch.name().unwrap())
         .wrap_err("Setting HEAD to head")?;
 
-    let head_commit = match repo.find_commit(head_id).wrap_err("Finding head commit") {
-        Ok(commit) => commit,
-        Err(_) => repo.head()?.peel_to_commit()?,
-    };
+    let head_commit = repo.find_commit(head_id).wrap_err("Finding head commit")?;
 
     head_branch.set_target(
         head_commit.id(),
         "Setting head branch to the correct commit",
     )?;
 
-    let head_branch = repo
-        .resolve_reference_from_short_name(&head_name)
-        .wrap_err("Getting the head reference")?;
+    merge_base_into_head(base_branch_name, &head_branch_name, repo).wrap_err("Merging")?;
 
-    remote.disconnect().wrap_err("Disconnecting from remote")?;
+    checkout_to(base_branch_name, repo).wrap_err("Checking out to base")?;
 
-    repo.set_head(
-        repo.resolve_reference_from_short_name(base_branch_name)?
-            .name()
-            .unwrap(),
-    )
-    .wrap_err("Setting head to default branch")?;
-
-    repo.checkout_head(Some(
-        CheckoutBuilder::default()
-            .force()
-            .remove_ignored(true)
-            .remove_untracked(true),
+    Ok((
+        repo.resolve_reference_from_short_name(base_branch_name)
+            .wrap_err("Getting the base reference")?,
+        repo.resolve_reference_from_short_name(&head_branch_name)
+            .wrap_err("Getting the head reference")?,
     ))
-    .wrap_err("Resetting to base commit")?;
+}
 
-    Ok((base_branch, head_branch))
+fn merge_base_into_head(base: &str, head: &str, repo: &Repository) -> Result<()> {
+    checkout_to(head, repo).wrap_err("Checking out to head")?;
+
+    let head_commit = repo.head()?.peel_to_commit()?;
+
+    let base_branch = repo.resolve_reference_from_short_name(base)?;
+
+    if let Err(e) = repo
+        .merge(
+            &[&repo.reference_to_annotated_commit(&base_branch)?],
+            Some(
+                git2::MergeOptions::default()
+                    .ignore_whitespace(true)
+                    .fail_on_conflict(false)
+                    .file_favor(git2::FileFavor::Theirs),
+            ),
+            Some(
+                CheckoutBuilder::default()
+                    .force()
+                    .remove_ignored(true)
+                    .remove_untracked(true),
+            ),
+        )
+        .wrap_err("Trying to merge base into head")
+    {
+        repo.cleanup_state()?;
+        checkout_to(base, repo).wrap_err("Checking out to base")?;
+        return Err(e);
+    };
+
+    let treeoid = repo.index()?.write_tree()?;
+
+    let destination_commit = repo.head()?.peel_to_commit()?;
+
+    let merge_commit = repo.commit(
+        Some("HEAD"),
+        &head_commit.author(),
+        &head_commit.author(),
+        "MAPDIFFBOT: MERGING BASE INTO HEAD",
+        &repo.find_tree(treeoid)?,
+        &[&head_commit, &destination_commit],
+    )?;
+    repo.cleanup_state()?;
+
+    repo.resolve_reference_from_short_name(head)?
+        .set_target(merge_commit, "Setting head to the merge commit")?;
+    Ok(())
 }
 
 pub fn clean_up_references(repo: &Repository, branch: &str) -> Result<()> {
-    repo.set_head(
-        repo.resolve_reference_from_short_name(branch)?
-            .name()
-            .unwrap(),
-    )
-    .wrap_err("Setting head")?;
-    repo.checkout_head(Some(
-        CheckoutBuilder::new()
-            .force()
-            .remove_ignored(true)
-            .remove_untracked(true),
-    ))
-    .wrap_err("Checkout to head")?;
+    checkout_to(branch, repo).wrap_err("Checking out to default branch")?;
     let mut references = repo.references().wrap_err("Getting all references")?;
     let references = references
         .names()
@@ -159,13 +177,57 @@ pub fn with_checkout<T>(
     f: impl FnOnce() -> Result<T>,
 ) -> Result<T> {
     repo.set_head(checkout_ref.name().unwrap())?;
-    repo.checkout_head(Some(
-        CheckoutBuilder::new()
-            .force()
-            .remove_ignored(true)
-            .remove_untracked(true),
-    ))?;
+    repo.checkout_head(Some(CheckoutBuilder::new().force().remove_untracked(true)))?;
+    commit_all_stragglers(repo)?;
     f()
+}
+
+pub fn checkout_to(checkout_ref: &str, repo: &Repository) -> Result<()> {
+    repo.set_head(
+        repo.resolve_reference_from_short_name(checkout_ref)?
+            .name()
+            .unwrap(),
+    )?;
+    repo.checkout_head(Some(CheckoutBuilder::new().force().remove_untracked(true)))?;
+    commit_all_stragglers(repo)?;
+    Ok(())
+}
+
+//Commits all untracked files that pop up during checkout, e.g un-normalized eofs
+fn commit_all_stragglers(repo: &Repository) -> Result<()> {
+    let dirty = repo
+        .statuses(None)?
+        .into_iter()
+        .find(|item| {
+            item.status().intersects(
+                git2::Status::INDEX_NEW
+                    | git2::Status::INDEX_MODIFIED
+                    | git2::Status::INDEX_DELETED
+                    | git2::Status::INDEX_RENAMED
+                    | git2::Status::INDEX_TYPECHANGE
+                    | git2::Status::WT_NEW
+                    | git2::Status::WT_MODIFIED
+                    | git2::Status::WT_DELETED
+                    | git2::Status::WT_RENAMED
+                    | git2::Status::WT_TYPECHANGE,
+            )
+        })
+        .map_or(false, |_| true);
+    if dirty {
+        let head_commit = repo.head()?.peel_to_commit()?;
+        repo.index()?
+            .add_all(["*"].iter(), git2::IndexAddOption::empty(), None)?;
+        _ = repo.commit(
+            Some("HEAD"),
+            &head_commit.author(),
+            &head_commit.author(),
+            "MAPDIFFBOT: COMMITTING AUTOMATED CHANGES",
+            &repo.find_tree(repo.index()?.write_tree()?)?,
+            &[&head_commit],
+        )?;
+        repo.checkout_head(None)?;
+    }
+    Ok(())
 }
 
 pub fn clone_repo(url: &str, dir: &Path) -> Result<()> {
