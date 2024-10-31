@@ -21,7 +21,7 @@ logging = "info"
 # Github credentials (Required)
 [github]
 app_id = 123456
-private_key_path = "diffbot.pem"
+private_key_path = "./config/diffbot.pem"
 
 # Server details (Required)
 [web]

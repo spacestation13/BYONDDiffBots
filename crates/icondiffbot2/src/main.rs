@@ -132,7 +132,7 @@ async fn main() -> eyre::Result<()> {
     simple_eyre::install().expect("Eyre handler installation failed!");
     // init_global_subscriber();
 
-    let config_path = Path::new(".").join("config.toml");
+    let config_path = Path::new("./config").join("config.toml");
     let config =
         init_config(&config_path).unwrap_or_else(|_| panic!("Failed to read {config_path:?}"));
 

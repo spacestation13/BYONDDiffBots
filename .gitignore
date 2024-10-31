@@ -4,6 +4,4 @@ target/
 images/
 repos/
 jobs/
-
-diffbot.pem
-config.toml
+config/
