@@ -1,3 +1,5 @@
+# All paths are relative to the current working library, this app gets all config files from the config directory in the current working directory
+
 # Blacklisted repos, and message to show on blacklisted repo's jobs (Optional)
 blacklist = [1337]
 blacklist_contact = "Good luck!"
@@ -18,7 +20,7 @@ logging = "info"
 # Github credentials (Required)
 [github]
 app_id = 123456
-private_key_path = "diffbot.pem"
+private_key_path = "./config/diffbot.pem"
 
 # Server details (Required)
 [web]

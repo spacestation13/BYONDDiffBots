@@ -6,10 +6,10 @@ license = "MIT"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-serde = { version = "1.0.206", features = ["derive"] }
-serde_json = { version = "1.0.124" }
+serde = { version = "1.0.214", features = ["derive"] }
+serde_json = { version = "1.0.132" }
 toml = "0.8.19"
-octocrab = "0.39.0"
+octocrab = "0.41.2"
 dmm-tools = { git = "https://github.com/jupyterkat/SpacemanDMM/" }
 dreammaker = { git = "https://github.com/jupyterkat/SpacemanDMM/" }
 ahash = "0.8.11"
@@ -18,19 +18,19 @@ jsonwebtoken = "9.3.0"
 eyre = "0.6.12"
 simple-eyre = "0.3.1"
 rayon = "1.10.0"
-image = "0.25.2"
+image = "0.25.4"
 diffbot_lib = { path = "../diffbot_lib" }
 git2 = "0.19.0"
 walkdir = "2.5.0"
 delay_timer = "0.11.6"
 itertools = "0.13.0"
-indexmap = { version = "2.3.0", features = ["rayon"] }
+indexmap = { version = "2.6.0", features = ["rayon"] }
 tracing-loki = "0.2.5"
-flume = "0.11.0"
-object_store = { version = "0.10.2", features = ["azure"] }
-mysql_async = "0.34.1"
+flume = "0.11.1"
+object_store = { version = "0.11.1", features = ["azure"] }
+mysql_async = "0.34.2"
 time = "0.3.36"
-secrecy = "0.8.0"
+secrecy = "0.10.3"
 
 actix-web = "4.9.0"
 actix-files = "0.6.6"

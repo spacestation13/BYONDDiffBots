@@ -123,7 +123,7 @@ type Azure = Option<std::sync::Arc<object_store::azure::MicrosoftAzure>>;
 async fn main() -> eyre::Result<()> {
     simple_eyre::install().expect("Eyre handler installation failed!");
 
-    let config_path = std::path::Path::new(".").join("config.toml");
+    let config_path = std::path::Path::new("./config").join("config.toml");
     let config =
         init_config(&config_path).unwrap_or_else(|_| panic!("Failed to read {config_path:?}"));
 
