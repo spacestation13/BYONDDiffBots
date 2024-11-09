@@ -4,4 +4,4 @@ target/
 images/
 repos/
 jobs/
-config/
+/config/

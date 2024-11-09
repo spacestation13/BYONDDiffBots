@@ -1,15 +1,14 @@
+# All paths are relative to the current working library, this app gets all config files from the config directory in the current working directory
+
 # Blacklisted repos, and message to show on blacklisted repo's jobs (Optional)
 blacklist = [1337]
 blacklist_contact = "Good luck!"
-
-# Cron schedule for git gc operations (Optional, defaults to below value)
-gc_schedule = "0 0 4 * * *"
 
 # Logging level (Optional, defaults to info), Valid values are "info", "warn", "trace", "error", "debug"
 logging = "info"
 
 # Summary message, the message that goes before the diff, (Optional, defaults to below)
-# summary_msg = "*Please file any issues [here](https://github.com/spacestation13/BYONDDiffBots/issues).*\n\n*Github may fail to render some images, appearing as cropped on large map changes. Please use the raw links in this case.*\n\nMaps with diff:"
+# summary_msg = "*Please file any issues [here](https://github.com/spacestation13/BYONDDiffBots/issues).*\n\nIcons with diff:"
 
 # Mysql db url, the bots will write down a table that contains necessary information,
 # for automated deletion (Optional)
@@ -34,12 +33,6 @@ file_hosting_url = "http://example.com:1234"
 [web.limits]
 forms = 131072
 string = 131072
-
-# Azure storage (Optional) (This will make the bot write to an azure storage blob and not local files)
-# [azure_blobs]
-# storage_account= "storageaccountname"
-# storage_access_key= "accesskey"
-# storage_container = "containername"
 
 # Send logs to a grafana loki server (Optional) (Logs will still be printed to stdout)
 #[grafana_loki]
