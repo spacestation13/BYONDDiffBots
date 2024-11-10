@@ -15,6 +15,8 @@ env:
 jobs:
   build-and-push-image:
     strategy:
+      # Single job at a time to make use of the github cache to only build the rust project once and then build images
+      max-parallel: 1
       matrix:
         image: [ "mapdiffbot2", "icondiffbot2" ]
 
