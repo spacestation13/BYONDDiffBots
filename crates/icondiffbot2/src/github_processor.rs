@@ -69,7 +69,7 @@ async fn handle_pull_request(
                             "check_id" => check_id,
                             "repo_id" => repo_id,
                             "pr_number" => pr_number,
-                            "merge_date" => None::<time::PrimitiveDateTime>,
+                            "merge_date" => None::<usize>,
                             "num_icons" => num_icons,
                         },
                     )
@@ -91,14 +91,13 @@ async fn handle_pull_request(
                 };
 
                 let now = time::OffsetDateTime::now_utc();
-                let now = time::PrimitiveDateTime::new(now.date(), now.time());
                 if let Err(e) = conn
                     .exec_drop(
                         r"UPDATE jobs SET merge_date=:date
                     WHERE repo_id=:rp_id
                     AND pr_number=:pr_num",
                         params! {
-                            "date" => now,
+                            "date" => mysql_async::Value::Date(now.year() as u16, now.month() as u8, now.day(), now.hour(), now.minute(), now.second(), now.microsecond()),
                             "rp_id" => payload.repository.id,
                             "pr_num" => payload.pull_request.number,
                         },

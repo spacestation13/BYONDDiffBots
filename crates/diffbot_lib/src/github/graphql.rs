@@ -107,7 +107,7 @@ pub async fn get_pull_files<I: Into<InstallationId>>(
     installation: I,
     pull: &super::github_types::PullRequest,
 ) -> Result<Vec<FileDiff>> {
-    let crab = octocrab::instance().installation(installation.into());
+    let crab = octocrab::instance().installation(installation.into())?;
 
     let mut cursor = "".to_string();
 
