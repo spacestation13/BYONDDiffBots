@@ -37,7 +37,7 @@ async fn handle_pull_request(
                 payload.pull_request.number,
             );
 
-            handle_pull(payload, job_sender, check_run).await?;
+            let num_icons = handle_pull(payload, job_sender, check_run).await?;
 
             if let Some(ref pool) = pool {
                 let mut conn = match pool.get_conn().await {
@@ -54,13 +54,15 @@ async fn handle_pull_request(
                         check_id,
                         repo_id,
                         pr_number,
-                        merge_date
+                        merge_date,
+                        num_icons,
                     )
                     VALUES(
                         :check_id,
                         :repo_id,
                         :pr_number,
-                        :merge_date
+                        :merge_date,
+                        :num_icons
                     )
                     ",
                         params! {
@@ -68,6 +70,7 @@ async fn handle_pull_request(
                             "repo_id" => repo_id,
                             "pr_number" => pr_number,
                             "merge_date" => None::<time::PrimitiveDateTime>,
+                            "num_icons" => num_icons,
                         },
                     )
                     .await
@@ -115,7 +118,7 @@ async fn handle_pull(
     payload: PullRequestEventPayload,
     job_sender: DataJobSender,
     check_run: CheckRun,
-) -> Result<()> {
+) -> Result<usize> {
     if payload
         .pull_request
         .title
@@ -131,7 +134,7 @@ async fn handle_pull(
         };
 
         check_run.mark_skipped(output).await?;
-        return Ok(());
+        return Ok(0);
     }
 
     let conf = &crate::CONFIG.get().unwrap();
@@ -149,7 +152,7 @@ async fn handle_pull(
 
         check_run.mark_skipped(output).await?;
 
-        return Ok(());
+        return Ok(0);
     }
 
     let files = get_pull_files(
@@ -170,6 +173,8 @@ async fn handle_pull(
         })
         .collect();
 
+    let num_icons_diffed = changed_dmis.len();
+
     if changed_dmis.is_empty() {
         let output = Output {
             title: "No icon changes",
@@ -179,7 +184,7 @@ async fn handle_pull(
 
         check_run.mark_skipped(output).await?;
 
-        return Ok(());
+        return Ok(0);
     }
 
     check_run.mark_queued().await?;
@@ -199,7 +204,7 @@ async fn handle_pull(
 
     job_sender.send_async(job).await?;
 
-    Ok(())
+    Ok(num_icons_diffed)
 }
 
 #[actix_web::post("/payload")]

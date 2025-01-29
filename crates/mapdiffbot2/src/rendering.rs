@@ -52,9 +52,10 @@ impl BoundingBox {
     }
 }
 
-impl ToString for BoundingBox {
-    fn to_string(&self) -> String {
-        format!(
+impl std::fmt::Display for BoundingBox {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
             "({}, {}) -> ({}, {})",
             self.left, self.bottom, self.right, self.top
         )
@@ -582,7 +583,7 @@ fn encode_image<W: std::io::Write>(write_to: &mut W, image: &image::RgbaImage) -
 }
 
 fn decode_image(bytes: &[u8]) -> Result<image::RgbaImage> {
-    let image = image::io::Reader::new(std::io::Cursor::new(bytes))
+    let image = image::ImageReader::new(std::io::Cursor::new(bytes))
         .with_guessed_format()
         .wrap_err("Failed to guess image format")?
         .decode()
