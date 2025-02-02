@@ -55,7 +55,7 @@ async fn handle_pull_request(
                         repo_id,
                         pr_number,
                         merge_date,
-                        num_icons,
+                        num_icons
                     )
                     VALUES(
                         :check_id,
