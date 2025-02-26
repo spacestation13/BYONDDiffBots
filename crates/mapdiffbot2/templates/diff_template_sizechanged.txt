@@ -1,0 +1,12 @@
+<details>
+    <summary>
+    SIZE CHANGED - {filename}
+    </summary>
+
+Raw links: {image_before_link} - {image_after_link}
+
+|  Old  |      New      |
+| :---: |     :---:     |
+| {old_row} | {new_row} |
+
+</details>

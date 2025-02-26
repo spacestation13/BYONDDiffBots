@@ -23,7 +23,7 @@ use indexmap::IndexMap;
 
 use super::Azure;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct BoundingBox {
     left: usize,
     bottom: usize,
@@ -69,7 +69,7 @@ pub fn get_diff_bounding_box(
     base_map: &dmm::Map,
     head_map: &dmm::Map,
     z_level: usize,
-) -> Option<BoundingBox> {
+) -> Option<(BoundingBox, BoundingBox)> {
     let left_dims = base_map.dim_xyz();
     let right_dims = head_map.dim_xyz();
     if left_dims != right_dims {
@@ -78,6 +78,12 @@ pub fn get_diff_bounding_box(
             left_dims,
             right_dims
         );
+    }
+    if left_dims.0 != right_dims.0 || left_dims.1 != right_dims.1 {
+        return Some((
+            BoundingBox::for_full_map(base_map),
+            BoundingBox::for_full_map(head_map),
+        ));
     }
 
     let max_y = min(left_dims.1, right_dims.1);
@@ -131,7 +137,10 @@ pub fn get_diff_bounding_box(
         "After expansion max: (right, top):({rightmost}, {topmost}), min: (left, bottom):({leftmost}, {bottommost})",
     );
 
-    Some(BoundingBox::new(leftmost, bottommost, rightmost, topmost))
+    Some((
+        BoundingBox::new(leftmost, bottommost, rightmost, topmost),
+        BoundingBox::new(leftmost, bottommost, rightmost, topmost),
+    ))
 }
 
 pub fn load_maps(
@@ -167,7 +176,9 @@ pub fn load_maps_with_whole_map_regions(
                 file.filename.clone(),
                 MapWithRegions {
                     map,
-                    bounding_boxes: std::iter::repeat(BoundType::Both(bbox)).take(zs).collect(),
+                    bounding_boxes: std::iter::repeat(BoundType::Both((bbox, bbox)))
+                        .take(zs)
+                        .collect(),
                 },
             ))
         })
@@ -178,7 +189,7 @@ pub fn load_maps_with_whole_map_regions(
 pub enum BoundType {
     OnlyHead,
     OnlyBase,
-    Both(BoundingBox),
+    Both((BoundingBox, BoundingBox)),
     None,
 }
 
@@ -383,18 +394,24 @@ fn render_map_region(
                 .get(z_level)
                 .expect("No bounding box generated for z-level"),
         ) {
-            (_, BoundType::Both(bounds)) => Some(
-                render_map(
-                    objtree,
-                    icon_cache,
-                    &map.map,
-                    z_level,
-                    bounds,
-                    errors,
-                    render_passes,
+            (_, BoundType::Both(bounds)) => {
+                let bound = match map_type {
+                    MapType::Base => bounds.0,
+                    MapType::Head => bounds.1,
+                };
+                Some(
+                    render_map(
+                        objtree,
+                        icon_cache,
+                        &map.map,
+                        z_level,
+                        &bound,
+                        errors,
+                        render_passes,
+                    )
+                    .wrap_err_with(|| format!("Rendering map {map_name}"))?,
                 )
-                .wrap_err_with(|| format!("Rendering map {map_name}"))?,
-            ),
+            }
             (MapType::Head, BoundType::OnlyHead) => {
                 let bounds = BoundingBox::for_full_map(&map.map);
                 Some(
@@ -469,6 +486,12 @@ pub fn render_diffs(before: RenderedMaps, after: RenderedMaps, blob_client: Azur
                     decode_image(after_image).wrap_err("Failed to decode after image")?,
                 );
 
+                let final_path = replace_name_pathbuf(before_path, "-before.png", "-diff.png");
+
+                if before_image.dimensions() != after_image.dimensions() {
+                    return Ok((final_path, Vec::new()));
+                }
+
                 let image =
                     ImageBuffer::from_fn(after_image.width(), after_image.height(), |x, y| {
                         use image::Pixel;
@@ -481,8 +504,6 @@ pub fn render_diffs(before: RenderedMaps, after: RenderedMaps, blob_client: Azur
                         }
                     });
 
-                let final_path = replace_name_pathbuf(before_path, "-before.png", "-diff.png");
-
                 let image = compress_image(image).wrap_err("Failed to compress image")?;
 
                 Ok((final_path, image))
@@ -493,6 +514,9 @@ pub fn render_diffs(before: RenderedMaps, after: RenderedMaps, blob_client: Azur
     res.iter()
         .filter_map(|item| item.as_ref().ok())
         .for_each(|(final_path, image)| {
+            if image.is_empty() {
+                return;
+            }
             if let Some(client) = blob_client.clone() {
                 if let Err(e) = write_to_azure(final_path, client, image.as_slice())
                     .wrap_err("Sending image to azure")
@@ -500,12 +524,10 @@ pub fn render_diffs(before: RenderedMaps, after: RenderedMaps, blob_client: Azur
                     tracing::error!("{e:?}")
                 };
                 tracing::debug!("Sent to azure: {final_path:?}");
-            } else {
-                if let Err(e) =
-                    write_to_file(final_path, image.as_slice()).wrap_err("Writing image to file")
-                {
-                    tracing::error!("{e:?}")
-                };
+            } else if let Err(e) =
+                write_to_file(final_path, image.as_slice()).wrap_err("Writing image to file")
+            {
+                tracing::error!("{e:?}");
                 tracing::debug!("Written to file: {final_path:?}");
             }
         });
