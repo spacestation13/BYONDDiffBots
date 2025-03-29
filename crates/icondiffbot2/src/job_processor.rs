@@ -246,7 +246,7 @@ fn render(
                             let (_, after_url) = render_state(
                                 &prefix,
                                 &after,
-                                (duplication_index, before_state.1),
+                                (duplication_index, after_state.1),
                                 &after_renderer,
                             )
                             .with_context(|| {
