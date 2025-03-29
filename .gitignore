@@ -7,3 +7,5 @@ jobs/
 
 diffbot.pem
 config.toml
+
+/config/
