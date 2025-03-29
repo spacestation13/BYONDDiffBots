@@ -6,10 +6,10 @@ license = "MIT"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-serde = { version = "1.0.218", features = ["derive"] }
-serde_json = { version = "1.0.139" }
+serde = { version = "1.0.219", features = ["derive"] }
+serde_json = { version = "1.0.140" }
 toml = "0.8.20"
-octocrab = "0.43.0"
+octocrab = "0.44.0"
 dmm-tools = { git = "https://github.com/jupyterkat/SpacemanDMM/" }
 dreammaker = { git = "https://github.com/jupyterkat/SpacemanDMM/" }
 ahash = "0.8.11"
@@ -18,21 +18,21 @@ jsonwebtoken = "9.3.1"
 eyre = "0.6.12"
 simple-eyre = "0.3.1"
 rayon = "1.10.0"
-image = "0.25.5"
+image = "0.25.6"
 diffbot_lib = { path = "../diffbot_lib" }
-git2 = "0.20.0"
+git2 = "0.20.1"
 walkdir = "2.5.0"
 delay_timer = "0.11.6"
 itertools = "0.14.0"
-indexmap = { version = "2.7.1", features = ["rayon"] }
+indexmap = { version = "2.8.0", features = ["rayon"] }
 tracing-loki = "0.2.6"
 flume = "0.11.1"
-object_store = { version = "0.11.2", features = ["azure"] }
+object_store = { version = "0.12.0", features = ["azure"] }
 mysql_async = "0.35.1"
-time = "0.3.37"
+time = "0.3.41"
 secrecy = "0.10.3"
 
-actix-web = "4.9.0"
+actix-web = "4.10.2"
 actix-files = "0.6.6"
 
 [target.'cfg(not(target_env = "msvc"))'.dependencies]
