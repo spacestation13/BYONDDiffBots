@@ -320,18 +320,29 @@ fn generate_finished_output<P: AsRef<Path>>(
                                 diff_row = Z_DELETED_TEXT
                             ));
                         }
-                        crate::rendering::BoundType::Both(bounds) => {
-                            builder.add_text(&format!(
-                                include_str!("../templates/diff_template_mod.txt"),
-                                bounds = bounds.to_string(),
-                                filename = name,
-                                image_before_link = format_args!("[Old]({link_before})"),
-                                image_after_link = format_args!("[New]({link_after})"),
-                                image_diff_link = format_args!("[Diff]({link_diff})"),
-                                old_row = format_args!("![{ROW_DESC}]({link_before})"),
-                                new_row = format_args!("![{ROW_DESC}]({link_after})"),
-                                diff_row = format_args!("![{ROW_DESC}]({link_diff})")
-                            ));
+                        crate::rendering::BoundType::Both((base_bound, head_bound)) => {
+                            if base_bound == head_bound {
+                                builder.add_text(&format!(
+                                    include_str!("../templates/diff_template_mod.txt"),
+                                    bounds = base_bound.to_string(),
+                                    filename = name,
+                                    image_before_link = format_args!("[Old]({link_before})"),
+                                    image_after_link = format_args!("[New]({link_after})"),
+                                    image_diff_link = format_args!("[Diff]({link_diff})"),
+                                    old_row = format_args!("![{ROW_DESC}]({link_before})"),
+                                    new_row = format_args!("![{ROW_DESC}]({link_after})"),
+                                    diff_row = format_args!("![{ROW_DESC}]({link_diff})")
+                                ));
+                            } else {
+                                builder.add_text(&format!(
+                                    include_str!("../templates/diff_template_sizechanged.txt"),
+                                    filename = name,
+                                    image_before_link = format_args!("[Old]({link_before})"),
+                                    image_after_link = format_args!("[New]({link_after})"),
+                                    old_row = format_args!("![{ROW_DESC}]({link_before})"),
+                                    new_row = format_args!("![{ROW_DESC}]({link_after})"),
+                                ));
+                            }
                         }
                     }
                 });

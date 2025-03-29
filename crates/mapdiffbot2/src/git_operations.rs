@@ -212,7 +212,7 @@ fn commit_all_stragglers(repo: &Repository) -> Result<()> {
                     | git2::Status::WT_TYPECHANGE,
             )
         })
-        .map_or(false, |_| true);
+        .is_some_and(|_| true);
     if dirty {
         let head_commit = repo.head()?.peel_to_commit()?;
         repo.index()?

@@ -181,6 +181,7 @@ async fn main() -> eyre::Result<()> {
                 `repo_id` BIGINT(20) NOT NULL,
                 `pr_number` INT(11) NOT NULL,
                 `merge_date` DATETIME NULL DEFAULT NULL,
+                `num_icons` BIGINT(20) NOT NULL DEFAULT b'0',
                 `processed` BIT(1) NOT NULL DEFAULT b'0',
                 PRIMARY KEY (`check_id`) USING BTREE,
                 INDEX `merge_date` (`processed`) USING BTREE,

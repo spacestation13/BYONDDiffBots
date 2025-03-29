@@ -37,7 +37,7 @@ async fn handle_pull_request(
                 payload.pull_request.number,
             );
 
-            handle_pull(payload, job_sender, check_run).await?;
+            let num_icons = handle_pull(payload, job_sender, check_run).await?;
 
             if let Some(ref pool) = pool {
                 let mut conn = match pool.get_conn().await {
@@ -54,20 +54,23 @@ async fn handle_pull_request(
                         check_id,
                         repo_id,
                         pr_number,
-                        merge_date
+                        merge_date,
+                        num_icons
                     )
                     VALUES(
                         :check_id,
                         :repo_id,
                         :pr_number,
-                        :merge_date
+                        :merge_date,
+                        :num_icons
                     )
                     ",
                         params! {
                             "check_id" => check_id,
                             "repo_id" => repo_id,
                             "pr_number" => pr_number,
-                            "merge_date" => None::<time::PrimitiveDateTime>,
+                            "merge_date" => None::<usize>,
+                            "num_icons" => num_icons,
                         },
                     )
                     .await
@@ -88,14 +91,13 @@ async fn handle_pull_request(
                 };
 
                 let now = time::OffsetDateTime::now_utc();
-                let now = time::PrimitiveDateTime::new(now.date(), now.time());
                 if let Err(e) = conn
                     .exec_drop(
                         r"UPDATE jobs SET merge_date=:date
                     WHERE repo_id=:rp_id
                     AND pr_number=:pr_num",
                         params! {
-                            "date" => now,
+                            "date" => mysql_async::Value::Date(now.year() as u16, now.month() as u8, now.day(), now.hour(), now.minute(), now.second(), now.microsecond()),
                             "rp_id" => payload.repository.id,
                             "pr_num" => payload.pull_request.number,
                         },
@@ -115,7 +117,7 @@ async fn handle_pull(
     payload: PullRequestEventPayload,
     job_sender: DataJobSender,
     check_run: CheckRun,
-) -> Result<()> {
+) -> Result<usize> {
     if payload
         .pull_request
         .title
@@ -131,7 +133,7 @@ async fn handle_pull(
         };
 
         check_run.mark_skipped(output).await?;
-        return Ok(());
+        return Ok(0);
     }
 
     let conf = &crate::CONFIG.get().unwrap();
@@ -149,7 +151,7 @@ async fn handle_pull(
 
         check_run.mark_skipped(output).await?;
 
-        return Ok(());
+        return Ok(0);
     }
 
     let files = get_pull_files(
@@ -170,6 +172,8 @@ async fn handle_pull(
         })
         .collect();
 
+    let num_icons_diffed = changed_dmis.len();
+
     if changed_dmis.is_empty() {
         let output = Output {
             title: "No icon changes",
@@ -179,7 +183,7 @@ async fn handle_pull(
 
         check_run.mark_skipped(output).await?;
 
-        return Ok(());
+        return Ok(0);
     }
 
     check_run.mark_queued().await?;
@@ -199,7 +203,7 @@ async fn handle_pull(
 
     job_sender.send_async(job).await?;
 
-    Ok(())
+    Ok(num_icons_diffed)
 }
 
 #[actix_web::post("/payload")]

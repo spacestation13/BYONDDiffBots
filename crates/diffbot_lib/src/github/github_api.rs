@@ -76,7 +76,7 @@ impl CheckRun {
     ) -> Result<Self> {
         let inst_id = inst_id.into();
         let result: RawCheckRun = octocrab::instance()
-            .installation(inst_id)
+            .installation(inst_id)?
             .post(
                 format!("/repos/{full_repo}/check-runs"),
                 Some(&CreateCheckRun {
@@ -181,7 +181,7 @@ impl CheckRun {
         #[derive(Deserialize)]
         struct Empty {}
         let _: Empty = octocrab::instance()
-            .installation(self.installation_id)
+            .installation(self.installation_id)?
             .patch(
                 format!(
                     "/repos/{repo}/check-runs/{check_run_id}",

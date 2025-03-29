@@ -25,7 +25,7 @@ async fn find_content<S: AsRef<str>>(
 ) -> Result<Content> {
     let (owner, repo) = repo.name_tuple();
     let items = octocrab::instance()
-        .installation(*installation)
+        .installation(*installation)?
         .repos(owner, repo)
         .get_content()
         .path(
