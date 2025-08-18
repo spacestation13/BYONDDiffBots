@@ -11,7 +11,7 @@ extern crate dreammaker;
 use diffbot_lib::tracing;
 
 use diffbot_lib::github::github_types::FileDiff;
-use dmm_tools::{dmm, minimap, render_passes::RenderPass, IconCache};
+use dmm_tools::{IconCache, dmm, minimap, render_passes::RenderPass};
 use dreammaker::objtree::ObjectTree;
 use eyre::{Context, Result};
 use image::{EncodableLayout, ImageBuffer, ImageEncoder};
@@ -176,8 +176,7 @@ pub fn load_maps_with_whole_map_regions(
                 file.filename.clone(),
                 MapWithRegions {
                     map,
-                    bounding_boxes: std::iter::repeat(BoundType::Both((bbox, bbox)))
-                        .take(zs)
+                    bounding_boxes: std::iter::repeat_n(BoundType::Both((bbox, bbox)), zs)
                         .collect(),
                 },
             ))
