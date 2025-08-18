@@ -5,14 +5,11 @@ mod runner;
 mod sha;
 mod table_builder;
 
-use diffbot_lib::{
-    async_fs,
-    job::types::{Job, JobSender},
-};
+use diffbot_lib::{async_fs, job::types::Job};
 use mysql_async::prelude::Queryable;
 use octocrab::OctocrabBuilder;
 use serde::Deserialize;
-use std::sync::OnceLock;
+use std::sync::{Arc, OnceLock};
 use std::{
     fs::File,
     io::Read,
@@ -23,7 +20,9 @@ use std::{
 #[global_allocator]
 static GLOBAL: tikv_jemallocator::Jemalloc = tikv_jemallocator::Jemalloc;
 
-pub type DataJobSender = actix_web::web::Data<JobSender<Job>>;
+pub type DataJobScheduler = actix_web::web::Data<JobScheduler>;
+
+pub type JobScheduler = Arc<dashmap::DashMap<(String, u64), Job, ahash::RandomState>>;
 
 #[actix_web::get("/")]
 async fn index() -> &'static str {
@@ -166,8 +165,6 @@ async fn main() -> eyre::Result<()> {
 
     async_fs::create_dir_all("./images").await.unwrap();
 
-    let (job_sender, job_receiver) = flume::unbounded();
-
     let pool = config
         .db_url
         .as_ref()
@@ -191,13 +188,15 @@ async fn main() -> eyre::Result<()> {
         .await?;
     }
 
+    let scheduler: JobScheduler = Default::default();
+
     actix_web::rt::spawn(runner::handle_jobs(
         "IconDiffBot2",
-        job_receiver,
+        scheduler.clone(),
         reqwest_client,
     ));
 
-    let job_sender: DataJobSender = actix_web::web::Data::new(job_sender);
+    let scheduler: DataJobScheduler = actix_web::web::Data::new(scheduler.clone());
 
     actix_web::HttpServer::new(move || {
         let pool = actix_web::web::Data::new(pool.clone());
@@ -215,8 +214,8 @@ async fn main() -> eyre::Result<()> {
         actix_web::App::new()
             .app_data(form_config)
             .app_data(string_config)
-            .app_data(job_sender.clone())
             .app_data(pool)
+            .app_data(scheduler.clone())
             .service(index)
             .service(github_processor::process_github_payload_actix)
             .service(actix_files::Files::new("/images", "./images"))

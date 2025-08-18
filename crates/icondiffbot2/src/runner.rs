@@ -1,22 +1,22 @@
 use std::time::Duration;
 
+use crate::JobScheduler;
+
 use super::job_processor::do_job;
 use diffbot_lib::job::types::Job;
 
 use diffbot_lib::tracing;
 
-pub async fn handle_jobs<S: AsRef<str>>(
-    name: S,
-    job_receiver: flume::Receiver<Job>,
-    client: reqwest::Client,
-) {
+pub async fn handle_jobs<S: AsRef<str>>(name: S, scheduler: JobScheduler, client: reqwest::Client) {
     loop {
-        match job_receiver.recv_async().await {
-            Ok(job) => {
-                tracing::info!("Job received from queue");
-                job_handler(name.as_ref(), job, client.clone()).await;
-            }
-            Err(err) => tracing::error!("{err}"),
+        let job = { scheduler.iter().next().as_deref().cloned() };
+
+        if let Some(job) = job {
+            let entry = (job.repo.full_name(), job.pull_request);
+            scheduler.remove(&entry);
+
+            tracing::info!("Job received from queue");
+            job_handler(name.as_ref(), job, client.clone()).await;
         }
     }
 }

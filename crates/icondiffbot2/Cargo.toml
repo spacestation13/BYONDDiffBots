@@ -7,26 +7,27 @@ license = "MIT"
 
 [dependencies]
 serde = { version = "1.0.219", features = ["derive"] }
-serde_json = "1.0.140"
-octocrab = "0.44.0"
+serde_json = "1.0.142"
+octocrab = "0.44.1"
 dmm-tools = { git = "https://github.com/jupyterkat/SpacemanDMM/" }
 jsonwebtoken = "9.3.1"
-reqwest = "0.12.15"
+reqwest = "0.12.23"
 diffbot_lib = { path = "../diffbot_lib" }
 eyre = "0.6.12"
 simple-eyre = "0.3.1"
-rayon = "1.10.0"
-toml = "0.8.20"
-ahash = "0.8.11"
-hashbrown = { version = "0.15.2", features = ["rayon"] }
+rayon = "1.11.0"
+toml = "0.9.5"
+ahash = "0.8.12"
+hashbrown = { version = "0.15.5", features = ["rayon"] }
 tracing-loki = "0.2.6"
 flume = "0.11.1"
-mysql_async = "0.35.1"
+mysql_async = "0.36.1"
 time = "0.3.41"
 secrecy = "0.10.3"
 percent-encoding = "2.3.1"
+dashmap = "6.1.0"
 
-actix-web = "4.10.2"
+actix-web = "4.11.0"
 actix-files = "0.6.6"
 
 [target.'cfg(not(target_env = "msvc"))'.dependencies]

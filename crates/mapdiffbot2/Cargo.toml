@@ -7,32 +7,32 @@ license = "MIT"
 
 [dependencies]
 serde = { version = "1.0.219", features = ["derive"] }
-serde_json = { version = "1.0.140" }
-toml = "0.8.20"
-octocrab = "0.44.0"
+serde_json = { version = "1.0.142" }
+toml = "0.9.5"
+octocrab = "0.44.1"
 dmm-tools = { git = "https://github.com/jupyterkat/SpacemanDMM/" }
 dreammaker = { git = "https://github.com/jupyterkat/SpacemanDMM/" }
-ahash = "0.8.11"
+ahash = "0.8.12"
 path-absolutize = "3.1.1"
 jsonwebtoken = "9.3.1"
 eyre = "0.6.12"
 simple-eyre = "0.3.1"
-rayon = "1.10.0"
+rayon = "1.11.0"
 image = "0.25.6"
 diffbot_lib = { path = "../diffbot_lib" }
-git2 = "0.20.1"
+git2 = "0.20.2"
 walkdir = "2.5.0"
 delay_timer = "0.11.6"
 itertools = "0.14.0"
-indexmap = { version = "2.8.0", features = ["rayon"] }
+indexmap = { version = "2.10.0", features = ["rayon"] }
 tracing-loki = "0.2.6"
 flume = "0.11.1"
-object_store = { version = "0.12.0", features = ["azure"] }
-mysql_async = "0.35.1"
+object_store = { version = "0.12.3", features = ["azure"] }
+mysql_async = "0.36.1"
 time = "0.3.41"
 secrecy = "0.10.3"
 
-actix-web = "4.10.2"
+actix-web = "4.11.0"
 actix-files = "0.6.6"
 
 [target.'cfg(not(target_env = "msvc"))'.dependencies]
