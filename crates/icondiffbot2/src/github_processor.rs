@@ -39,7 +39,7 @@ async fn handle_pull_request(
 
             let num_icons = handle_pull(payload, scheduler, check_run).await?;
 
-            if let Some(ref pool) = pool {
+            if let Some(pool) = pool {
                 let mut conn = match pool.get_conn().await {
                     Ok(conn) => conn,
                     Err(e) => {
@@ -82,11 +82,11 @@ async fn handle_pull_request(
         }
         "closed" => {
             let scheduler = scheduler.get_ref();
-            if let Some(ref scheduler) = scheduler {
+            if let Some(scheduler) = scheduler {
                 scheduler.remove(&(payload.repository.full_name(), payload.pull_request.number));
             }
 
-            if let Some(ref pool) = pool {
+            if let Some(pool) = pool {
                 let mut conn = match pool.get_conn().await {
                     Ok(conn) => conn,
                     Err(e) => {
@@ -210,7 +210,7 @@ async fn handle_pull(
 
     let scheduler = scheduler.get_ref();
 
-    if let Some(ref scheduler) = scheduler {
+    if let Some(scheduler) = scheduler {
         match scheduler.entry(scheduler_entry) {
             dashmap::Entry::Occupied(mut entry) => {
                 _ = entry

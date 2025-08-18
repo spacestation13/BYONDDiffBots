@@ -152,7 +152,7 @@ async fn handle_pull_request(
             )
             .await?;
 
-            if let Some(ref pool) = pool {
+            if let Some(pool) = pool {
                 let mut conn = match pool.get_conn().await {
                     Ok(conn) => conn,
                     Err(e) => {
@@ -189,7 +189,7 @@ async fn handle_pull_request(
             }
         }
         "closed" => {
-            if let Some(ref pool) = pool {
+            if let Some(pool) = pool {
                 let mut conn = match pool.get_conn().await {
                     Ok(conn) => conn,
                     Err(e) => {
