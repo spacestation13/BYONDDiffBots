@@ -2,10 +2,7 @@ use actix_web::rt::Runtime;
 use diffbot_lib::{github::github_types::ChangeType, job::types::Job};
 use dmm_tools::dmi::IconFile;
 use eyre::{Context, Result};
-use std::{
-    collections::hash_map::DefaultHasher,
-    hash::{Hash, Hasher},
-};
+use std::hash::{Hash, Hasher};
 
 use crate::downloading::download_url;
 
@@ -53,7 +50,7 @@ fn get_if_exists(
             .wrap_err_with(|| format!("Failed to download file {filename:?}"))
     })?;
 
-    let mut hasher = DefaultHasher::new();
+    let mut hasher = ahash::AHasher::default();
     raw.hash(&mut hasher);
     let hash = hasher.finish();
 
