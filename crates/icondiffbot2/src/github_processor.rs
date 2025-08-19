@@ -12,11 +12,12 @@ use octocrab::models::InstallationId;
 
 use mysql_async::{params, prelude::Queryable};
 
-use crate::JobScheduler;
+use crate::{JobScheduler, Sender};
 
 async fn handle_pull_request(
     payload: PullRequestEventPayload,
     scheduler: actix_web::web::Data<Option<JobScheduler>>,
+    sender: actix_web::web::Data<Option<Sender>>,
     pool: actix_web::web::Data<Option<mysql_async::Pool>>,
 ) -> Result<()> {
     let pool = pool.get_ref();
@@ -37,7 +38,7 @@ async fn handle_pull_request(
                 payload.pull_request.number,
             );
 
-            let num_icons = handle_pull(payload, scheduler, check_run).await?;
+            let num_icons = handle_pull(payload, scheduler, sender, check_run).await?;
 
             if let Some(pool) = pool {
                 let mut conn = match pool.get_conn().await {
@@ -121,6 +122,7 @@ async fn handle_pull_request(
 async fn handle_pull(
     payload: PullRequestEventPayload,
     scheduler: actix_web::web::Data<Option<JobScheduler>>,
+    sender: actix_web::web::Data<Option<Sender>>,
     check_run: CheckRun,
 ) -> Result<usize> {
     if payload
@@ -194,6 +196,7 @@ async fn handle_pull(
     check_run.mark_queued().await?;
 
     let scheduler_entry = (payload.repository.full_name(), payload.pull_request.number);
+    let scheduler_entry_clone = (payload.repository.full_name(), payload.pull_request.number);
 
     let pull = payload.pull_request;
     let installation = payload.installation;
@@ -225,6 +228,11 @@ async fn handle_pull(
         }
     }
 
+    let sender = sender.get_ref();
+    if let Some(sender) = sender {
+        sender.send_async(scheduler_entry_clone).await;
+    }
+
     Ok(num_icons_diffed)
 }
 
@@ -234,6 +242,7 @@ pub async fn process_github_payload_actix(
     payload: String,
     pool: actix_web::web::Data<Option<mysql_async::Pool>>,
     scheduler: actix_web::web::Data<Option<JobScheduler>>,
+    sender: actix_web::web::Data<Option<Sender>>,
 ) -> actix_web::Result<&'static str> {
     // TODO: Handle reruns
     if event.0 != "pull_request" {
@@ -253,7 +262,7 @@ pub async fn process_github_payload_actix(
 
     let payload: PullRequestEventPayload = serde_json::from_str(&payload)?;
 
-    handle_pull_request(payload, scheduler, pool)
+    handle_pull_request(payload, scheduler, sender, pool)
         .await
         .map_err(actix_web::error::ErrorBadRequest)?;
 

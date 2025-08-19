@@ -7,16 +7,21 @@ use diffbot_lib::job::types::Job;
 
 use diffbot_lib::tracing;
 
-pub async fn handle_jobs<S: AsRef<str>>(name: S, scheduler: JobScheduler, client: reqwest::Client) {
+pub async fn handle_jobs<S: AsRef<str>>(
+    name: S,
+    scheduler: JobScheduler,
+    receiver: flume::Receiver<(String, u64)>,
+    client: reqwest::Client,
+) {
     loop {
-        let job = { scheduler.iter().next().as_deref().cloned() };
-
-        if let Some(job) = job {
-            let entry = (job.repo.full_name(), job.pull_request);
-            scheduler.remove(&entry);
-
-            tracing::info!("Job received from queue");
-            job_handler(name.as_ref(), job, client.clone()).await;
+        match receiver.recv_async().await {
+            Ok(entry) => {
+                if let Some((_, job)) = scheduler.remove(&entry) {
+                    tracing::info!("Job received from queue");
+                    job_handler(name.as_ref(), job, client.clone()).await;
+                }
+            }
+            Err(e) => tracing::error!("{e}"),
         }
     }
 }
