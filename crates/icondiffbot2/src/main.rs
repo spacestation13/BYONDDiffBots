@@ -20,10 +20,6 @@ use std::{
 #[global_allocator]
 static GLOBAL: tikv_jemallocator::Jemalloc = tikv_jemallocator::Jemalloc;
 
-pub type DataSender = actix_web::web::Data<Sender>;
-pub type Sender = flume::Sender<(String, u64)>;
-
-pub type DataJobScheduler = actix_web::web::Data<JobScheduler>;
 pub type JobScheduler = Arc<dashmap::DashMap<(String, u64), Job, ahash::RandomState>>;
 
 #[actix_web::get("/")]
@@ -201,11 +197,7 @@ async fn main() -> eyre::Result<()> {
         reqwest_client,
     ));
 
-    let scheduler: DataJobScheduler = actix_web::web::Data::new(scheduler.clone());
-    let sender: DataSender = actix_web::web::Data::new(sender);
-
     actix_web::HttpServer::new(move || {
-        let pool = actix_web::web::Data::new(pool.clone());
         use actix_web::web::{FormConfig, PayloadConfig};
         //absolutely rancid
         let (form_config, string_config) = config.web.limits.as_ref().map_or(
@@ -220,9 +212,9 @@ async fn main() -> eyre::Result<()> {
         actix_web::App::new()
             .app_data(form_config)
             .app_data(string_config)
-            .app_data(pool)
-            .app_data(scheduler.clone())
-            .app_data(sender.clone())
+            .app_data(actix_web::web::Data::new(pool.clone()))
+            .app_data(actix_web::web::Data::new(scheduler.clone()))
+            .app_data(actix_web::web::Data::new(sender.clone()))
             .service(index)
             .service(github_processor::process_github_payload_actix)
             .service(actix_files::Files::new("/images", "./images"))
