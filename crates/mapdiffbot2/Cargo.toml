@@ -7,7 +7,7 @@ license = "MIT"
 
 [dependencies]
 serde = { version = "1.0.219", features = ["derive"] }
-serde_json = { version = "1.0.142" }
+serde_json = { version = "1.0.143" }
 toml = "0.9.5"
 octocrab = "0.44.1"
 dmm-tools = { git = "https://github.com/jupyterkat/SpacemanDMM/" }
@@ -24,7 +24,7 @@ git2 = "0.20.2"
 walkdir = "2.5.0"
 delay_timer = "0.11.6"
 itertools = "0.14.0"
-indexmap = { version = "2.10.0", features = ["rayon"] }
+indexmap = { version = "2.11.0", features = ["rayon"] }
 tracing-loki = "0.2.6"
 flume = "0.11.1"
 object_store = { version = "0.12.3", features = ["azure"] }
