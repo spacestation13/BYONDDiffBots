@@ -1,3 +1,4 @@
+use actix_web::web::Data;
 use diffbot_lib::{
     github::{
         github_api::CheckRun,
@@ -202,20 +203,20 @@ async fn handle_pull(
         installation: InstallationId(installation.id),
     };
 
-    match scheduler.entry(scheduler_entry) {
-        dashmap::Entry::Occupied(mut entry) => {
-            _ = entry
-                .insert(job)
-                .check_run
-                .mark_failed("Check cancelled, a later commit has triggered the check")
-                .await;
-        }
+    if let Some(old_job) = match scheduler.entry(scheduler_entry) {
+        dashmap::Entry::Occupied(mut entry) => Some(entry.insert(job)),
         dashmap::Entry::Vacant(entry) => {
             entry.insert(job);
+            None
         }
+    } {
+        _ = old_job
+            .check_run
+            .mark_failed("Check cancelled, a later commit has triggered the check")
+            .await;
     }
 
-    _ = sender.send_async(scheduler_entry_clone).await;
+    sender.send_async(scheduler_entry_clone).await?;
 
     Ok(num_icons_diffed)
 }
@@ -224,9 +225,9 @@ async fn handle_pull(
 pub async fn process_github_payload_actix(
     event: diffbot_lib::github::github_api::GithubEvent,
     payload: String,
-    pool: actix_web::web::Data<mysql_async::Pool>,
-    scheduler: actix_web::web::Data<JobScheduler>,
-    sender: actix_web::web::Data<flume::Sender<(String, u64)>>,
+    pool: Data<mysql_async::Pool>,
+    scheduler: Data<JobScheduler>,
+    sender: Data<flume::Sender<(String, u64)>>,
 ) -> actix_web::Result<&'static str> {
     let (pool, scheduler, sender) = (pool.get_ref(), scheduler.get_ref(), sender.get_ref());
     // TODO: Handle reruns

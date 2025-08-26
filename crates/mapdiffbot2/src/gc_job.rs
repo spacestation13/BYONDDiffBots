@@ -1,10 +1,9 @@
 use delay_timer::prelude::*;
-use diffbot_lib::{
-    job::types::{JobSender, JobType},
-    tracing,
-};
+use diffbot_lib::{job::types::JobSender, tracing};
 
-pub async fn gc_scheduler(cron_str: String, job: JobSender<JobType>) {
+use crate::JobKind;
+
+pub async fn gc_scheduler(cron_str: String, job: JobSender<JobKind>) {
     let scheduler = DelayTimerBuilder::default()
         .tokio_runtime_by_default()
         .build();
@@ -17,7 +16,7 @@ pub async fn gc_scheduler(cron_str: String, job: JobSender<JobType>) {
                 .spawn_async_routine(move || {
                     let sender_clone = job.clone();
                     async move {
-                        if let Err(err) = sender_clone.send_async(JobType::CleanupJob).await {
+                        if let Err(err) = sender_clone.send_async(JobKind::Gc).await {
                             tracing::error!("Cannot send cleanup job: {err}")
                         }
                     }

@@ -345,13 +345,12 @@ fn full_render(job: &Job, target: &IconFileWithName) -> Result<Vec<((usize, Stri
         .metadata
         .states
         .values()
-        .map(|vec| {
+        .flat_map(|vec| {
             vec.iter()
                 .enumerate()
                 .map(|(duplication_index, (_, state))| (duplication_index, state))
                 .collect::<Vec<_>>()
         })
-        .flatten()
         .map(|(idx, state)| {
             render_state(&prefix, target, (idx, state), &renderer)
                 .with_context(|| format!("Failed to render state {}", state.name))

@@ -9,16 +9,22 @@ use std::fs::File;
 use std::io::Read;
 use std::path::PathBuf;
 
+use diffbot_lib::job::types::Job;
 use mysql_async::prelude::Queryable;
 use serde::Deserialize;
-use std::sync::OnceLock;
+use std::sync::{Arc, OnceLock};
 
 #[cfg(not(target_env = "msvc"))]
 #[global_allocator]
 static GLOBAL: tikv_jemallocator::Jemalloc = tikv_jemallocator::Jemalloc;
 
-pub type DataJobSender =
-    actix_web::web::Data<diffbot_lib::job::types::JobSender<diffbot_lib::job::types::JobType>>;
+pub type JobScheduler = Arc<dashmap::DashMap<(String, u64), Job, ahash::RandomState>>;
+
+#[derive(Debug, Hash)]
+enum JobKind {
+    Regular((String, u64)),
+    Gc,
+}
 
 #[actix_web::get("/")]
 async fn index() -> &'static str {
@@ -153,8 +159,6 @@ async fn main() -> eyre::Result<()> {
             .expect("fucked up octocrab"),
     );
 
-    let (job_sender, job_receiver) = flume::unbounded();
-
     let pool = config
         .db_url
         .as_ref()
@@ -192,8 +196,13 @@ async fn main() -> eyre::Result<()> {
         )
     });
 
+    let (job_sender, job_receiver) = flume::unbounded();
+
+    let scheduler: JobScheduler = Default::default();
+
     actix_web::rt::spawn(runner::handle_jobs(
         "MapDiffBot2",
+        scheduler.clone(),
         job_receiver,
         blob_client,
     ));
@@ -221,6 +230,7 @@ async fn main() -> eyre::Result<()> {
         actix_web::App::new()
             .app_data(form_config)
             .app_data(string_config)
+            .app_data(actix_web::web::Data::new(scheduler.clone()))
             .app_data(actix_web::web::Data::new(job_sender.clone()))
             .app_data(actix_web::web::Data::new(pool))
             .service(index)

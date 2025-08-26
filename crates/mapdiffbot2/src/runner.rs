@@ -1,8 +1,10 @@
 use std::path::PathBuf;
 use std::time::Duration;
 
+use crate::{JobKind, JobScheduler};
+
 use super::job_processor::do_job;
-use diffbot_lib::job::types::{Job, JobType};
+use diffbot_lib::job::types::Job;
 
 use diffbot_lib::tracing;
 
@@ -10,16 +12,19 @@ use super::Azure;
 
 pub async fn handle_jobs<S: AsRef<str>>(
     name: S,
-    job_receiver: flume::Receiver<JobType>,
+    scheduler: JobScheduler,
+    job_receiver: flume::Receiver<JobKind>,
     blob_client: Azure,
 ) {
     loop {
         match job_receiver.recv_async().await {
-            Ok(job_type) => match job_type {
-                JobType::GithubJob(job) => {
-                    job_handler(name.as_ref(), *job, blob_client.clone()).await
+            Ok(entry) => match entry {
+                JobKind::Regular(entry) => {
+                    if let Some((_, job)) = scheduler.remove(&entry) {
+                        job_handler(name.as_ref(), job, blob_client.clone()).await
+                    }
                 }
-                JobType::CleanupJob => garbage_collect_all_repos().await,
+                JobKind::Gc => garbage_collect_all_repos().await,
             },
             Err(err) => tracing::error!("{err}"),
         }
