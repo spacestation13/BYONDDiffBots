@@ -1,4 +1,3 @@
-mod gc_job;
 mod git_operations;
 mod github_processor;
 mod job_processor;
@@ -10,6 +9,7 @@ use std::io::Read;
 use std::path::PathBuf;
 
 use diffbot_lib::job::types::Job;
+use diffbot_lib::tracing;
 use mysql_async::prelude::Queryable;
 use serde::Deserialize;
 use std::sync::{Arc, OnceLock};
@@ -129,9 +129,8 @@ type Azure = Option<std::sync::Arc<object_store::azure::MicrosoftAzure>>;
 async fn main() -> eyre::Result<()> {
     simple_eyre::install().expect("Eyre handler installation failed!");
 
-    let config_path = std::path::Path::new(".").join("config.toml");
-    let config =
-        init_config(&config_path).unwrap_or_else(|_| panic!("Failed to read {config_path:?}"));
+    let config_path = std::path::Path::new(".").join("config").join("config.toml");
+    let config = init_config(&config_path).unwrap();
 
     let (layer, tasks) = if let Some(ref loki_config) = config.grafana_loki {
         let (layer, tasks) = tracing_loki::builder()
@@ -211,7 +210,22 @@ async fn main() -> eyre::Result<()> {
 
     let cron_str = config.gc_schedule.to_owned();
 
-    actix_web::rt::spawn(async move { gc_job::gc_scheduler(cron_str, job_clone).await });
+    let sched = tokio_cron_scheduler::JobScheduler::new().await.unwrap();
+    sched
+        .add(
+            tokio_cron_scheduler::Job::new_async(cron_str, move |_, _| {
+                let sender_clone = job_clone.clone();
+                Box::pin(async move {
+                    if let Err(err) = sender_clone.send_async(JobKind::Gc).await {
+                        tracing::error!("Cannot send cleanup job: {err}")
+                    }
+                })
+            })
+            .unwrap(),
+        )
+        .await
+        .unwrap();
+    sched.start().await.unwrap();
 
     actix_web::HttpServer::new(move || {
         let pool = pool.clone();

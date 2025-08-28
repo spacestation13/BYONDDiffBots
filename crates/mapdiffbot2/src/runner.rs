@@ -33,7 +33,6 @@ pub async fn handle_jobs<S: AsRef<str>>(
 
 async fn garbage_collect_all_repos() {
     use eyre::Result;
-    use path_absolutize::Absolutize;
     use std::process::Command;
     tracing::info!("Garbage collection starting!");
 
@@ -52,7 +51,7 @@ async fn garbage_collect_all_repos() {
                         let path = entry.into_path();
                         //tfw no try blocks
                         if let Err(err) = || -> Result<()> {
-                            let path = path.absolutize()?;
+                            let path = std::fs::canonicalize(path)?;
                             let output =
                                 Command::new("git").current_dir(&path).arg("gc").status()?;
                             if !output.success() {
