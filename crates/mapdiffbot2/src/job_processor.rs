@@ -1,4 +1,5 @@
 use eyre::{Context, Result};
+use path_absolutize::Absolutize;
 use secrecy::ExposeSecret;
 use std::io::Read;
 use std::path::Path;
@@ -403,8 +404,10 @@ pub fn do_job(job: Job, blob_client: Azure) -> Result<CheckOutputs> {
     ]
     .iter()
     .collect();
-    let output_directory =
-        std::fs::canonicalize(non_abs_directory.as_path()).wrap_err("Absolutizing images path")?;
+    let output_directory = non_abs_directory
+        .as_path()
+        .absolutize()
+        .wrap_err("Absolutizing images path")?;
 
     tracing::debug!(
         "Dirs absolutized from {:?} to {:?}",
