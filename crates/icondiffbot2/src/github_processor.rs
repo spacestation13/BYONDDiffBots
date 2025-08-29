@@ -19,7 +19,7 @@ async fn handle_pull_request(
     payload: PullRequestEventPayload,
     scheduler: &JobScheduler,
     sender: &flume::Sender<(String, u64)>,
-    pool: &mysql_async::Pool,
+    pool: Option<&mysql_async::Pool>,
 ) -> Result<()> {
     match payload.action.as_str() {
         "opened" | "synchronize" => {
@@ -39,17 +39,18 @@ async fn handle_pull_request(
 
             let num_icons = handle_pull(payload, scheduler, sender, check_run).await?;
 
-            let mut conn = match pool.get_conn().await {
-                Ok(conn) => conn,
-                Err(e) => {
-                    tracing::error!("{:?}", e);
-                    return Ok(());
-                }
-            };
+            if let Some(pool) = pool {
+                let mut conn = match pool.get_conn().await {
+                    Ok(conn) => conn,
+                    Err(e) => {
+                        tracing::error!("{:?}", e);
+                        return Ok(());
+                    }
+                };
 
-            if let Err(e) = conn
-                .exec_drop(
-                    r"INSERT INTO jobs (
+                if let Err(e) = conn
+                    .exec_drop(
+                        r"INSERT INTO jobs (
                         check_id,
                         repo_id,
                         pr_number,
@@ -64,33 +65,35 @@ async fn handle_pull_request(
                         :num_icons
                     )
                     ",
-                    params! {
-                        "check_id" => check_id,
-                        "repo_id" => repo_id,
-                        "pr_number" => pr_number,
-                        "merge_date" => None::<usize>,
-                        "num_icons" => num_icons,
-                    },
-                )
-                .await
-            {
-                tracing::error!("{:?}", e);
-            };
+                        params! {
+                            "check_id" => check_id,
+                            "repo_id" => repo_id,
+                            "pr_number" => pr_number,
+                            "merge_date" => None::<usize>,
+                            "num_icons" => num_icons,
+                        },
+                    )
+                    .await
+                {
+                    tracing::error!("{:?}", e);
+                };
+            }
             Ok(())
         }
         "closed" => {
             scheduler.remove(&(payload.repository.full_name(), payload.pull_request.number));
 
-            let mut conn = match pool.get_conn().await {
-                Ok(conn) => conn,
-                Err(e) => {
-                    tracing::error!("{:?}", e);
-                    return Ok(());
-                }
-            };
+            if let Some(pool) = pool {
+                let mut conn = match pool.get_conn().await {
+                    Ok(conn) => conn,
+                    Err(e) => {
+                        tracing::error!("{:?}", e);
+                        return Ok(());
+                    }
+                };
 
-            let now = time::OffsetDateTime::now_utc();
-            if let Err(e) = conn
+                let now = time::OffsetDateTime::now_utc();
+                if let Err(e) = conn
                     .exec_drop(
                         r"UPDATE jobs SET merge_date=:date
                     WHERE repo_id=:rp_id
@@ -105,6 +108,7 @@ async fn handle_pull_request(
                 {
                     tracing::error!("{:?}", e);
                 };
+            }
             Ok(())
         }
         _ => Ok(()),
@@ -225,11 +229,15 @@ async fn handle_pull(
 pub async fn process_github_payload_actix(
     event: diffbot_lib::github::github_api::GithubEvent,
     payload: String,
-    pool: Data<mysql_async::Pool>,
+    pool: Data<Option<mysql_async::Pool>>,
     scheduler: Data<JobScheduler>,
     sender: Data<flume::Sender<(String, u64)>>,
 ) -> actix_web::Result<&'static str> {
-    let (pool, scheduler, sender) = (pool.get_ref(), scheduler.get_ref(), sender.get_ref());
+    let (pool, scheduler, sender) = (
+        pool.get_ref().as_ref(),
+        scheduler.get_ref(),
+        sender.get_ref(),
+    );
     // TODO: Handle reruns
     if event.0 != "pull_request" {
         return Ok("Not a pull request event");
