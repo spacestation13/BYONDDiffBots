@@ -10,8 +10,8 @@ use super::git_operations::{
 };
 
 use crate::rendering::{
-    get_map_diff_bounding_boxes, load_maps, load_maps_with_whole_map_regions, render_diffs,
-    render_map_regions, MapWithRegions, MapsWithRegions, RenderingContext,
+    MapWithRegions, MapsWithRegions, RenderingContext, get_map_diff_bounding_boxes, load_maps,
+    load_maps_with_whole_map_regions, render_diffs, render_map_regions,
 };
 
 use crate::CONFIG;
@@ -63,9 +63,7 @@ fn render(
         fetch_and_get_branches(&base.sha, &head.sha, repo, &head_branch, base_branch_name)
             .wrap_err("Fetching and constructing diffs")?;
 
-    let path = repo_dir
-        .absolutize()
-        .wrap_err("Making repo path absolute")?;
+    let path = std::fs::canonicalize(repo_dir).wrap_err("Making repo path absolute")?;
 
     let base_context = with_checkout(&base_branch, repo, || RenderingContext::new(&path))
         .wrap_err("Parsing base")?;
@@ -82,7 +80,8 @@ fn render(
     })
     .unwrap_or_else(|_| MapConfig {
         include_pass: "".to_owned(),
-        exclude_pass: "hide-space,hide-invisible,random".to_owned(),
+        exclude_pass: "hide-space,hide-invisible,random,spawners,icon-smoothing,smart-cables"
+            .to_owned(),
     });
 
     let base_render_passes = dmm_tools::render_passes::configure(

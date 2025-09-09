@@ -1,5 +1,7 @@
 use std::time::Duration;
 
+use crate::JobScheduler;
+
 use super::job_processor::do_job;
 use diffbot_lib::job::types::Job;
 
@@ -7,16 +9,19 @@ use diffbot_lib::tracing;
 
 pub async fn handle_jobs<S: AsRef<str>>(
     name: S,
-    job_receiver: flume::Receiver<Job>,
+    scheduler: JobScheduler,
+    receiver: flume::Receiver<(String, u64)>,
     client: reqwest::Client,
 ) {
     loop {
-        match job_receiver.recv_async().await {
-            Ok(job) => {
-                tracing::info!("Job received from queue");
-                job_handler(name.as_ref(), job, client.clone()).await;
+        match receiver.recv_async().await {
+            Ok(entry) => {
+                if let Some((_, job)) = scheduler.remove(&entry) {
+                    tracing::info!("Job received from queue");
+                    job_handler(name.as_ref(), job, client.clone()).await;
+                }
             }
-            Err(err) => tracing::error!("{err}"),
+            Err(e) => tracing::error!("{e}"),
         }
     }
 }

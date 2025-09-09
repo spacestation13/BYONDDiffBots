@@ -1,4 +1,3 @@
-mod gc_job;
 mod git_operations;
 mod github_processor;
 mod job_processor;
@@ -9,16 +8,23 @@ use std::fs::File;
 use std::io::Read;
 use std::path::PathBuf;
 
+use diffbot_lib::job::types::Job;
+use diffbot_lib::tracing;
 use mysql_async::prelude::Queryable;
 use serde::Deserialize;
-use std::sync::OnceLock;
+use std::sync::{Arc, OnceLock};
 
 #[cfg(not(target_env = "msvc"))]
 #[global_allocator]
 static GLOBAL: tikv_jemallocator::Jemalloc = tikv_jemallocator::Jemalloc;
 
-pub type DataJobSender =
-    actix_web::web::Data<diffbot_lib::job::types::JobSender<diffbot_lib::job::types::JobType>>;
+pub type JobScheduler = Arc<dashmap::DashMap<(String, u64), Job, ahash::RandomState>>;
+
+#[derive(Debug, Hash)]
+enum JobKind {
+    Regular((String, u64)),
+    Gc,
+}
 
 #[actix_web::get("/")]
 async fn index() -> &'static str {
@@ -123,9 +129,8 @@ type Azure = Option<std::sync::Arc<object_store::azure::MicrosoftAzure>>;
 async fn main() -> eyre::Result<()> {
     simple_eyre::install().expect("Eyre handler installation failed!");
 
-    let config_path = std::path::Path::new(".").join("config.toml");
-    let config =
-        init_config(&config_path).unwrap_or_else(|_| panic!("Failed to read {config_path:?}"));
+    let config_path = std::path::Path::new(".").join("config").join("config.toml");
+    let config = init_config(&config_path).unwrap();
 
     let (layer, tasks) = if let Some(ref loki_config) = config.grafana_loki {
         let (layer, tasks) = tracing_loki::builder()
@@ -152,8 +157,6 @@ async fn main() -> eyre::Result<()> {
             .build()
             .expect("fucked up octocrab"),
     );
-
-    let (job_sender, job_receiver) = flume::unbounded();
 
     let pool = config
         .db_url
@@ -192,8 +195,13 @@ async fn main() -> eyre::Result<()> {
         )
     });
 
+    let (job_sender, job_receiver) = flume::unbounded();
+
+    let scheduler: JobScheduler = Default::default();
+
     actix_web::rt::spawn(runner::handle_jobs(
         "MapDiffBot2",
+        scheduler.clone(),
         job_receiver,
         blob_client,
     ));
@@ -202,7 +210,22 @@ async fn main() -> eyre::Result<()> {
 
     let cron_str = config.gc_schedule.to_owned();
 
-    actix_web::rt::spawn(async move { gc_job::gc_scheduler(cron_str, job_clone).await });
+    let sched = tokio_cron_scheduler::JobScheduler::new().await.unwrap();
+    sched
+        .add(
+            tokio_cron_scheduler::Job::new_async(cron_str, move |_, _| {
+                let sender_clone = job_clone.clone();
+                Box::pin(async move {
+                    if let Err(err) = sender_clone.send_async(JobKind::Gc).await {
+                        tracing::error!("Cannot send cleanup job: {err}")
+                    }
+                })
+            })
+            .unwrap(),
+        )
+        .await
+        .unwrap();
+    sched.start().await.unwrap();
 
     actix_web::HttpServer::new(move || {
         let pool = pool.clone();
@@ -221,6 +244,7 @@ async fn main() -> eyre::Result<()> {
         actix_web::App::new()
             .app_data(form_config)
             .app_data(string_config)
+            .app_data(actix_web::web::Data::new(scheduler.clone()))
             .app_data(actix_web::web::Data::new(job_sender.clone()))
             .app_data(actix_web::web::Data::new(pool))
             .service(index)

@@ -5,14 +5,11 @@ mod runner;
 mod sha;
 mod table_builder;
 
-use diffbot_lib::{
-    async_fs,
-    job::types::{Job, JobSender},
-};
+use diffbot_lib::job::types::Job;
 use mysql_async::prelude::Queryable;
 use octocrab::OctocrabBuilder;
 use serde::Deserialize;
-use std::sync::OnceLock;
+use std::sync::{Arc, OnceLock};
 use std::{
     fs::File,
     io::Read,
@@ -23,7 +20,7 @@ use std::{
 #[global_allocator]
 static GLOBAL: tikv_jemallocator::Jemalloc = tikv_jemallocator::Jemalloc;
 
-pub type DataJobSender = actix_web::web::Data<JobSender<Job>>;
+pub type JobScheduler = Arc<dashmap::DashMap<(String, u64), Job, ahash::RandomState>>;
 
 #[actix_web::get("/")]
 async fn index() -> &'static str {
@@ -132,9 +129,8 @@ async fn main() -> eyre::Result<()> {
     simple_eyre::install().expect("Eyre handler installation failed!");
     // init_global_subscriber();
 
-    let config_path = Path::new(".").join("config.toml");
-    let config =
-        init_config(&config_path).unwrap_or_else(|_| panic!("Failed to read {config_path:?}"));
+    let config_path = std::path::Path::new(".").join("config").join("config.toml");
+    let config = init_config(&config_path).unwrap();
 
     let (layer, tasks) = if let Some(ref loki_config) = config.grafana_loki {
         let (layer, tasks) = tracing_loki::builder()
@@ -164,9 +160,7 @@ async fn main() -> eyre::Result<()> {
     );
     let reqwest_client = reqwest::Client::new();
 
-    async_fs::create_dir_all("./images").await.unwrap();
-
-    let (job_sender, job_receiver) = flume::unbounded();
+    std::fs::create_dir_all("./images").unwrap();
 
     let pool = config
         .db_url
@@ -191,16 +185,18 @@ async fn main() -> eyre::Result<()> {
         .await?;
     }
 
+    let (sender, receiver) = flume::unbounded();
+
+    let scheduler: JobScheduler = Default::default();
+
     actix_web::rt::spawn(runner::handle_jobs(
         "IconDiffBot2",
-        job_receiver,
+        scheduler.clone(),
+        receiver,
         reqwest_client,
     ));
 
-    let job_sender: DataJobSender = actix_web::web::Data::new(job_sender);
-
     actix_web::HttpServer::new(move || {
-        let pool = actix_web::web::Data::new(pool.clone());
         use actix_web::web::{FormConfig, PayloadConfig};
         //absolutely rancid
         let (form_config, string_config) = config.web.limits.as_ref().map_or(
@@ -215,8 +211,9 @@ async fn main() -> eyre::Result<()> {
         actix_web::App::new()
             .app_data(form_config)
             .app_data(string_config)
-            .app_data(job_sender.clone())
-            .app_data(pool)
+            .app_data(actix_web::web::Data::new(pool.clone()))
+            .app_data(actix_web::web::Data::new(scheduler.clone()))
+            .app_data(actix_web::web::Data::new(sender.clone()))
             .service(index)
             .service(github_processor::process_github_payload_actix)
             .service(actix_files::Files::new("/images", "./images"))

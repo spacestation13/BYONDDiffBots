@@ -1,8 +1,5 @@
-use eyre::{Context, Result};
-use mysql_async::{params, prelude::Queryable};
-use octocrab::models::InstallationId;
-
-use crate::DataJobSender;
+use crate::{JobKind, JobScheduler};
+use actix_web::web::Data;
 use diffbot_lib::{
     github::{
         github_api::CheckRun,
@@ -11,16 +8,21 @@ use diffbot_lib::{
         },
         graphql::get_pull_files,
     },
-    job::types::{Job, JobType},
+    job::types::Job,
     tracing,
 };
+use eyre::{Context, Result};
+use flume::Sender;
+use mysql_async::{params, prelude::Queryable};
+use octocrab::models::InstallationId;
 
 async fn process_pull(
     repo: Repository,
     pull: PullRequest,
     check_run: CheckRun,
     installation: &Installation,
-    job_sender: DataJobSender,
+    job_sender: &Sender<JobKind>,
+    job_scheduler: &JobScheduler,
 ) -> Result<()> {
     tracing::debug!("Processing pull request");
 
@@ -97,6 +99,9 @@ async fn process_pull(
 
     check_run.mark_queued().await?;
 
+    let scheduler_entry = (repo.full_name(), pull.number);
+    let scheduler_entry_clone = (repo.full_name(), pull.number);
+
     let job = Job {
         repo,
         base: pull.base,
@@ -107,8 +112,21 @@ async fn process_pull(
         installation: InstallationId(installation.id),
     };
 
+    if let Some(old_job) = match job_scheduler.entry(scheduler_entry) {
+        dashmap::Entry::Occupied(mut entry) => Some(entry.insert(job)),
+        dashmap::Entry::Vacant(entry) => {
+            entry.insert(job);
+            None
+        }
+    } {
+        _ = old_job
+            .check_run
+            .mark_failed("Check cancelled, a later commit has triggered the check")
+            .await;
+    }
+
     job_sender
-        .send_async(JobType::GithubJob(Box::new(job)))
+        .send_async(JobKind::Regular(scheduler_entry_clone))
         .await?;
 
     tracing::debug!("Job sent to queue");
@@ -118,8 +136,9 @@ async fn process_pull(
 
 async fn handle_pull_request(
     payload: String,
-    job_sender: DataJobSender,
-    pool: actix_web::web::Data<Option<mysql_async::Pool>>,
+    job_sender: &Sender<JobKind>,
+    job_scheduler: &JobScheduler,
+    pool: Data<Option<mysql_async::Pool>>,
 ) -> Result<&'static str> {
     let payload: PullRequestEventPayload = serde_json::from_str(&payload)?;
 
@@ -149,10 +168,11 @@ async fn handle_pull_request(
                 check_run,
                 &payload.installation,
                 job_sender,
+                job_scheduler,
             )
             .await?;
 
-            if let Some(ref pool) = pool {
+            if let Some(pool) = pool {
                 let mut conn = match pool.get_conn().await {
                     Ok(conn) => conn,
                     Err(e) => {
@@ -189,7 +209,7 @@ async fn handle_pull_request(
             }
         }
         "closed" => {
-            if let Some(ref pool) = pool {
+            if let Some(pool) = pool {
                 let mut conn = match pool.get_conn().await {
                     Ok(conn) => conn,
                     Err(e) => {
@@ -227,9 +247,11 @@ async fn handle_pull_request(
 pub async fn process_github_payload(
     event: diffbot_lib::github::github_api::GithubEvent,
     payload: String,
-    job_sender: DataJobSender,
-    pool: actix_web::web::Data<Option<mysql_async::Pool>>,
+    job_sender: Data<Sender<JobKind>>,
+    job_scheduler: Data<JobScheduler>,
+    pool: Data<Option<mysql_async::Pool>>,
 ) -> actix_web::Result<&'static str> {
+    let (job_sender, job_scheduler) = (job_sender.as_ref(), job_scheduler.as_ref());
     if event.0 != "pull_request" {
         return Ok("Not a pull request event");
     }
@@ -247,7 +269,7 @@ pub async fn process_github_payload(
 
     tracing::debug!("Payload received, processing");
 
-    handle_pull_request(payload, job_sender, pool)
+    handle_pull_request(payload, job_sender, job_scheduler, pool)
         .await
         .map_err(|e| {
             tracing::error!("Error handling event: {:?}", e);

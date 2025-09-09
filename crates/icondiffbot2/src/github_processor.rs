@@ -1,3 +1,4 @@
+use actix_web::web::Data;
 use diffbot_lib::{
     github::{
         github_api::CheckRun,
@@ -12,15 +13,14 @@ use octocrab::models::InstallationId;
 
 use mysql_async::{params, prelude::Queryable};
 
-use crate::DataJobSender;
+use crate::JobScheduler;
 
 async fn handle_pull_request(
     payload: PullRequestEventPayload,
-    job_sender: DataJobSender,
-    pool: actix_web::web::Data<Option<mysql_async::Pool>>,
+    scheduler: &JobScheduler,
+    sender: &flume::Sender<(String, u64)>,
+    pool: Option<&mysql_async::Pool>,
 ) -> Result<()> {
-    let pool = pool.get_ref();
-
     match payload.action.as_str() {
         "opened" | "synchronize" => {
             let check_run = CheckRun::create(
@@ -37,9 +37,9 @@ async fn handle_pull_request(
                 payload.pull_request.number,
             );
 
-            let num_icons = handle_pull(payload, job_sender, check_run).await?;
+            let num_icons = handle_pull(payload, scheduler, sender, check_run).await?;
 
-            if let Some(ref pool) = pool {
+            if let Some(pool) = pool {
                 let mut conn = match pool.get_conn().await {
                     Ok(conn) => conn,
                     Err(e) => {
@@ -81,7 +81,9 @@ async fn handle_pull_request(
             Ok(())
         }
         "closed" => {
-            if let Some(ref pool) = pool {
+            scheduler.remove(&(payload.repository.full_name(), payload.pull_request.number));
+
+            if let Some(pool) = pool {
                 let mut conn = match pool.get_conn().await {
                     Ok(conn) => conn,
                     Err(e) => {
@@ -106,7 +108,7 @@ async fn handle_pull_request(
                 {
                     tracing::error!("{:?}", e);
                 };
-            };
+            }
             Ok(())
         }
         _ => Ok(()),
@@ -115,7 +117,8 @@ async fn handle_pull_request(
 
 async fn handle_pull(
     payload: PullRequestEventPayload,
-    job_sender: DataJobSender,
+    scheduler: &JobScheduler,
+    sender: &flume::Sender<(String, u64)>,
     check_run: CheckRun,
 ) -> Result<usize> {
     if payload
@@ -188,6 +191,9 @@ async fn handle_pull(
 
     check_run.mark_queued().await?;
 
+    let scheduler_entry = (payload.repository.full_name(), payload.pull_request.number);
+    let scheduler_entry_clone = (payload.repository.full_name(), payload.pull_request.number);
+
     let pull = payload.pull_request;
     let installation = payload.installation;
 
@@ -201,7 +207,20 @@ async fn handle_pull(
         installation: InstallationId(installation.id),
     };
 
-    job_sender.send_async(job).await?;
+    if let Some(old_job) = match scheduler.entry(scheduler_entry) {
+        dashmap::Entry::Occupied(mut entry) => Some(entry.insert(job)),
+        dashmap::Entry::Vacant(entry) => {
+            entry.insert(job);
+            None
+        }
+    } {
+        _ = old_job
+            .check_run
+            .mark_failed("Check cancelled, a later commit has triggered the check")
+            .await;
+    }
+
+    sender.send_async(scheduler_entry_clone).await?;
 
     Ok(num_icons_diffed)
 }
@@ -210,9 +229,15 @@ async fn handle_pull(
 pub async fn process_github_payload_actix(
     event: diffbot_lib::github::github_api::GithubEvent,
     payload: String,
-    job_sender: DataJobSender,
-    pool: actix_web::web::Data<Option<mysql_async::Pool>>,
+    pool: Data<Option<mysql_async::Pool>>,
+    scheduler: Data<JobScheduler>,
+    sender: Data<flume::Sender<(String, u64)>>,
 ) -> actix_web::Result<&'static str> {
+    let (pool, scheduler, sender) = (
+        pool.get_ref().as_ref(),
+        scheduler.get_ref(),
+        sender.get_ref(),
+    );
     // TODO: Handle reruns
     if event.0 != "pull_request" {
         return Ok("Not a pull request event");
@@ -231,7 +256,7 @@ pub async fn process_github_payload_actix(
 
     let payload: PullRequestEventPayload = serde_json::from_str(&payload)?;
 
-    handle_pull_request(payload, job_sender, pool)
+    handle_pull_request(payload, scheduler, sender, pool)
         .await
         .map_err(actix_web::error::ErrorBadRequest)?;
 

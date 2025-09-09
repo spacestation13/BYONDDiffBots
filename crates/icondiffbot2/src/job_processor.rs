@@ -1,11 +1,11 @@
 use crate::{
-    sha::{sha_to_iconfile, status_to_sha, IconFileWithName},
-    table_builder::OutputTableBuilder,
     CONFIG,
+    sha::{IconFileWithName, sha_to_iconfile, status_to_sha},
+    table_builder::OutputTableBuilder,
 };
 use diffbot_lib::{github::github_types::CheckOutputs, job::types::Job, tracing};
-use dmm_tools::dmi::render::{IconRenderer, RenderType};
 use dmm_tools::dmi::State;
+use dmm_tools::dmi::render::{IconRenderer, RenderType};
 use eyre::{Context, Result};
 use hashbrown::HashSet;
 use rayon::prelude::*;
@@ -344,14 +344,13 @@ fn full_render(job: &Job, target: &IconFileWithName) -> Result<Vec<((usize, Stri
     let vec: Vec<((usize, String), String)> = icon
         .metadata
         .states
-        .par_values()
-        .map(|vec| {
+        .values()
+        .flat_map(|vec| {
             vec.iter()
                 .enumerate()
                 .map(|(duplication_index, (_, state))| (duplication_index, state))
                 .collect::<Vec<_>>()
         })
-        .flatten()
         .map(|(idx, state)| {
             render_state(&prefix, target, (idx, state), &renderer)
                 .with_context(|| format!("Failed to render state {}", state.name))
