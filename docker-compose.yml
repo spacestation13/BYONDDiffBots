@@ -1,0 +1,36 @@
+services:
+  icondiffbot2:
+    image: ghcr.io/spacestation13/icondiffbot2:latest
+    build:
+      target: icondiffbot2
+    init: true
+    volumes:
+      - type: bind
+        source: ./config/icondiffbot2.toml
+        target: /app/config.toml
+        read_only: true
+      - type: bind
+        source: ./config/config
+        target: /app/config
+        read_only: true
+      - icondiffbot2_images:/app/images
+  mapdiffbot2:
+    image: ghcr.io/spacestation13/mapdiffbot2:latest
+    build:
+      target: mapdiffbot2
+    init: true
+    volumes:
+      - type: bind
+        source: ./config/mapdiffbot2.toml
+        target: /app/config.toml
+        read_only: true
+      - type: bind
+        source: ./config/config
+        target: /app/config
+        read_only: true
+      - mapdiffbot2_images:/app/images
+      - mapdiffbot2_repos:/app/repos
+volumes:
+  icondiffbot2_images:
+  mapdiffbot2_images:
+  mapdiffbot2_repos:
