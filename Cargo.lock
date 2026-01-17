@@ -1664,6 +1664,7 @@ dependencies = [
  "eyre",
  "flume",
  "hashbrown 0.15.5",
+ "indexmap",
  "jsonwebtoken",
  "mysql_async",
  "octocrab",

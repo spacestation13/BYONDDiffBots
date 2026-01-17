@@ -16,7 +16,7 @@ use std::{
     path::Path,
 };
 
-#[tracing::instrument]
+#[tracing::instrument(skip_all)]
 pub fn do_job(job: Job, client: reqwest::Client) -> Result<CheckOutputs> {
     let handle = actix_web::rt::Runtime::new()?;
 
@@ -46,7 +46,7 @@ pub fn do_job(job: Job, client: reqwest::Client) -> Result<CheckOutputs> {
     map.build()
 }
 
-#[tracing::instrument]
+#[tracing::instrument(skip_all)]
 fn render(
     job: &Job,
     diff: (Result<Option<IconFileWithName>>, Option<IconFileWithName>),
@@ -281,7 +281,7 @@ fn render(
     }
 }
 
-#[tracing::instrument]
+#[tracing::instrument(skip_all)]
 fn render_state<'a, S: AsRef<str> + std::fmt::Debug>(
     prefix: S,
     target: &IconFileWithName,
@@ -333,7 +333,7 @@ fn render_state<'a, S: AsRef<str> + std::fmt::Debug>(
     Ok(((index, state.name.clone()), url))
 }
 
-#[tracing::instrument]
+#[tracing::instrument(skip_all)]
 fn full_render(job: &Job, target: &IconFileWithName) -> Result<Vec<((usize, String), String)>> {
     let icon = &target.icon;
 
@@ -344,7 +344,7 @@ fn full_render(job: &Job, target: &IconFileWithName) -> Result<Vec<((usize, Stri
     let vec: Vec<((usize, String), String)> = icon
         .metadata
         .states
-        .values()
+        .par_values()
         .flat_map(|vec| {
             vec.iter()
                 .enumerate()

@@ -26,6 +26,7 @@ time = "0.3.41"
 secrecy = "0.10.3"
 percent-encoding = "2.3.2"
 dashmap = "6.1.0"
+indexmap = { version = "2.10.0", features = ["rayon"] }
 
 actix-web = "4.11.0"
 actix-files = "0.6.6"
