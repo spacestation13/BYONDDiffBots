@@ -222,11 +222,10 @@ fn generate_finished_output<P: AsRef<Path>>(
     maps: RenderedMaps,
 ) -> Result<CheckOutputs> {
     let conf = CONFIG.get().unwrap();
-    let file_url = if conf.azure_blobs.is_some() {
+    let file_url = if let Some(ref blob) = conf.azure_blobs {
         format!(
             "https://{}.blob.core.windows.net/{}",
-            conf.azure_blobs.as_ref().unwrap().storage_account,
-            conf.azure_blobs.as_ref().unwrap().storage_container
+            blob.storage_account, blob.storage_container
         )
     } else {
         conf.web.file_hosting_url.to_string()

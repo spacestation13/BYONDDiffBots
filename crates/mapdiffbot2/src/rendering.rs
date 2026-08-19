@@ -155,7 +155,7 @@ pub fn load_maps(
                 file.filename.clone(),
                 dmm::Map::from_file(&actual_path)
                     .map_err(|e| eyre::anyhow!(e))
-                    .wrap_err_with(|| format!("Map name: {}", &file.filename)),
+                    .wrap_err_with(|| format!("Map name: {}", file.filename)),
             )
         })
         .collect()
