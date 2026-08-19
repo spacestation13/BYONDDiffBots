@@ -5,18 +5,18 @@ edition = "2024"
 license = "MIT"
 
 [dependencies]
-serde = { version = "1.0.219", features = ["derive"] }
-octocrab = "0.44.1"
-eyre = "0.6.12"
+serde = { version = "1.0.229", features = ["derive"] }
+octocrab = "0.54.1"
+eyre = "0.6.14"
 derive_builder = "0.20.2"
-chrono = "0.4.41"
-sha2 = "0.10.9"
-hmac = "0.12.1"
+chrono = "0.4.45"
+sha2 = "0.11.0"
+hmac = "0.13.0"
 hex = "0.4.3"
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["fmt", "time"] }
 tracing-panic = "0.1.2"
-tracing-loki = "0.2.6"
-flume = "0.11.1"
+tracing-loki = "0.2.7"
+flume = "0.12.0"
 
-actix-web = "4.11.0"
+actix-web = "4.14.1"

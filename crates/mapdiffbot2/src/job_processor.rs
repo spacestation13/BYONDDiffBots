@@ -222,11 +222,10 @@ fn generate_finished_output<P: AsRef<Path>>(
     maps: RenderedMaps,
 ) -> Result<CheckOutputs> {
     let conf = CONFIG.get().unwrap();
-    let file_url = if conf.azure_blobs.is_some() {
+    let file_url = if let Some(ref blob) = conf.azure_blobs {
         format!(
             "https://{}.blob.core.windows.net/{}",
-            conf.azure_blobs.as_ref().unwrap().storage_account,
-            conf.azure_blobs.as_ref().unwrap().storage_container
+            blob.storage_account, blob.storage_container
         )
     } else {
         conf.web.file_hosting_url.to_string()
@@ -432,7 +431,7 @@ pub fn do_job(job: Job, blob_client: Azure) -> Result<CheckOutputs> {
     if let Ok(submod_names) = repository.submodules().map(|submodules| {
         submodules
             .into_iter()
-            .filter_map(|submod| submod.name().map(|refstr| refstr.to_owned()))
+            .filter_map(|submod| submod.name().map_or(None, |refstr| Some(refstr.to_owned())))
             .collect::<Vec<_>>()
     }) {
         submod_names.into_iter().for_each(|name| {

@@ -318,7 +318,7 @@ fn render_state<'a, S: AsRef<str> + std::fmt::Debug>(
 
     render_guard
         .render(&mut buffer)
-        .with_context(|| format!("Failed to render state {} to file {:?}", state.name, &path))?;
+        .with_context(|| format!("Failed to render state {} to file {:?}", state.name, path))?;
 
     let url = format!(
         "{}/images/{}/{filename}.{extension}",
