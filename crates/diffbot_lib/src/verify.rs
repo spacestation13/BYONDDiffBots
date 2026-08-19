@@ -1,7 +1,4 @@
-use hmac::{
-    digest::{generic_array::GenericArray, CtOutput},
-    Hmac, Mac,
-};
+use hmac::{Hmac, KeyInit, Mac};
 use sha2::Sha256;
 
 type HmacSha256 = Hmac<Sha256>;
@@ -18,18 +15,13 @@ pub fn verify_signature(
             ));
         };
 
-        //have to wrap it to stop timing attacks on comparison
-        let actual_signature = CtOutput::new(GenericArray::clone_from_slice(sig));
-
         let mut mac = HmacSha256::new_from_slice(sekrit.as_bytes()).unwrap();
         mac.update(payload.as_bytes());
-        let computed_signature = mac.finalize();
 
-        if actual_signature.ne(&computed_signature) {
-            return Err(actix_web::error::ErrorBadRequest(
-                "Signature does not match!",
-            ));
-        };
+        match mac.verify_slice(sig) {
+            Ok(_) => {}
+            Err(e) => return Err(actix_web::error::ErrorBadRequest(e)),
+        }
     }
     Ok(())
 }

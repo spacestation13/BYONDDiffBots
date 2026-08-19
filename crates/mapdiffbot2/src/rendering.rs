@@ -543,7 +543,7 @@ fn write_to_azure<P: AsRef<Path>>(
     client: std::sync::Arc<MicrosoftAzure>,
     compressed_image: &[u8],
 ) -> Result<()> {
-    use object_store::ObjectStore;
+    use object_store::ObjectStoreExt;
 
     let path = object_store::path::Path::from_iter(
         path.as_ref().iter().map(|ostr| ostr.to_str().unwrap()),

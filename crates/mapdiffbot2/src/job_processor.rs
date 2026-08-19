@@ -432,7 +432,7 @@ pub fn do_job(job: Job, blob_client: Azure) -> Result<CheckOutputs> {
     if let Ok(submod_names) = repository.submodules().map(|submodules| {
         submodules
             .into_iter()
-            .filter_map(|submod| submod.name().map(|refstr| refstr.to_owned()))
+            .filter_map(|submod| submod.name().map_or(None, |refstr| Some(refstr.to_owned())))
             .collect::<Vec<_>>()
     }) {
         submod_names.into_iter().for_each(|name| {
